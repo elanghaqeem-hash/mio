@@ -1,6 +1,6 @@
 import { eventBus } from '../core/EventBus';
 import { emergencyStop } from '../core/EmergencyStop';
-import { resourceGovernor } from '../security/ResourceGovernor';
+import { resourceGovernor } from './ResourceGovernor';
 import { taskRuntime } from './TaskRuntime';
 import type { TaskRuntimeSnapshot } from '../types/tasks';
 
