@@ -6,16 +6,17 @@ import { MemoryPolicy } from '../memory/MemoryPolicy';
 
 const MEMORY_STORAGE_KEY = 'long-term-memory';
 
-interface PersistedMemoryState {
-  enabled: boolean;
-  memories: MemoryItem[];
-}
-
 export interface PendingMemoryCandidate {
   id: string;
   createdAt: number;
   item: Omit<MemoryItem, 'id' | 'timestamp'>;
   reason: string;
+}
+
+interface PersistedMemoryState {
+  enabled: boolean;
+  memories: MemoryItem[];
+  pendingCandidates?: PendingMemoryCandidate[];
 }
 
 export type MemoryWriteResult =
@@ -36,9 +37,11 @@ export class MioMemoryManager {
       if (stored) {
         this.enabled = stored.enabled !== false;
         this.memories = Array.isArray(stored.memories) ? stored.memories : [];
+        this.pendingCandidates = Array.isArray(stored.pendingCandidates) ? stored.pendingCandidates : [];
       }
       this.initialized = true;
       eventBus.emit('MEMORY_UPDATED', this.getMemories());
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
     } catch (error) {
       console.error('[MemoryManager] Persistence initialization failed; continuing with runtime memory.', error);
       eventBus.emit('STORAGE_ERROR', {
@@ -55,13 +58,8 @@ export class MioMemoryManager {
     this.initialized = false;
   }
 
-  public static isInitialized(): boolean {
-    return this.initialized;
-  }
-
-  public static isEnabled(): boolean {
-    return this.enabled;
-  }
+  public static isInitialized(): boolean { return this.initialized; }
+  public static isEnabled(): boolean { return this.enabled; }
 
   public static setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -78,9 +76,7 @@ export class MioMemoryManager {
   }
 
   public static proposeMemory(item: Omit<MemoryItem, 'id' | 'timestamp'>): MemoryWriteResult {
-    if (!this.enabled) {
-      return { status: 'DENIED', reason: 'Long-term memory is disabled.' };
-    }
+    if (!this.enabled) return { status: 'DENIED', reason: 'Long-term memory is disabled.' };
 
     const decision = MemoryPolicy.evaluateWrite(item);
     if (decision.decision === 'DENY') {
@@ -97,11 +93,12 @@ export class MioMemoryManager {
       };
       this.pendingCandidates.push(candidate);
       eventBus.emit('MEMORY_REVIEW_REQUIRED', candidate);
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+      void this.flush();
       return { status: 'REVIEW_REQUIRED', candidateId: candidate.id, reason: candidate.reason };
     }
 
-    const memory = this.saveTrustedMemory(item);
-    return { status: 'SAVED', memory };
+    return { status: 'SAVED', memory: this.saveTrustedMemory(item) };
   }
 
   public static addMemory(item: Omit<MemoryItem, 'id' | 'timestamp'>): MemoryItem | null {
@@ -112,14 +109,11 @@ export class MioMemoryManager {
   public static approveCandidate(candidateId: string): MemoryItem | null {
     const index = this.pendingCandidates.findIndex((candidate) => candidate.id === candidateId);
     if (index < 0 || !this.enabled) return null;
-
     const [candidate] = this.pendingCandidates.splice(index, 1);
     const memory = this.saveTrustedMemory(candidate.item);
-    eventBus.emit('MEMORY_POLICY_EVENT', {
-      decision: 'APPROVED_BY_USER',
-      candidateId,
-      source: candidate.item.source,
-    });
+    eventBus.emit('MEMORY_POLICY_EVENT', { decision: 'APPROVED_BY_USER', candidateId, source: candidate.item.source });
+    eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+    void this.flush();
     return memory;
   }
 
@@ -129,6 +123,8 @@ export class MioMemoryManager {
     const removed = this.pendingCandidates.length < before;
     if (removed) {
       eventBus.emit('MEMORY_POLICY_EVENT', { decision: 'REJECTED_BY_USER', candidateId });
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+      void this.flush();
     }
     return removed;
   }
@@ -137,7 +133,6 @@ export class MioMemoryManager {
     if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1 || !content.trim()) return false;
     const memory = this.memories.find((item) => item.id === id);
     if (!memory) return false;
-
     memory.content = content;
     memory.confidence = confidence;
     eventBus.emit('MEMORY_UPDATED', this.getMemories());
@@ -160,16 +155,17 @@ export class MioMemoryManager {
     this.memories = [];
     this.pendingCandidates = [];
     eventBus.emit('MEMORY_UPDATED', this.getMemories());
+    eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
     void this.flush();
   }
 
   public static async flush(): Promise<void> {
     try {
-      const state: PersistedMemoryState = {
+      await this.storage.set<PersistedMemoryState>('memory', MEMORY_STORAGE_KEY, {
         enabled: this.enabled,
         memories: this.memories,
-      };
-      await this.storage.set('memory', MEMORY_STORAGE_KEY, state);
+        pendingCandidates: this.pendingCandidates,
+      });
     } catch (error) {
       console.error('[MemoryManager] Failed to persist long-term memory.', error);
       eventBus.emit('STORAGE_ERROR', {
@@ -186,7 +182,6 @@ export class MioMemoryManager {
       id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       timestamp: Date.now(),
     };
-
     this.memories.push(memory);
     eventBus.emit('MEMORY_UPDATED', this.getMemories());
     void this.flush();
