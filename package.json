@@ -2,20 +2,19 @@
   "name": "mio-v2-desktop",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
-    "build:all": "npm run build && npm run build:electron",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
-    "pack:win": "npm run build:all && electron-builder --win --dir",
-    "dist:win": "npm run build:all && electron-builder --win",
-    "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite();\"",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite();\"",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "electron:dev": "concurrently -k \"npm run dev\" \"cross-env VITE_DEV_SERVER_URL=http://localhost:5173 wait-on http://localhost:5173 && npm run build:electron && electron .\"",
+    "electron:build": "npm run build && npm run build:electron && electron-builder"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "1.0.0",
     "@types/three": "^0.186.0",
     "lucide-react": "^1.45.0",
     "react": "^19.2.8",
@@ -46,20 +45,17 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "package.json"
     ],
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      "target": "nsis"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Mio V2"
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
     }
   }
 }
