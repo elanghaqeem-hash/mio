@@ -7,6 +7,7 @@ export interface ModelMessage {
 
 export type ApplicationContextTrust = 'VERIFIED' | 'QUARANTINED';
 export type ApplicationContextFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
+export type ApplicationContextPriority = 'PRIMARY' | 'STANDARD' | 'LOW';
 
 export interface ApplicationContextSource {
   id: string;
@@ -15,6 +16,7 @@ export interface ApplicationContextSource {
   sourceUri: string;
   trust: ApplicationContextTrust;
   freshness?: ApplicationContextFreshness;
+  priority?: ApplicationContextPriority;
   reviewedAt?: number;
   score: number;
   text: string;

@@ -5,12 +5,14 @@ export type AssetOrigin = 'GENERATED' | 'VERIFIED' | 'USER-EDITED' | 'IMPORTED' 
 export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'document' | 'reference';
 export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
 export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
-export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED';
+export type KnowledgeSourcePriority = 'PRIMARY' | 'STANDARD' | 'LOW';
+export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED';
 
 export interface KnowledgeSourceGovernanceRecord {
   assetId: string;
   included: boolean;
   trust: KnowledgeSourceTrust;
+  priority?: KnowledgeSourcePriority;
   reviewedAt?: number;
   reviewNote?: string;
   freshUntil?: number;
@@ -24,6 +26,7 @@ export interface KnowledgeGovernanceEvent {
   action: KnowledgeGovernanceAction;
   timestamp: number;
   trust?: KnowledgeSourceTrust;
+  priority?: KnowledgeSourcePriority;
   included?: boolean;
   note?: string;
   freshUntil?: number;
