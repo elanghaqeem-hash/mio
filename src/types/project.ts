@@ -6,7 +6,8 @@ export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'docu
 export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
 export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
 export type KnowledgeSourcePriority = 'PRIMARY' | 'STANDARD' | 'LOW';
-export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED';
+export type KnowledgeConflictResolutionStatus = 'ACCEPTED_VARIANCE' | 'PREFER_SOURCE' | 'RESOLVED_BY_SUPERSESSION';
+export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED' | 'CORROBORATION_GROUP_CREATED' | 'CONFLICT_REVIEWED';
 
 export interface KnowledgeSourceGovernanceRecord {
   assetId: string;
@@ -20,6 +21,22 @@ export interface KnowledgeSourceGovernanceRecord {
   updatedAt: number;
 }
 
+export interface KnowledgeCorroborationGroup {
+  id: string;
+  label: string;
+  assetIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KnowledgeConflictResolution {
+  conflictKey: string;
+  status: KnowledgeConflictResolutionStatus;
+  note?: string;
+  preferredAssetId?: string;
+  reviewedAt: number;
+}
+
 export interface KnowledgeGovernanceEvent {
   id: string;
   assetId: string;
@@ -31,11 +48,14 @@ export interface KnowledgeGovernanceEvent {
   note?: string;
   freshUntil?: number;
   replacementAssetId?: string;
+  conflictKey?: string;
   actor: 'USER' | 'SYSTEM';
 }
 
 export interface KnowledgeGovernanceState {
   sources: Record<string, KnowledgeSourceGovernanceRecord>;
+  corroborationGroups?: KnowledgeCorroborationGroup[];
+  conflictResolutions?: Record<string, KnowledgeConflictResolution>;
   history: KnowledgeGovernanceEvent[];
   updatedAt: number;
 }
