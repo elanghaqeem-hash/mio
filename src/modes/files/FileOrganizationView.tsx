@@ -19,6 +19,11 @@ interface PreviewState {
   memoryStatus?: string;
 }
 
+let requestSequence = 0;
+const createRequestTaskId = (prefix: string) => {
+  requestSequence += 1;
+  return `${prefix}_${requestSequence}`;
+};
 const normalizeChildPath = (parent: string, child: string) => parent === '.' ? child : `${parent}/${child}`;
 const parentPath = (current: string) => {
   if (current === '.') return '.';
@@ -46,7 +51,7 @@ export const FileOrganizationView: React.FC = () => {
         'service.desktop.workspace.list',
         { workspaceId: authorizedWorkspace.id, relativePath },
         {
-          taskId: `files_list_${Date.now()}`,
+          taskId: createRequestTaskId('files_list'),
           projectId: project.id,
           mode: 'FILES',
           requestedBy: 'USER',
@@ -122,7 +127,7 @@ export const FileOrganizationView: React.FC = () => {
         'service.desktop.workspace.read-text',
         { workspaceId: workspace.id, relativePath },
         {
-          taskId: `files_read_${Date.now()}`,
+          taskId: createRequestTaskId('files_read'),
           projectId: project.id,
           mode: 'FILES',
           requestedBy: 'USER',
