@@ -1,14 +1,16 @@
-import type { KnowledgeFreshness, KnowledgeSourcePriority, MioProject, ProjectAsset } from '../types/project';
+import type { KnowledgeConflictResolution, KnowledgeFreshness, KnowledgeSourcePriority, MioProject, ProjectAsset } from '../types/project';
 
 export type KnowledgeConflictReason = 'NUMERIC_MISMATCH' | 'POLARITY_MISMATCH';
 
 export interface KnowledgePotentialConflict {
+  conflictKey: string;
   leftAssetId: string;
   rightAssetId: string;
   sharedTerms: string[];
   reason: KnowledgeConflictReason;
   leftSignal: string;
   rightSignal: string;
+  resolution?: KnowledgeConflictResolution;
 }
 
 export interface KnowledgeHealthSummary {
@@ -16,8 +18,13 @@ export interface KnowledgeHealthSummary {
   verifiedSources: number;
   currentSources: number;
   primarySources: number;
+  corroboratedSources: number;
+  corroborationGroups: number;
+  evidenceStrength: 'NONE' | 'SINGLE_SOURCE' | 'MIXED' | 'CORROBORATED';
   reviewRequiredSources: number;
   potentialConflicts: KnowledgePotentialConflict[];
+  openConflicts: number;
+  reviewedConflicts: number;
   healthScore: number;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   method: 'BOUNDED_GOVERNANCE_HEURISTIC';
@@ -61,6 +68,11 @@ function boundedSignal(text: string, max = 120): string {
   return normalized.length <= max ? normalized : `${normalized.slice(0, max - 1)}…`;
 }
 
+function conflictKey(leftAssetId: string, rightAssetId: string, reason: KnowledgeConflictReason): string {
+  const [left, right] = [leftAssetId, rightAssetId].sort();
+  return `${left}::${right}::${reason}`;
+}
+
 function detectPotentialConflicts(project: MioProject, documents: ProjectAsset[]): KnowledgePotentialConflict[] {
   const conflicts: KnowledgePotentialConflict[] = [];
   for (let leftIndex = 0; leftIndex < documents.length; leftIndex += 1) {
@@ -77,26 +89,14 @@ function detectPotentialConflicts(project: MioProject, documents: ProjectAsset[]
       const rightNumbers = numbers(rightText);
       const differingNumericSignals = leftNumbers.length > 0 && rightNumbers.length > 0 && leftNumbers.every((value) => !rightNumbers.includes(value)) && rightNumbers.every((value) => !leftNumbers.includes(value));
       if (differingNumericSignals) {
-        conflicts.push({
-          leftAssetId: left.id,
-          rightAssetId: right.id,
-          sharedTerms,
-          reason: 'NUMERIC_MISMATCH',
-          leftSignal: boundedSignal(leftText),
-          rightSignal: boundedSignal(rightText),
-        });
+        const key = conflictKey(left.id, right.id, 'NUMERIC_MISMATCH');
+        conflicts.push({ conflictKey: key, leftAssetId: left.id, rightAssetId: right.id, sharedTerms, reason: 'NUMERIC_MISMATCH', leftSignal: boundedSignal(leftText), rightSignal: boundedSignal(rightText), resolution: project.knowledgeGovernance.conflictResolutions?.[key] });
         continue;
       }
 
       if (hasNegation(leftText) !== hasNegation(rightText) && sharedTerms.length >= 3) {
-        conflicts.push({
-          leftAssetId: left.id,
-          rightAssetId: right.id,
-          sharedTerms,
-          reason: 'POLARITY_MISMATCH',
-          leftSignal: boundedSignal(leftText),
-          rightSignal: boundedSignal(rightText),
-        });
+        const key = conflictKey(left.id, right.id, 'POLARITY_MISMATCH');
+        conflicts.push({ conflictKey: key, leftAssetId: left.id, rightAssetId: right.id, sharedTerms, reason: 'POLARITY_MISMATCH', leftSignal: boundedSignal(leftText), rightSignal: boundedSignal(rightText), resolution: project.knowledgeGovernance.conflictResolutions?.[key] });
       }
     }
   }
@@ -106,6 +106,9 @@ function detectPotentialConflicts(project: MioProject, documents: ProjectAsset[]
 export class KnowledgeHealth {
   public static evaluate(project: MioProject): KnowledgeHealthSummary {
     const documents = activeDocuments(project);
+    const activeIds = new Set(documents.map((asset) => asset.id));
+    const groups = (project.knowledgeGovernance.corroborationGroups ?? []).filter((group) => group.assetIds.filter((id) => activeIds.has(id)).length >= 2);
+    const corroboratedIds = new Set(groups.flatMap((group) => group.assetIds.filter((id) => activeIds.has(id))));
     const verifiedSources = documents.filter((asset) => project.knowledgeGovernance.sources[asset.id]?.trust === 'VERIFIED').length;
     const currentSources = documents.filter((asset) => freshness(project.knowledgeGovernance.sources[asset.id]?.freshUntil) === 'CURRENT').length;
     const primarySources = documents.filter((asset) => priority(project, asset.id) === 'PRIMARY').length;
@@ -114,15 +117,18 @@ export class KnowledgeHealth {
       return record?.trust !== 'VERIFIED' || freshness(record?.freshUntil) !== 'CURRENT';
     }).length;
     const potentialConflicts = detectPotentialConflicts(project, documents);
+    const openConflicts = potentialConflicts.filter((item) => !item.resolution).length;
+    const reviewedConflicts = potentialConflicts.length - openConflicts;
+    const evidenceStrength: KnowledgeHealthSummary['evidenceStrength'] = documents.length === 0 ? 'NONE' : documents.length === 1 ? 'SINGLE_SOURCE' : corroboratedIds.size >= 2 ? 'CORROBORATED' : 'MIXED';
 
     if (documents.length === 0) {
-      return { activeSources: 0, verifiedSources: 0, currentSources: 0, primarySources: 0, reviewRequiredSources: 0, potentialConflicts: [], healthScore: 0, confidence: 'LOW', method: 'BOUNDED_GOVERNANCE_HEURISTIC' };
+      return { activeSources: 0, verifiedSources: 0, currentSources: 0, primarySources: 0, corroboratedSources: 0, corroborationGroups: 0, evidenceStrength, reviewRequiredSources: 0, potentialConflicts: [], openConflicts: 0, reviewedConflicts: 0, healthScore: 0, confidence: 'LOW', method: 'BOUNDED_GOVERNANCE_HEURISTIC' };
     }
 
     const verifiedRatio = verifiedSources / documents.length;
     const currentRatio = currentSources / documents.length;
     const reviewPenalty = reviewRequiredSources / documents.length;
-    const conflictPenalty = Math.min(potentialConflicts.length / documents.length, 1);
+    const conflictPenalty = Math.min(openConflicts / documents.length, 1);
     const rawScore = 45 * verifiedRatio + 35 * currentRatio + 20 * (1 - reviewPenalty) - 20 * conflictPenalty;
     const healthScore = Math.max(0, Math.min(100, Math.round(rawScore)));
     const confidence: KnowledgeHealthSummary['confidence'] = healthScore >= 80 ? 'HIGH' : healthScore >= 55 ? 'MEDIUM' : 'LOW';
@@ -132,8 +138,13 @@ export class KnowledgeHealth {
       verifiedSources,
       currentSources,
       primarySources,
+      corroboratedSources: corroboratedIds.size,
+      corroborationGroups: groups.length,
+      evidenceStrength,
       reviewRequiredSources,
       potentialConflicts,
+      openConflicts,
+      reviewedConflicts,
       healthScore,
       confidence,
       method: 'BOUNDED_GOVERNANCE_HEURISTIC',
