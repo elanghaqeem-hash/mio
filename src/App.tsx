@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { MioCoreState, MioSystemMode } from './types/core';
 import { DryRunRequest } from './types/security';
 import { eventBus } from './core/EventBus';
@@ -8,106 +8,68 @@ import { ContextPanel } from './components/layout/ContextPanel';
 import { PermissionModal } from './security/PermissionModal';
 import { FirstRunWizard } from './components/wizard/FirstRunWizard';
 
-// Studios
-import { ChatStudioView } from './modes/chat/ChatStudioView';
-import { Studio3DView } from './modes/studio3d/Studio3DView';
-import { AnimationStudioView } from './modes/animation/AnimationStudioView';
-import { GraphicStudioView } from './modes/graphic/GraphicStudioView';
-import { SFXStudioView } from './modes/sfx/SFXStudioView';
-import { MusicStudioView } from './modes/music/MusicStudioView';
-import { ResearchStudioView } from './modes/research/ResearchStudioView';
-import { FileOrganizationView } from './modes/files/FileOrganizationView';
-import { MotionTrackingView } from './modes/motion/MotionTrackingView';
-import { SecurityDashboardView } from './modes/security/SecurityDashboardView';
-import { ProjectOverviewView } from './modes/project/ProjectOverviewView';
-import { SettingsView } from './modes/settings/SettingsView';
+const ChatStudioView = lazy(() => import('./modes/chat/ChatStudioView').then((m) => ({ default: m.ChatStudioView })));
+const Studio3DView = lazy(() => import('./modes/studio3d/Studio3DView').then((m) => ({ default: m.Studio3DView })));
+const AnimationStudioView = lazy(() => import('./modes/animation/AnimationStudioView').then((m) => ({ default: m.AnimationStudioView })));
+const GraphicStudioView = lazy(() => import('./modes/graphic/GraphicStudioView').then((m) => ({ default: m.GraphicStudioView })));
+const SFXStudioView = lazy(() => import('./modes/sfx/SFXStudioView').then((m) => ({ default: m.SFXStudioView })));
+const MusicStudioView = lazy(() => import('./modes/music/MusicStudioView').then((m) => ({ default: m.MusicStudioView })));
+const ResearchStudioView = lazy(() => import('./modes/research/ResearchStudioView').then((m) => ({ default: m.ResearchStudioView })));
+const FileOrganizationView = lazy(() => import('./modes/files/FileOrganizationView').then((m) => ({ default: m.FileOrganizationView })));
+const MotionTrackingView = lazy(() => import('./modes/motion/MotionTrackingView').then((m) => ({ default: m.MotionTrackingView })));
+const SecurityDashboardView = lazy(() => import('./modes/security/SecurityDashboardView').then((m) => ({ default: m.SecurityDashboardView })));
+const ProjectOverviewView = lazy(() => import('./modes/project/ProjectOverviewView').then((m) => ({ default: m.ProjectOverviewView })));
+const SettingsView = lazy(() => import('./modes/settings/SettingsView').then((m) => ({ default: m.SettingsView })));
+
+const WorkspaceLoader = () => (
+  <div className="h-full w-full flex items-center justify-center bg-[#07090e] font-mono text-xs text-cyan-400">
+    <div className="border border-cyan-500/20 bg-[#0d121d] rounded-xl px-5 py-3 animate-pulse">LOADING MIO WORKSPACE...</div>
+  </div>
+);
 
 export const App: React.FC = () => {
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [activeMode, setActiveMode] = useState<MioSystemMode>('CHAT');
   const [dryRunRequest, setDryRunRequest] = useState<DryRunRequest | null>(null);
-  const [showWizard, setShowWizard] = useState<boolean>(() => {
-    return localStorage.getItem('mio_v2_setup_completed') !== 'true';
-  });
+  const [showWizard, setShowWizard] = useState<boolean>(() => localStorage.getItem('mio_v2_setup_completed') !== 'true');
 
   useEffect(() => {
     const unsubState = eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state));
     const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => setActiveMode(mode));
-    const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => {
-      setDryRunRequest(req);
-    });
-
-    return () => {
-      unsubState();
-      unsubMode();
-      unsubPerm();
-    };
+    const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => setDryRunRequest(req));
+    return () => { unsubState(); unsubMode(); unsubPerm(); };
   }, []);
 
   const renderActiveWorkspace = () => {
     switch (activeMode) {
-      case 'CHAT':
-        return <ChatStudioView />;
-      case '3D':
-        return <Studio3DView />;
-      case 'ANIMATION':
-        return <AnimationStudioView />;
-      case 'GRAPHIC':
-        return <GraphicStudioView />;
-      case 'SFX':
-        return <SFXStudioView />;
-      case 'MUSIC':
-        return <MusicStudioView />;
-      case 'RESEARCH':
-        return <ResearchStudioView />;
-      case 'FILES':
-        return <FileOrganizationView />;
-      case 'MOTION':
-        return <MotionTrackingView />;
-      case 'SECURITY':
-        return <SecurityDashboardView />;
-      case 'PROJECT':
-        return <ProjectOverviewView />;
-      case 'SETTINGS':
-        return <SettingsView />;
-      default:
-        return <ChatStudioView />;
+      case 'CHAT': return <ChatStudioView />;
+      case '3D': return <Studio3DView />;
+      case 'ANIMATION': return <AnimationStudioView />;
+      case 'GRAPHIC': return <GraphicStudioView />;
+      case 'SFX': return <SFXStudioView />;
+      case 'MUSIC': return <MusicStudioView />;
+      case 'RESEARCH': return <ResearchStudioView />;
+      case 'FILES': return <FileOrganizationView />;
+      case 'MOTION': return <MotionTrackingView />;
+      case 'SECURITY': return <SecurityDashboardView />;
+      case 'PROJECT': return <ProjectOverviewView />;
+      case 'SETTINGS': return <SettingsView />;
+      default: return <ChatStudioView />;
     }
   };
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-200 overflow-hidden font-sans select-none">
-      {/* Top Header Bar */}
-      <TopBar
-        coreState={coreState}
-        activeMode={activeMode}
-        onOpenSecurity={() => setActiveMode('SECURITY')}
-      />
-
-      {/* Main Multi-Mode Workspace Layout */}
+      <TopBar coreState={coreState} activeMode={activeMode} onOpenSecurity={() => setActiveMode('SECURITY')} />
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Navigation Panel */}
         <ModeNavigation activeMode={activeMode} onSelectMode={setActiveMode} />
-
-        {/* Central Workspace */}
         <main className="flex-1 h-full overflow-hidden relative flex flex-col">
-          {renderActiveWorkspace()}
+          <Suspense fallback={<WorkspaceLoader />}>{renderActiveWorkspace()}</Suspense>
         </main>
-
-        {/* Right Context & Telemetry Panel */}
         <ContextPanel />
       </div>
-
-      {/* Security Dry-Run / Permission Modal */}
-      <PermissionModal
-        request={dryRunRequest}
-        onClose={() => setDryRunRequest(null)}
-      />
-
-      {/* First-Run Desktop Setup Wizard */}
-      {showWizard && (
-        <FirstRunWizard onComplete={() => setShowWizard(false)} />
-      )}
+      <PermissionModal request={dryRunRequest} onClose={() => setDryRunRequest(null)} />
+      {showWizard && <FirstRunWizard onComplete={() => setShowWizard(false)} />}
     </div>
   );
 };
