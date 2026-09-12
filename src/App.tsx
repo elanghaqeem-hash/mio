@@ -70,7 +70,7 @@ export const App: React.FC = () => {
         </main>
         <ContextPanel />
       </div>
-      <PermissionModal request={dryRunRequest} onClose={() => setDryRunRequest(null)} />
+      <PermissionModal key={dryRunRequest?.id ?? 'no-permission-request'} request={dryRunRequest} onClose={() => setDryRunRequest(null)} />
       {showWizard && <FirstRunWizard onComplete={() => setShowWizard(false)} />}
     </div>
   );
