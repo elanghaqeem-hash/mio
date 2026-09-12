@@ -15,6 +15,7 @@ const createInitialProject = (name = 'MIO Web Lab Workspace', description = 'Per
   assets: [],
   references: [],
   versions: [],
+  creativePipelines: [],
   activityLog: [{ timestamp: Date.now(), message: 'Project initialized in controlled MIO workspace', mode: 'PROJECT' }],
   securityLog: [],
   knowledgeGovernance: { sources: {}, history: [], updatedAt: Date.now() },
@@ -158,24 +159,14 @@ export class ProjectManager {
 
   private static appendGovernanceEvent(assetId: string, action: KnowledgeGovernanceAction, actor: 'USER' | 'SYSTEM', details: { trust?: KnowledgeSourceTrust; priority?: KnowledgeSourcePriority; included?: boolean; note?: string; freshUntil?: number; replacementAssetId?: string } = {}): void {
     const timestamp = Date.now();
-    this.currentProject.knowledgeGovernance.history.unshift({
-      id: `kg_${timestamp}_${Math.random().toString(36).substring(2, 7)}`,
-      assetId,
-      action,
-      timestamp,
-      actor,
-      ...details,
-    });
+    this.currentProject.knowledgeGovernance.history.unshift({ id: `kg_${timestamp}_${Math.random().toString(36).substring(2, 7)}`, assetId, action, timestamp, actor, ...details });
     this.currentProject.knowledgeGovernance.history = this.currentProject.knowledgeGovernance.history.slice(0, 500);
     this.currentProject.knowledgeGovernance.updatedAt = timestamp;
   }
 
   private static ensureKnowledgeGovernance(asset: ProjectAsset): KnowledgeSourceGovernanceRecord {
     const existing = this.currentProject.knowledgeGovernance.sources[asset.id];
-    if (existing) {
-      if (!existing.priority) existing.priority = 'STANDARD';
-      return existing;
-    }
+    if (existing) { if (!existing.priority) existing.priority = 'STANDARD'; return existing; }
     const record: KnowledgeSourceGovernanceRecord = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', priority: 'STANDARD', updatedAt: Date.now() };
     this.currentProject.knowledgeGovernance.sources[asset.id] = record;
     this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
@@ -188,6 +179,7 @@ export class ProjectManager {
       assets: Array.isArray(project.assets) ? project.assets : [],
       references: Array.isArray(project.references) ? project.references : [],
       versions: Array.isArray(project.versions) ? project.versions : [],
+      creativePipelines: Array.isArray(project.creativePipelines) ? project.creativePipelines : [],
       activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
       securityLog: Array.isArray(project.securityLog) ? project.securityLog : [],
       knowledgeGovernance: project.knowledgeGovernance && typeof project.knowledgeGovernance.sources === 'object'
@@ -196,9 +188,8 @@ export class ProjectManager {
     };
     for (const asset of normalized.assets.filter((item) => item.type === 'document')) {
       const existing = normalized.knowledgeGovernance.sources[asset.id];
-      if (!existing) {
-        normalized.knowledgeGovernance.sources[asset.id] = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', priority: 'STANDARD', updatedAt: asset.updatedAt || Date.now() };
-      } else if (!existing.priority) existing.priority = 'STANDARD';
+      if (!existing) normalized.knowledgeGovernance.sources[asset.id] = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', priority: 'STANDARD', updatedAt: asset.updatedAt || Date.now() };
+      else if (!existing.priority) existing.priority = 'STANDARD';
     }
     return normalized;
   }
