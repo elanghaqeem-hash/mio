@@ -23,7 +23,14 @@ export interface SecurityEvent {
   id: string;
   timestamp: number;
   level: 'info' | 'warning' | 'blocked' | 'error';
-  category: 'PERMISSION' | 'PROMPT_INJECTION' | 'FILE_INTEGRITY' | 'UNTRUSTED_CONTENT' | 'RESOURCE_LIMIT';
+  category:
+    | 'PERMISSION'
+    | 'PROMPT_INJECTION'
+    | 'FILE_INTEGRITY'
+    | 'UNTRUSTED_CONTENT'
+    | 'RESOURCE_LIMIT'
+    | 'TOOL_EXECUTION'
+    | 'TOOL_VALIDATION';
   action: string;
   details: string;
   blocked: boolean;
