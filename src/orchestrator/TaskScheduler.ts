@@ -5,10 +5,10 @@ import type { TaskRuntimeSnapshot } from '../types/tasks';
 
 type QueueRunner<T> = () => Promise<T>;
 
-interface QueueEntry<T = unknown> {
+interface QueueEntry {
   taskId: string;
-  runner: QueueRunner<T>;
-  resolve: (value: T) => void;
+  runner: QueueRunner<unknown>;
+  resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
   enqueuedAt: number;
 }
@@ -46,19 +46,30 @@ export class TaskScheduler {
   public getActiveTaskIds(): string[] { return Array.from(this.active); }
   public getQueuedTaskIds(): string[] { return this.queue.map((entry) => entry.taskId); }
   public canRetry(taskId: string): boolean { return this.runnerRegistry.has(taskId) && taskRuntime.get(taskId)?.status === 'FAILED'; }
-  public snapshot(): TaskSchedulerSnapshot { return { queuedTaskIds: this.getQueuedTaskIds(), activeTaskIds: this.getActiveTaskIds(), concurrencyLimit: this.concurrencyLimit, updatedAt: Date.now() }; }
+  public snapshot(): TaskSchedulerSnapshot {
+    return {
+      queuedTaskIds: this.getQueuedTaskIds(),
+      activeTaskIds: this.getActiveTaskIds(),
+      concurrencyLimit: this.concurrencyLimit,
+      updatedAt: Date.now(),
+    };
+  }
 
   public execute<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
     if (emergencyStop.isEmergencyStopped()) return Promise.reject(new Error('STOP MIO is active'));
     if (!taskRuntime.get(taskId)) return Promise.reject(new Error(`Unknown runtime task '${taskId}'`));
-    if (this.active.has(taskId) || this.queue.some((entry) => entry.taskId === taskId)) return Promise.reject(new Error(`Task '${taskId}' is already scheduled`));
+    if (this.active.has(taskId) || this.queue.some((entry) => entry.taskId === taskId)) {
+      return Promise.reject(new Error(`Task '${taskId}' is already scheduled`));
+    }
     this.runnerRegistry.set(taskId, runner as QueueRunner<unknown>);
     return this.enqueue(taskId, runner);
   }
 
   public retry<T = unknown>(taskId: string): Promise<T> {
     const runner = this.runnerRegistry.get(taskId) as QueueRunner<T> | undefined;
-    if (!runner) return Promise.reject(new Error('Retry runner is unavailable after restart; re-submit the directive to create a new authorized execution.'));
+    if (!runner) {
+      return Promise.reject(new Error('Retry runner is unavailable after restart; re-submit the directive to create a new authorized execution.'));
+    }
     const scheduled = taskRuntime.scheduleRetry(taskId);
     if (!scheduled || scheduled.status !== 'PENDING') return Promise.reject(new Error(`Retry unavailable for task '${taskId}'`));
     return this.enqueue(taskId, runner);
@@ -88,7 +99,14 @@ export class TaskScheduler {
 
   private enqueue<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.queue.push({ taskId, runner, resolve, reject, enqueuedAt: Date.now() });
+      const entry: QueueEntry = {
+        taskId,
+        runner: runner as QueueRunner<unknown>,
+        resolve: (value) => resolve(value as T),
+        reject,
+        enqueuedAt: Date.now(),
+      };
+      this.queue.push(entry);
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId}: QUEUED`, mode: 'PROJECT' });
       this.publish();
       this.pump();
@@ -121,12 +139,14 @@ export class TaskScheduler {
     if (changed) this.publish();
   }
 
-  private async runEntry<T>(entry: QueueEntry<T>): Promise<void> {
+  private async runEntry(entry: QueueEntry): Promise<void> {
     try {
       const value = await entry.runner();
       entry.resolve(value);
     } catch (error) {
-      if (!taskRuntime.isCancelled(entry.taskId) && taskRuntime.get(entry.taskId)?.status !== 'FAILED') taskRuntime.fail(entry.taskId, error instanceof Error ? error.message : String(error));
+      if (!taskRuntime.isCancelled(entry.taskId) && taskRuntime.get(entry.taskId)?.status !== 'FAILED') {
+        taskRuntime.fail(entry.taskId, error instanceof Error ? error.message : String(error));
+      }
       entry.reject(error);
     } finally {
       this.active.delete(entry.taskId);
@@ -149,7 +169,9 @@ export class TaskScheduler {
     this.publish();
   }
 
-  private publish(): void { eventBus.emit<TaskSchedulerSnapshot>('TASK_SCHEDULER_UPDATED', this.snapshot()); }
+  private publish(): void {
+    eventBus.emit<TaskSchedulerSnapshot>('TASK_SCHEDULER_UPDATED', this.snapshot());
+  }
 }
 
 export const taskScheduler = new TaskScheduler(2);
