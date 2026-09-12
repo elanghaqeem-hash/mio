@@ -37,7 +37,7 @@ function fingerprint(input: string): string {
 }
 
 function terms(input: string): string[] {
-  return [...new Set(input.toLowerCase().match(/[a-z0-9_\-]{3,}/g) ?? [])].filter((term) => !STOP_WORDS.has(term));
+  return [...new Set(input.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? [])].filter((term) => !STOP_WORDS.has(term));
 }
 
 function splitBounded(text: string): string[] {
