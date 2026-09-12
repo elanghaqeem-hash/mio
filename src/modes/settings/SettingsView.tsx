@@ -1,13 +1,27 @@
-import React, { useState } from 'react';
-import { Settings, Cpu, HardDrive, Wifi, Sliders, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server } from 'lucide-react';
 import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
+import { ModelProviderId } from '../../types/models';
 
 export const SettingsView: React.FC = () => {
+  const initialConfig = ModelRouter.getConfig();
   const [autonomy, setAutonomy] = useState<AutonomyLevel>('ASSISTIVE');
   const [network, setNetwork] = useState<NetworkState>(ModelRouter.getNetworkState());
-  const [apiKey, setApiKey] = useState<string>('');
-  const [provider, setProvider] = useState<string>('local_heuristic');
+  const [provider, setProvider] = useState<ModelProviderId>(initialConfig.provider);
+  const [model, setModel] = useState<string>(initialConfig.model ?? '');
+  const [ollamaEndpoint, setOllamaEndpoint] = useState<string>(initialConfig.ollamaEndpoint ?? 'http://127.0.0.1:11434');
+  const [allowOfflineFallback, setAllowOfflineFallback] = useState<boolean>(initialConfig.allowOfflineFallback);
+
+  useEffect(() => {
+    ModelRouter.configure({
+      provider,
+      model: model.trim() || undefined,
+      ollamaEndpoint: ollamaEndpoint.trim() || undefined,
+      proxyEndpoint: '/api/ai/generate',
+      allowOfflineFallback,
+    });
+  }, [provider, model, ollamaEndpoint, allowOfflineFallback]);
 
   const handleNetworkToggle = (newNet: NetworkState) => {
     setNetwork(newNet);
@@ -16,7 +30,6 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-y-auto p-4 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between bg-[#0d121d] p-3 rounded-xl border border-gray-800">
         <div className="flex items-center gap-2 text-cyan-300">
           <Settings size={16} />
@@ -24,114 +37,86 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Autonomy Level */}
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
-        <span className="text-gray-300 font-bold block flex items-center gap-2">
+        <span className="text-gray-300 font-bold flex items-center gap-2">
           <Sliders size={14} className="text-cyan-400" /> AUTONOMY LEVEL
         </span>
-        <p className="text-gray-400 text-[11px]">
-          Controls how independently Mio generates ideas, advances project steps, or awaits explicit commands.
-        </p>
-
+        <p className="text-gray-400 text-[11px]">Controls how independently Mio generates ideas, advances project steps, or awaits explicit commands.</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {(['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'] as AutonomyLevel[]).map((lvl) => (
-            <div
+            <button
               key={lvl}
               onClick={() => setAutonomy(lvl)}
-              className={`p-3 rounded-lg border cursor-pointer transition text-center ${
-                autonomy === lvl
-                  ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/20'
-                  : 'bg-[#111726] border-gray-800 text-gray-400 hover:border-gray-700'
-              }`}
+              className={`p-3 rounded-lg border cursor-pointer transition text-center ${autonomy === lvl ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/20' : 'bg-[#111726] border-gray-800 text-gray-400 hover:border-gray-700'}`}
             >
               <div className="font-bold text-xs">{lvl}</div>
               <div className="text-[10px] text-gray-500 mt-1">
                 {lvl === 'PASSIVE' && 'Awaits explicit commands only'}
                 {lvl === 'ASSISTIVE' && 'Default: Suggests & confirms'}
-                {lvl === 'PROACTIVE' && 'Recommends creative next steps'}
-                {lvl === 'AUTONOMOUS' && 'Executes within bounds'}
+                {lvl === 'PROACTIVE' && 'Recommends bounded next steps'}
+                {lvl === 'AUTONOMOUS' && 'Executes only inside explicit bounds'}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Connectivity & Model Abstraction */}
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-4">
-        <span className="text-gray-300 font-bold block flex items-center gap-2">
+        <span className="text-gray-300 font-bold flex items-center gap-2">
           <Wifi size={14} className="text-cyan-400" /> MODEL ROUTER &amp; CONNECTIVITY
         </span>
 
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => handleNetworkToggle('OFFLINE')}
-            className={`flex-1 p-2.5 rounded-lg border font-bold cursor-pointer transition ${
-              network === 'OFFLINE'
-                ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
-                : 'bg-[#111726] border-gray-800 text-gray-500'
-            }`}
-          >
-            OFFLINE MODE (Local Procedural Engines)
+          <button onClick={() => handleNetworkToggle('OFFLINE')} className={`flex-1 p-2.5 rounded-lg border font-bold cursor-pointer transition ${network === 'OFFLINE' ? 'bg-cyan-950 border-cyan-500 text-cyan-300' : 'bg-[#111726] border-gray-800 text-gray-500'}`}>
+            OFFLINE MODE
           </button>
-          <button
-            onClick={() => handleNetworkToggle('ONLINE')}
-            className={`flex-1 p-2.5 rounded-lg border font-bold cursor-pointer transition ${
-              network === 'ONLINE'
-                ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
-                : 'bg-[#111726] border-gray-800 text-gray-500'
-            }`}
-          >
-            ONLINE MODE (Authorized Web &amp; APIs)
+          <button onClick={() => handleNetworkToggle('ONLINE')} className={`flex-1 p-2.5 rounded-lg border font-bold cursor-pointer transition ${network === 'ONLINE' ? 'bg-emerald-950 border-emerald-500 text-emerald-300' : 'bg-[#111726] border-gray-800 text-gray-500'}`}>
+            ONLINE MODE
           </button>
         </div>
 
         <div className="space-y-2 pt-2 border-t border-gray-800">
           <span className="text-gray-400 text-[10px] block">AI INFERENCE PROVIDER</span>
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs"
-          >
-            <option value="local_heuristic">Built-in Local Procedural Synthesis (Offline / Zero-latency)</option>
-            <option value="gemini">Google Gemini API</option>
-            <option value="claude">Anthropic Claude API</option>
-            <option value="ollama">Local Ollama / WebLLM Endpoint</option>
+          <select value={provider} onChange={(e) => setProvider(e.target.value as ModelProviderId)} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
+            <option value="local_heuristic">MIO Local Heuristic — offline fallback / orchestration intelligence</option>
+            <option value="openai">OpenAI — server-side MIO Secure Proxy</option>
+            <option value="ollama">Ollama — local endpoint</option>
           </select>
         </div>
 
-        {provider !== 'local_heuristic' && (
-          <div className="space-y-1">
-            <span className="text-gray-400 text-[10px] block">API KEY / ACCESS TOKEN</span>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter secure API token (stored in memory sandbox)..."
-              className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs"
-            />
+        {provider === 'openai' && (
+          <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-300 font-bold"><ShieldCheck size={14} /> SERVER-SIDE SECRET BOUNDARY</div>
+            <p className="text-gray-400 text-[10px] leading-relaxed">No API key is accepted or stored by this browser. Configure <code className="text-cyan-300">OPENAI_API_KEY</code> and optionally <code className="text-cyan-300">OPENAI_MODEL</code> in the Web Lab server / Cloudflare environment. Remote inference still requires the MIO L4 permission gate.</p>
           </div>
         )}
+
+        {(provider === 'openai' || provider === 'ollama') && (
+          <div className="space-y-1">
+            <span className="text-gray-400 text-[10px] block">MODEL {provider === 'openai' ? '(optional when configured server-side)' : ''}</span>
+            <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === 'openai' ? 'Server default when empty' : 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+          </div>
+        )}
+
+        {provider === 'ollama' && (
+          <div className="space-y-1">
+            <span className="text-gray-400 text-[10px] flex items-center gap-1"><Server size={11} /> LOCAL OLLAMA ENDPOINT</span>
+            <input type="text" value={ollamaEndpoint} onChange={(e) => setOllamaEndpoint(e.target.value)} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+          </div>
+        )}
+
+        <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
+          <input type="checkbox" checked={allowOfflineFallback} onChange={(e) => setAllowOfflineFallback(e.target.checked)} className="accent-cyan-400" />
+          <span className="text-gray-300">Allow explicit fallback to local heuristic when selected provider is unavailable</span>
+        </label>
       </div>
 
-      {/* Resource Limits */}
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
-        <span className="text-gray-300 font-bold block flex items-center gap-2">
-          <Cpu size={14} className="text-cyan-400" /> RESOURCE LIMITS &amp; QUOTA GUARDS
-        </span>
-
+        <span className="text-gray-300 font-bold flex items-center gap-2"><Cpu size={14} className="text-cyan-400" /> RESOURCE LIMITS &amp; QUOTA GUARDS</span>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-gray-400">
-          <div className="bg-[#111726] p-2.5 rounded border border-gray-800">
-            <span className="text-[10px] block text-gray-500">MAX EXECUTION TIMEOUT</span>
-            <span className="text-cyan-300 font-bold">15.00 Seconds</span>
-          </div>
-          <div className="bg-[#111726] p-2.5 rounded border border-gray-800">
-            <span className="text-[10px] block text-gray-500">MAX GENERATION STEPS</span>
-            <span className="text-cyan-300 font-bold">100 Iterations</span>
-          </div>
-          <div className="bg-[#111726] p-2.5 rounded border border-gray-800">
-            <span className="text-[10px] block text-gray-500">MAX MEMORY ALLOCATION</span>
-            <span className="text-cyan-300 font-bold">256 MB Sandbox</span>
-          </div>
+          <div className="bg-[#111726] p-2.5 rounded border border-gray-800"><span className="text-[10px] block text-gray-500">MODEL EXECUTION TIMEOUT</span><span className="text-cyan-300 font-bold">30 Seconds</span></div>
+          <div className="bg-[#111726] p-2.5 rounded border border-gray-800"><span className="text-[10px] block text-gray-500">TOOL DEFAULT TIMEOUT</span><span className="text-cyan-300 font-bold">15 Seconds</span></div>
+          <div className="bg-[#111726] p-2.5 rounded border border-gray-800"><span className="text-[10px] block text-gray-500">BROWSER SECRET STORAGE</span><span className="text-emerald-300 font-bold">DISABLED</span></div>
         </div>
       </div>
     </div>
