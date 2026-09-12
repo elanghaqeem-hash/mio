@@ -1,5 +1,6 @@
 import { eventBus } from '../../core/EventBus';
 import { taskRuntime } from '../TaskRuntime';
+import { resourceGovernor } from '../ResourceGovernor';
 import { PermissionEngine } from '../../security/PermissionEngine';
 import { PolicyEngine } from '../../security/PolicyEngine';
 import { RiskAnalyzer } from '../../security/RiskAnalyzer';
@@ -46,6 +47,14 @@ export class ToolRouter {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
+    try {
+      resourceGovernor.assertCanDispatch(context.taskId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.audit('blocked', 'TOOL_EXECUTION', tool.id, message, true);
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: message, validation: 'FAILED' };
+    }
+
     const permissionGated = tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE';
     if (permissionGated) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
@@ -69,6 +78,15 @@ export class ToolRouter {
 
     if (taskRuntime.isCancelled(context.taskId)) {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
+    }
+
+    try {
+      resourceGovernor.consumeToolCall(context.taskId, tool.networkAccess === true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.audit('blocked', 'TOOL_EXECUTION', tool.id, message, true);
+      eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: message, validation: 'FAILED' };
     }
 
     taskRuntime.start(context.taskId);
