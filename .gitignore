@@ -12,7 +12,7 @@ dist
 dist-electron
 release
 out
-public/mediapipe/
+public/mediapipe/wasm/
 
 # Editor directories and files
 .vscode/*
