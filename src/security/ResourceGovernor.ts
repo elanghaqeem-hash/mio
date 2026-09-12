@@ -19,7 +19,7 @@ const DEFAULT_BUDGETS: Record<MioSystemMode, TaskResourceBudget> = {
   TASKS: { maxDurationMs: 30_000, maxToolCalls: 2, maxNetworkCalls: 1, maxModelCalls: 1 },
 };
 
-class ResourceGovernorController {
+export class ResourceGovernorController {
   private readonly states = new Map<string, TaskResourceState>();
 
   public registerTask(taskId: string, mode: MioSystemMode, override?: Partial<TaskResourceBudget>): TaskResourceState {
