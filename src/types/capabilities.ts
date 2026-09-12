@@ -26,6 +26,7 @@ export interface CapabilityExecutionContext {
   mode: MioSystemMode;
   projectId?: string;
   requestedBy: 'USER' | 'AGENT';
+  toolId?: string;
   resourceId?: string;
   path?: string;
   networkOrigin?: string;
