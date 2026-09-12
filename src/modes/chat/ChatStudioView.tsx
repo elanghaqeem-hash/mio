@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BookOpen, CircleOff, Mic, MicOff, Send, ShieldCheck, Volume2, X } from 'lucide-react';
+import { BookOpen, CircleOff, Download, Mic, MicOff, Send, ShieldCheck, Volume2, X } from 'lucide-react';
 import { AgentOrchestrator, StructuredAgentResponse } from '../../agents/AgentOrchestrator';
 import { eventBus } from '../../core/EventBus';
+import { EvidencePackageBuilder, type MioEvidencePackage } from '../../project/EvidencePackage';
+import { ProjectKnowledgeIndex } from '../../project/ProjectKnowledgeIndex';
 import { ProjectManager } from '../../project/ProjectManager';
 import { MioCoreState } from '../../types/core';
 import { ModelMessage } from '../../types/models';
@@ -15,11 +17,22 @@ interface Message {
   text: string;
   timestamp: number;
   structured?: StructuredAgentResponse;
+  evidencePackage?: MioEvidencePackage;
 }
 
 function persistentExclusions(): string[] {
   const project = ProjectManager.getProject();
   return Object.values(project.knowledgeGovernance?.sources ?? {}).filter((source) => !source.included).map((source) => source.assetId);
+}
+
+function downloadEvidencePackage(pkg: MioEvidencePackage): void {
+  const blob = new Blob([EvidencePackageBuilder.serialize(pkg)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${pkg.packageId}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export const ChatStudioView: React.FC = () => {
@@ -51,11 +64,20 @@ export const ChatStudioView: React.FC = () => {
     const userText = input.trim();
     if (!userText) return;
     const conversation = buildConversationContext();
+    const exclusionsAtRequest = [...excludedAssetIds];
+    const projectKnowledgeAtRequest = projectKnowledgeEnabled;
     setInput('');
     setMessages((prev) => [...prev, { id: `msg_user_${Date.now()}`, sender: 'user', text: userText, timestamp: Date.now() }]);
 
-    const structured = await AgentOrchestrator.processPrompt(userText, conversation, { projectKnowledgeEnabled, excludedAssetIds, contextBudgetChars: 4800 });
-    setMessages((prev) => [...prev, { id: `msg_mio_${Date.now()}`, sender: 'mio', text: structured.resultText, timestamp: Date.now(), structured }]);
+    const structured = await AgentOrchestrator.processPrompt(userText, conversation, { projectKnowledgeEnabled: projectKnowledgeAtRequest, excludedAssetIds: exclusionsAtRequest, contextBudgetChars: 4800 });
+    const project = ProjectManager.getProject();
+    const snapshotContext = projectKnowledgeAtRequest
+      ? ProjectKnowledgeIndex.retrieve(project, userText, { excludedAssetIds: exclusionsAtRequest, contextBudgetChars: 4800 })
+      : { query: userText, hits: [], contextText: '', applicationContext: undefined };
+    const evidencePackage = structured.evidenceAudit && snapshotContext.hits.length > 0
+      ? EvidencePackageBuilder.build({ project, query: userText, responseText: structured.resultText, projectContext: snapshotContext, evidenceAudit: structured.evidenceAudit })
+      : undefined;
+    setMessages((prev) => [...prev, { id: `msg_mio_${Date.now()}`, sender: 'mio', text: structured.resultText, timestamp: Date.now(), structured, evidencePackage }]);
 
     if (isSpeaking && 'speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(structured.resultText);
@@ -105,6 +127,13 @@ export const ChatStudioView: React.FC = () => {
                   {msg.structured.projectContextEnabled !== undefined && <div className="flex flex-wrap items-center gap-2 text-[9px]"><span className={`rounded border px-2 py-0.5 ${msg.structured.projectContextEnabled ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`}>PROJECT CONTEXT: {msg.structured.projectContextEnabled ? 'ENABLED' : 'DISABLED'}</span><span className="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-400">SOURCES USED: {msg.structured.projectContextSources ?? 0}</span></div>}
 
                   {msg.structured.evidenceAudit && <EvidenceInspector audit={msg.structured.evidenceAudit} messageId={msg.id} />}
+
+                  {msg.evidencePackage && (
+                    <div className="flex items-center justify-between rounded border border-violet-500/20 bg-violet-950/10 p-2 text-[9px]">
+                      <div><div className="font-bold text-violet-300">AUDIT SNAPSHOT · {msg.evidencePackage.integrity.fingerprint}</div><div className="mt-0.5 text-gray-600">Observable evidence and governance metadata only · no private chain-of-thought · non-cryptographic fingerprint.</div></div>
+                      <button onClick={() => downloadEvidencePackage(msg.evidencePackage!)} className="flex shrink-0 items-center gap-1 rounded border border-violet-500/30 px-2 py-1 text-violet-300 hover:bg-violet-950/30"><Download size={10} /> EXPORT EVIDENCE JSON</button>
+                    </div>
+                  )}
 
                   {msg.structured.knowledgeSources && msg.structured.knowledgeSources.length > 0 && (
                     <div className="rounded border border-gray-800 bg-[#0a0f18] p-2">
