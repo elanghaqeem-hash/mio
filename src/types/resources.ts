@@ -35,3 +35,21 @@ export interface ResourceUsageEvent {
   reason?: string;
   state: TaskResourceState;
 }
+
+export type ExecutionLedgerCategory = 'TASK' | 'RESOURCE' | 'SCHEDULER' | 'SECURITY';
+export type ExecutionLedgerOutcome = 'INFO' | 'ALLOWED' | 'BLOCKED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface ExecutionLedgerEntry {
+  id: string;
+  timestamp: number;
+  taskId?: string;
+  category: ExecutionLedgerCategory;
+  action: string;
+  outcome: ExecutionLedgerOutcome;
+  details?: string;
+}
+
+export interface ExecutionLedgerSnapshot {
+  entries: ExecutionLedgerEntry[];
+  updatedAt: number;
+}
