@@ -2,6 +2,7 @@ import React, { StrictMode, Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
+import { MemoryContextManager } from './memory/MemoryContextManager';
 import { ProjectManager } from './project/ProjectManager';
 import { MioMemoryManager } from './security/MemoryManager';
 import { executionLedger } from './security/ExecutionLedger';
@@ -44,9 +45,12 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 async function bootstrapMio(): Promise<void> {
+  await ProjectManager.initialize();
+  const project = ProjectManager.getProject();
+
   await Promise.all([
-    ProjectManager.initialize(),
     MioMemoryManager.initialize(),
+    MemoryContextManager.initializeProject(project.id),
     executionLedger.initialize(),
     taskRuntime.initialize(),
   ]);
