@@ -4,8 +4,8 @@ import { MioMemoryManager } from '../../security/MemoryManager';
 import { PermissionEngine } from '../../security/PermissionEngine';
 import { PERMISSION_LEVEL_POLICIES } from '../../security/PermissionPolicy';
 import { securityAuditLog } from '../../security/SecurityAuditLog';
-import { ProjectManager } from '../../project/ProjectManager';
-import type { AuthorizationGrant, AuthorizationScope, MemoryItem, SecurityEvent } from '../../types/security';
+import { GovernedMemoryActions } from '../../security/GovernedMemoryActions';
+import type { AuthorizationGrant, MemoryItem, SecurityEvent } from '../../types/security';
 import { eventBus } from '../../core/EventBus';
 
 export const SecurityDashboardView: React.FC = () => {
@@ -21,55 +21,6 @@ export const SecurityDashboardView: React.FC = () => {
     setActiveGrants(PermissionEngine.getActiveGrants());
     return () => { unsubMem(); unsubSec(); unsubGrants(); };
   }, []);
-
-  const deleteMemoryGoverned = async (memory: MemoryItem) => {
-    const taskId = `security_delete_memory_${memory.id}`;
-    const projectId = ProjectManager.getProject().id;
-    const scope: AuthorizationScope = {
-      taskId,
-      projectId,
-      action: 'MEMORY:DELETE',
-      target: `Long-term memory ${memory.id}`,
-      resourceId: `memory:${memory.id}`,
-      networkAllowed: false,
-    };
-    const grant = await PermissionEngine.requestScopedPermission({
-      ...scope,
-      level: 'L3_MODIFY',
-      changes: [`Delete long-term memory item ${memory.id}`],
-      risks: ['The selected persistent memory item will no longer be available to MIO.'],
-      expectedResult: 'Exactly one selected long-term memory item is removed.',
-      maxUses: 1,
-      ttlMs: 30_000,
-    });
-    if (!grant || !PermissionEngine.consumeGrant(grant.id, scope)) return;
-    MioMemoryManager.deleteMemory(memory.id);
-  };
-
-  const clearAllMemoryGoverned = async () => {
-    const taskId = `security_clear_memory_${ProjectManager.getProject().id}`;
-    const projectId = ProjectManager.getProject().id;
-    const scope: AuthorizationScope = {
-      taskId,
-      projectId,
-      action: 'MEMORY:CLEAR_ALL',
-      target: 'Controlled Long-Term Memory',
-      resourceId: 'memory:all',
-      networkAllowed: false,
-    };
-    const grant = await PermissionEngine.requestScopedPermission({
-      ...scope,
-      level: 'L5_DESTRUCTIVE',
-      changes: ['Delete all persistent long-term memories.', 'Delete every pending long-term memory review candidate.'],
-      risks: ['This destructive operation removes all current long-term memory records and review candidates from MIO storage.'],
-      expectedResult: 'Long-term memory and its pending review queue become empty.',
-      maxUses: 1,
-      ttlMs: 30_000,
-      forceDryRun: true,
-    });
-    if (!grant || !PermissionEngine.consumeGrant(grant.id, scope)) return;
-    MioMemoryManager.clearAll();
-  };
 
   return (
     <div className="flex h-full w-full flex-col space-y-6 overflow-y-auto bg-[#07090e] p-4 font-mono text-xs">
@@ -94,10 +45,10 @@ export const SecurityDashboardView: React.FC = () => {
       </div>
 
       <div className="rounded-xl border border-gray-800 bg-[#0d121d] p-4">
-        <div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 font-bold text-gray-300"><Database size={14} className="text-cyan-400" /> CONTROLLED LONG-TERM MEMORY ({memories.length})</span><button disabled={memories.length === 0} onClick={clearAllMemoryGoverned} className="cursor-pointer rounded border border-red-500/30 bg-red-950/20 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-40">CLEAR ALL — L5 APPROVAL</button></div>
+        <div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 font-bold text-gray-300"><Database size={14} className="text-cyan-400" /> CONTROLLED LONG-TERM MEMORY ({memories.length})</span><button disabled={memories.length === 0} onClick={() => void GovernedMemoryActions.clearAll()} className="cursor-pointer rounded border border-red-500/30 bg-red-950/20 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-40">CLEAR ALL — L5 APPROVAL</button></div>
         <div className="space-y-2 max-h-48 overflow-y-auto">
           {memories.length === 0 && <div className="p-3 text-center text-gray-500">No persistent long-term memory records.</div>}
-          {memories.map((mem) => <div key={mem.id} className="flex items-center justify-between rounded border border-gray-800 bg-[#111726] p-2.5"><div className="truncate pr-4"><div className="mb-1 flex items-center gap-2"><span className="rounded border border-cyan-500/30 bg-cyan-950 px-1.5 py-0.5 text-[9px] text-cyan-300">{mem.category}</span><span className="text-[10px] text-gray-500">Confidence: {(mem.confidence * 100).toFixed(0)}%</span></div><p className="truncate text-gray-300">{mem.content}</p></div><button aria-label={`Delete memory ${mem.id}`} onClick={() => void deleteMemoryGoverned(mem)} className="rounded p-1.5 text-gray-500 hover:text-red-400"><Trash2 size={13} /></button></div>)}
+          {memories.map((mem) => <div key={mem.id} className="flex items-center justify-between rounded border border-gray-800 bg-[#111726] p-2.5"><div className="truncate pr-4"><div className="mb-1 flex items-center gap-2"><span className="rounded border border-cyan-500/30 bg-cyan-950 px-1.5 py-0.5 text-[9px] text-cyan-300">{mem.category}</span><span className="text-[10px] text-gray-500">Confidence: {(mem.confidence * 100).toFixed(0)}%</span></div><p className="truncate text-gray-300">{mem.content}</p></div><button aria-label={`Delete memory ${mem.id}`} onClick={() => void GovernedMemoryActions.deleteMemory(mem)} className="rounded p-1.5 text-gray-500 hover:text-red-400"><Trash2 size={13} /></button></div>)}
         </div>
       </div>
 
