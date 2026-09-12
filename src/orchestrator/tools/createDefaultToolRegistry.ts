@@ -39,7 +39,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
       const query = (input as { query?: unknown }).query;
       return typeof query === 'string' && query.trim().length > 0 && query.length <= 1000;
     },
-    execute: async (input) => new ResearchEngine().research(input.query),
+    execute: async (input, context) => new ResearchEngine().research(input.query, context.signal),
     validateOutput: (output: ResearchReport) => Array.isArray(output.sources) && Array.isArray(output.providerErrors),
   });
 
