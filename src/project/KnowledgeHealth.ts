@@ -1,4 +1,5 @@
 import type { KnowledgeConflictResolution, KnowledgeFreshness, KnowledgeSourcePriority, MioProject, ProjectAsset } from '../types/project';
+import { KnowledgeLineage } from './KnowledgeLineage';
 
 export type KnowledgeConflictReason = 'NUMERIC_MISMATCH' | 'POLARITY_MISMATCH';
 
@@ -20,6 +21,8 @@ export interface KnowledgeHealthSummary {
   primarySources: number;
   corroboratedSources: number;
   corroborationGroups: number;
+  independentCorroborationGroups: number;
+  lineageOverlapGroups: number;
   evidenceStrength: 'NONE' | 'SINGLE_SOURCE' | 'MIXED' | 'CORROBORATED';
   reviewRequiredSources: number;
   potentialConflicts: KnowledgePotentialConflict[];
@@ -108,7 +111,9 @@ export class KnowledgeHealth {
     const documents = activeDocuments(project);
     const activeIds = new Set(documents.map((asset) => asset.id));
     const groups = (project.knowledgeGovernance.corroborationGroups ?? []).filter((group) => group.assetIds.filter((id) => activeIds.has(id)).length >= 2);
-    const corroboratedIds = new Set(groups.flatMap((group) => group.assetIds.filter((id) => activeIds.has(id))));
+    const independentGroups = groups.filter((group) => KnowledgeLineage.independentFamilyCount(project, group.assetIds.filter((id) => activeIds.has(id))) >= 2);
+    const lineageOverlapGroups = groups.length - independentGroups.length;
+    const corroboratedIds = new Set(independentGroups.flatMap((group) => group.assetIds.filter((id) => activeIds.has(id))));
     const verifiedSources = documents.filter((asset) => project.knowledgeGovernance.sources[asset.id]?.trust === 'VERIFIED').length;
     const currentSources = documents.filter((asset) => freshness(project.knowledgeGovernance.sources[asset.id]?.freshUntil) === 'CURRENT').length;
     const primarySources = documents.filter((asset) => priority(project, asset.id) === 'PRIMARY').length;
@@ -122,7 +127,7 @@ export class KnowledgeHealth {
     const evidenceStrength: KnowledgeHealthSummary['evidenceStrength'] = documents.length === 0 ? 'NONE' : documents.length === 1 ? 'SINGLE_SOURCE' : corroboratedIds.size >= 2 ? 'CORROBORATED' : 'MIXED';
 
     if (documents.length === 0) {
-      return { activeSources: 0, verifiedSources: 0, currentSources: 0, primarySources: 0, corroboratedSources: 0, corroborationGroups: 0, evidenceStrength, reviewRequiredSources: 0, potentialConflicts: [], openConflicts: 0, reviewedConflicts: 0, healthScore: 0, confidence: 'LOW', method: 'BOUNDED_GOVERNANCE_HEURISTIC' };
+      return { activeSources: 0, verifiedSources: 0, currentSources: 0, primarySources: 0, corroboratedSources: 0, corroborationGroups: 0, independentCorroborationGroups: 0, lineageOverlapGroups: 0, evidenceStrength, reviewRequiredSources: 0, potentialConflicts: [], openConflicts: 0, reviewedConflicts: 0, healthScore: 0, confidence: 'LOW', method: 'BOUNDED_GOVERNANCE_HEURISTIC' };
     }
 
     const verifiedRatio = verifiedSources / documents.length;
@@ -140,6 +145,8 @@ export class KnowledgeHealth {
       primarySources,
       corroboratedSources: corroboratedIds.size,
       corroborationGroups: groups.length,
+      independentCorroborationGroups: independentGroups.length,
+      lineageOverlapGroups,
       evidenceStrength,
       reviewRequiredSources,
       potentialConflicts,
