@@ -1,19 +1,51 @@
 import { eventBus } from '../core/EventBus';
 import { emergencyStop } from '../core/EmergencyStop';
+import { defaultStorageProvider } from '../storage/StorageRuntime';
+import type { StorageProvider } from '../storage/StorageProvider';
 import type { TaskPlan } from './TaskPlanner';
 import type { RuntimeTask, RuntimeTaskStep, TaskRuntimeEvent, TaskRuntimeSnapshot, TaskRuntimeStatus } from '../types/tasks';
 
 const TERMINAL_STATES = new Set<TaskRuntimeStatus>(['COMPLETED', 'FAILED', 'CANCELLED']);
+const RUNTIME_STORAGE_KEY = 'task-runtime-v1';
 
 class TaskRuntimeController {
   private readonly tasks = new Map<string, RuntimeTask>();
   private readonly cancellationHandlers = new Map<string, Set<() => void>>();
+  private storage: StorageProvider = defaultStorageProvider;
+  private initialized = false;
 
   constructor() {
-    emergencyStop.registerAbortHandler(() => {
-      this.cancelAllActive('STOP MIO / Emergency Stop');
-    });
+    emergencyStop.registerAbortHandler(() => this.cancelAllActive('STOP MIO / Emergency Stop'));
   }
+
+  public async initialize(): Promise<TaskRuntimeSnapshot> {
+    if (this.initialized) return this.snapshot();
+    try {
+      const persisted = await this.storage.get<TaskRuntimeSnapshot>('runtime', RUNTIME_STORAGE_KEY);
+      if (persisted?.tasks?.length) {
+        for (const raw of persisted.tasks) {
+          const recovered = this.normalizeRecoveredTask(raw);
+          this.tasks.set(recovered.id, recovered);
+        }
+      }
+    } catch (error) {
+      eventBus.emit('STORAGE_ERROR', {
+        scope: 'TASK_RUNTIME',
+        action: 'INITIALIZE',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    this.initialized = true;
+    this.publishSnapshot();
+    return this.snapshot();
+  }
+
+  public setStorageProvider(provider: StorageProvider): void {
+    this.storage = provider;
+    this.initialized = false;
+  }
+
+  public isInitialized(): boolean { return this.initialized; }
 
   public create(plan: TaskPlan, prompt: string, projectId?: string, maxRetries: number = 1): RuntimeTask {
     const now = Date.now();
@@ -48,9 +80,7 @@ class TaskRuntimeController {
     };
   }
 
-  public isCancelled(taskId: string): boolean {
-    return this.tasks.get(taskId)?.status === 'CANCELLED';
-  }
+  public isCancelled(taskId: string): boolean { return this.tasks.get(taskId)?.status === 'CANCELLED'; }
 
   public start(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId);
@@ -76,7 +106,7 @@ class TaskRuntimeController {
   public resume(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId);
     if (!task || task.status !== 'PAUSED' || emergencyStop.isEmergencyStopped()) return task ? this.clone(task) : undefined;
-    task.status = 'RUNNING'; task.updatedAt = Date.now();
+    task.status = 'PENDING'; task.updatedAt = Date.now();
     this.emitTaskEvent(taskId, 'RESUMED'); this.publishSnapshot(); return this.clone(task);
   }
 
@@ -122,7 +152,7 @@ class TaskRuntimeController {
     const task = this.getMutable(taskId);
     if (!task || task.status !== 'FAILED' || task.retryCount >= task.maxRetries || emergencyStop.isEmergencyStopped()) return task ? this.clone(task) : undefined;
     task.retryCount += 1; task.status = 'PENDING'; task.error = undefined; task.completedAt = undefined; task.updatedAt = Date.now();
-    task.steps.forEach((step) => { if (step.status === 'FAILED' || step.status === 'RUNNING') { step.status = 'PENDING'; step.error = undefined; step.startedAt = undefined; step.completedAt = undefined; } });
+    task.steps.forEach((step) => { if (step.status === 'FAILED' || step.status === 'RUNNING' || step.status === 'CANCELLED') { step.status = 'PENDING'; step.error = undefined; step.startedAt = undefined; step.completedAt = undefined; } });
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'RETRY_SCHEDULED', `Retry ${task.retryCount}/${task.maxRetries}`); this.publishSnapshot(); return this.clone(task);
   }
 
@@ -164,13 +194,53 @@ class TaskRuntimeController {
     this.publishSnapshot();
   }
 
+  public async flush(): Promise<void> {
+    try {
+      await this.storage.set('runtime', RUNTIME_STORAGE_KEY, this.snapshot());
+    } catch (error) {
+      eventBus.emit('STORAGE_ERROR', {
+        scope: 'TASK_RUNTIME',
+        action: 'WRITE',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private normalizeRecoveredTask(task: RuntimeTask): RuntimeTask {
+    const normalized: RuntimeTask = {
+      ...task,
+      dependencies: Array.isArray(task.dependencies) ? [...task.dependencies] : [],
+      steps: Array.isArray(task.steps) ? task.steps.map((step) => ({ ...step })) : [],
+      retryCount: Number.isFinite(task.retryCount) ? task.retryCount : 0,
+      maxRetries: Number.isFinite(task.maxRetries) ? task.maxRetries : 1,
+    };
+
+    if (!TERMINAL_STATES.has(normalized.status)) {
+      const recoveredAt = Date.now();
+      normalized.status = 'FAILED';
+      normalized.error = 'Execution interrupted by application/runtime restart. Explicit retry is required.';
+      normalized.completedAt = recoveredAt;
+      normalized.updatedAt = recoveredAt;
+      const runningStep = normalized.steps.find((step) => step.status === 'RUNNING');
+      if (runningStep) {
+        runningStep.status = 'FAILED';
+        runningStep.error = 'Interrupted by runtime restart';
+        runningStep.completedAt = recoveredAt;
+      }
+    }
+    return normalized;
+  }
+
   private getMutable(taskId: string): RuntimeTask | undefined { return this.tasks.get(taskId); }
   private recalculateProgress(task: RuntimeTask): void {
     if (task.steps.length === 0) { task.progress = TERMINAL_STATES.has(task.status) ? 100 : 0; return; }
     const completed = task.steps.filter((step) => step.status === 'COMPLETED' || step.status === 'SKIPPED').length;
     task.progress = Math.round((completed / task.steps.length) * 100);
   }
-  private publishSnapshot(): void { eventBus.emit<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', this.snapshot()); }
+  private publishSnapshot(): void {
+    eventBus.emit<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', this.snapshot());
+    if (this.initialized) void this.flush();
+  }
   private emitTaskEvent(taskId: string, type: TaskRuntimeEvent['type'], details?: string): void {
     const event: TaskRuntimeEvent = { taskId, type, timestamp: Date.now(), details };
     eventBus.emit<TaskRuntimeEvent>('TASK_RUNTIME_EVENT', event);
