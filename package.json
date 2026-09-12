@@ -11,7 +11,7 @@
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
     "pack:win": "npm run build:all && electron-builder --win --dir",
     "dist:win": "npm run build:all && electron-builder --win",
-    "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite();\"",
+    "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite().then(({passed,total}) => { if (passed !== total) process.exit(1); }).catch((error) => { console.error(error); process.exit(1); });\"",
     "lint": "oxlint",
     "preview": "vite preview"
   },

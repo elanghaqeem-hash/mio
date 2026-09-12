@@ -2,6 +2,8 @@ import React, { StrictMode, Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
+import { ProjectManager } from './project/ProjectManager';
+import { MioMemoryManager } from './security/MemoryManager';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -92,10 +94,19 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
-);
+async function bootstrapMio(): Promise<void> {
+  await Promise.all([
+    ProjectManager.initialize(),
+    MioMemoryManager.initialize(),
+  ]);
+
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+}
+
+void bootstrapMio();
