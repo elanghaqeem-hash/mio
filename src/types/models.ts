@@ -17,6 +17,8 @@ export interface ApplicationContextSource {
   trust: ApplicationContextTrust;
   freshness?: ApplicationContextFreshness;
   priority?: ApplicationContextPriority;
+  lineageFamilyKeys?: string[];
+  derivedFromAssetIds?: string[];
   reviewedAt?: number;
   score: number;
   text: string;
