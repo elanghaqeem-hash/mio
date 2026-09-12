@@ -12,6 +12,7 @@ dist
 dist-electron
 release
 out
+public/mediapipe/
 
 # Editor directories and files
 .vscode/*
