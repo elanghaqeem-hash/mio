@@ -12,6 +12,9 @@ export interface AuthorizationScope {
   action: string;
   target: string;
   toolId?: string;
+  networkOrigin?: string;
+  resourceId?: string;
+  path?: string;
   networkAllowed?: boolean;
 }
 
@@ -22,7 +25,11 @@ export interface AuthorizationGrant {
   grantedAt: number;
   expiresAt: number;
   revoked: boolean;
+  revokeReason?: string;
   source: 'AUTO_POLICY' | 'USER_APPROVAL';
+  maxUses: number;
+  uses: number;
+  requiresDryRun: boolean;
 }
 
 export interface ScopedPermissionRequest {
@@ -36,7 +43,12 @@ export interface ScopedPermissionRequest {
   projectId?: string;
   toolId?: string;
   networkAccess?: boolean;
+  networkOrigin?: string;
+  resourceId?: string;
+  path?: string;
   ttlMs?: number;
+  maxUses?: number;
+  forceDryRun?: boolean;
 }
 
 export interface DryRunRequest {
@@ -50,7 +62,9 @@ export interface DryRunRequest {
   taskId?: string;
   projectId?: string;
   toolId?: string;
+  scopeSummary?: string[];
   expiresInMs?: number;
+  maxUses?: number;
   onApprove: () => void;
   onReview: () => void;
   onCancel: () => void;
