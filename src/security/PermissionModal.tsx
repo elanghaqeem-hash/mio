@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { DryRunRequest } from '../types/security';
 import { ShieldAlert, CheckCircle, Eye, XCircle } from 'lucide-react';
 
@@ -9,8 +9,6 @@ interface PermissionModalProps {
 
 export const PermissionModal: React.FC<PermissionModalProps> = ({ request, onClose }) => {
   const [destructiveAcknowledged, setDestructiveAcknowledged] = useState(false);
-
-  useEffect(() => { setDestructiveAcknowledged(false); }, [request?.id]);
   if (!request) return null;
 
   const isDestructive = request.permissionLevel === 'L5_DESTRUCTIVE';
