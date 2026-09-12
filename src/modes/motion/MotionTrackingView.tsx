@@ -3,6 +3,7 @@ import { Camera, CameraOff, ShieldCheck, Activity, AlertTriangle, ScanLine, Load
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { PermissionEngine } from '../../security/PermissionEngine';
 import { eventBus } from '../../core/EventBus';
+import { poseTransferStore } from '../../core/PoseTransferStore';
 
 interface PosePoint {
   x: number;
@@ -217,8 +218,8 @@ export const MotionTrackingView: React.FC = () => {
   const transferPose = () => {
     if (landmarks.length !== 33) return;
     const capture = { timestamp: Date.now(), landmarks: landmarks.map((point) => ({ ...point })), confidence, gesture };
-    eventBus.emit('POSE_CAPTURED', capture);
-    eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Transferred real MediaPipe pose (${landmarks.length} landmarks, ${Math.round(confidence * 100)}% confidence)`, mode: 'MOTION' });
+    poseTransferStore.set(capture);
+    eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Queued real MediaPipe pose for Animation (${landmarks.length} landmarks, ${Math.round(confidence * 100)}% confidence)`, mode: 'MOTION' });
     eventBus.emit('SWITCH_MODE', 'ANIMATION');
   };
 
@@ -232,16 +233,13 @@ export const MotionTrackingView: React.FC = () => {
         {engineState === 'LOADING' ? <Loader2 size={14} className="animate-spin"/> : cameraActive ? <CameraOff size={14}/> : <Camera size={14}/>} {engineState === 'LOADING' ? 'LOADING ENGINE' : cameraActive ? 'DEACTIVATE CAMERA' : 'REQUEST CAMERA'}
       </button>
     </div>
-
     {error && <div className="mb-3 p-3 border border-red-500/30 bg-red-950/20 rounded text-red-300 flex gap-2"><AlertTriangle size={14}/><span>Motion error: {error}</span></div>}
-
     <div className="flex-1 flex gap-4 overflow-hidden">
       <div className="flex-1 bg-black rounded-xl border border-cyan-500/30 overflow-hidden relative flex items-center justify-center">
         <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-contain"/>
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain pointer-events-none"/>
         {!cameraActive && <div className="absolute text-gray-500 flex flex-col items-center gap-2"><ScanLine size={28}/><span>CAMERA OFF // HTTPS PERMISSION REQUIRED</span></div>}
       </div>
-
       <div className="w-80 bg-[#0d121d] rounded-xl border border-gray-800 p-4 space-y-4">
         <span className="text-gray-300 font-bold block border-b border-gray-800 pb-2">REAL-TIME POSE TELEMETRY</span>
         <div className="grid grid-cols-2 gap-2">
