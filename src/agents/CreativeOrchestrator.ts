@@ -32,17 +32,7 @@ function persistPipeline(record: CreativePipelineRecord, message?: string): void
 }
 
 function toPersistedStep(step: CreativePlanStep): CreativePipelineStepRecord {
-  return {
-    id: step.id,
-    mode: step.mode,
-    action: step.action,
-    assetName: step.assetName,
-    status: step.status === 'pending' ? 'PENDING' : step.status === 'in_progress' ? 'RUNNING' : step.status === 'completed' ? 'COMPLETED' : step.status === 'blocked' ? 'BLOCKED' : 'FAILED',
-    dependsOnStepIds: [...step.dependsOnStepIds],
-    dependsOnAssetIds: [],
-    outputAssetId: step.outputAssetId,
-    validation: step.validation,
-  };
+  return { id: step.id, mode: step.mode, action: step.action, assetName: step.assetName, status: step.status === 'pending' ? 'PENDING' : step.status === 'in_progress' ? 'RUNNING' : step.status === 'completed' ? 'COMPLETED' : step.status === 'blocked' ? 'BLOCKED' : 'FAILED', dependsOnStepIds: [...step.dependsOnStepIds], dependsOnAssetIds: [], outputAssetId: step.outputAssetId, validation: step.validation };
 }
 
 export class CreativeOrchestrator {
@@ -54,7 +44,6 @@ export class CreativeOrchestrator {
     const needsSFX = lower.includes('sfx') || lower.includes('sound') || lower.includes('footstep') || lower.includes('laser') || lower.includes('engine') || lower.includes('thruster') || lower.includes('audio');
     const needsMusic = lower.includes('music') || lower.includes('compose') || lower.includes('theme') || lower.includes('melody') || lower.includes('score') || lower.includes('soundtrack');
     const needsGraphic = lower.includes('poster') || lower.includes('graphic') || lower.includes('banner') || lower.includes('design') || lower.includes('art') || lower.includes('ui');
-
     if (needs3D || (!needsAnim && !needsSFX && !needsMusic && !needsGraphic)) steps.push({ id: 'create_3d', mode: '3D', action: 'Generate validated parametric 3D scene', assetName: 'Cyber_Asset_Model.mio3d', status: 'pending', dependsOnStepIds: [] });
     const threeDId = steps.find((step) => step.mode === '3D')?.id;
     if (needsAnim) steps.push({ id: 'create_animation', mode: 'ANIMATION', action: 'Generate animation bound to the produced 3D object when available', assetName: 'Kinetic_Locomotion.mioanim', status: 'pending', dependsOnStepIds: threeDId ? [threeDId] : [] });
@@ -67,18 +56,25 @@ export class CreativeOrchestrator {
   public static async executePipeline(steps: CreativePlanStep[], onProgress: (stepIdx: number, step: CreativePlanStep) => void, prompt = 'Cross-mode creative project pipeline'): Promise<boolean> {
     const pipelineId = `creative_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = Date.now();
-    const record: CreativePipelineRecord = {
-      id: pipelineId,
-      prompt,
-      status: 'PLANNED',
-      steps: steps.map(toPersistedStep),
-      createdAt: now,
-      updatedAt: now,
-      disclosure: 'Pipeline status records deterministic local prototype generation, dependency linkage, structural validation, and project versioning. It does not imply artistic quality or external-model generation.',
-    };
+    const record: CreativePipelineRecord = { id: pipelineId, prompt, status: 'PLANNED', steps: steps.map(toPersistedStep), createdAt: now, updatedAt: now, disclosure: 'Pipeline status records deterministic local prototype generation, dependency linkage, structural validation, and project versioning. It does not imply artistic quality or external-model generation.' };
     persistPipeline(record, `Planned cross-mode creative pipeline ${pipelineId}`);
-    record.status = 'RUNNING'; record.updatedAt = Date.now(); persistPipeline(record);
 
+    const knownStepIds = new Set(record.steps.map((step) => step.id));
+    for (let index = 0; index < steps.length; index += 1) {
+      const missingDependencyId = steps[index].dependsOnStepIds.find((dependencyId) => !knownStepIds.has(dependencyId));
+      if (missingDependencyId) {
+        steps[index].status = 'blocked';
+        record.steps[index].status = 'BLOCKED';
+        record.steps[index].error = `Declared dependency ${missingDependencyId} does not exist in this pipeline`;
+        record.steps[index].completedAt = Date.now();
+        record.status = 'FAILED'; record.completedAt = Date.now(); record.updatedAt = record.completedAt;
+        persistPipeline(record, `Rejected creative pipeline ${pipelineId}: missing dependency ${missingDependencyId}`);
+        onProgress(index, steps[index]);
+        return false;
+      }
+    }
+
+    record.status = 'RUNNING'; record.updatedAt = Date.now(); persistPipeline(record);
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index];
       const persisted = record.steps[index];
@@ -86,41 +82,21 @@ export class CreativeOrchestrator {
         step.status = 'failed'; persisted.status = 'CANCELLED'; persisted.completedAt = Date.now(); persisted.error = 'STOP MIO / Emergency Stop';
         record.status = 'CANCELLED'; record.completedAt = Date.now(); record.updatedAt = record.completedAt; persistPipeline(record, `Cancelled creative pipeline ${pipelineId} by STOP MIO`); onProgress(index, step); return false;
       }
-
-      const dependencies = step.dependsOnStepIds.map((dependencyId) => record.steps.find((candidate) => candidate.id === dependencyId)).filter(Boolean) as CreativePipelineStepRecord[];
-      const incompleteDependency = dependencies.find((dependency) => dependency.status !== 'COMPLETED' || !dependency.outputAssetId);
+      const dependencies = step.dependsOnStepIds.map((dependencyId) => record.steps.find((candidate) => candidate.id === dependencyId)) as CreativePipelineStepRecord[];
+      const incompleteDependency = dependencies.find((dependency) => !dependency || dependency.status !== 'COMPLETED' || !dependency.outputAssetId);
       if (incompleteDependency) {
-        step.status = 'blocked'; persisted.status = 'BLOCKED'; persisted.error = `Dependency ${incompleteDependency.id} is not completed with an output asset`; persisted.completedAt = Date.now();
-        record.status = 'FAILED'; record.completedAt = Date.now(); record.updatedAt = record.completedAt; persistPipeline(record, `Blocked creative pipeline ${pipelineId} on dependency ${incompleteDependency.id}`); onProgress(index, step); return false;
+        const dependencyId = incompleteDependency?.id ?? step.dependsOnStepIds[dependencies.indexOf(incompleteDependency)];
+        step.status = 'blocked'; persisted.status = 'BLOCKED'; persisted.error = `Dependency ${dependencyId} is not completed with an output asset`; persisted.completedAt = Date.now();
+        record.status = 'FAILED'; record.completedAt = Date.now(); record.updatedAt = record.completedAt; persistPipeline(record, `Blocked creative pipeline ${pipelineId} on dependency ${dependencyId}`); onProgress(index, step); return false;
       }
-
       persisted.dependsOnAssetIds = dependencies.flatMap((dependency) => dependency.outputAssetId ? [dependency.outputAssetId] : []);
       step.status = 'in_progress'; persisted.status = 'RUNNING'; persisted.startedAt = Date.now(); record.updatedAt = persisted.startedAt;
       eventBus.emit('CORE_STATE_CHANGE', 'CREATING'); persistPipeline(record); onProgress(index, step);
-
       try {
         const generated = this.generateStep(step, pipelineId, persisted.dependsOnAssetIds, prompt);
         step.validation = validationSnapshot(generated.validation); persisted.validation = step.validation;
         if (!generated.validation.valid) throw new Error(`Validation failed: ${generated.validation.errors.join('; ')}`);
-
-        const asset = ProjectManager.addAsset({
-          name: step.assetName,
-          type: generated.assetType,
-          origin: 'GENERATED',
-          filePath: `GENERATED/${step.mode}/${step.assetName}`,
-          verified: true,
-          data: {
-            ...generated.data,
-            __mioPipeline: {
-              pipelineId,
-              stepId: step.id,
-              mode: step.mode,
-              dependsOnAssetIds: [...persisted.dependsOnAssetIds],
-              sourcePrompt: prompt,
-              generatedAt: Date.now(),
-            },
-          },
-        });
+        const asset = ProjectManager.addAsset({ name: step.assetName, type: generated.assetType, origin: 'GENERATED', filePath: `GENERATED/${step.mode}/${step.assetName}`, verified: true, data: { ...generated.data, __mioPipeline: { pipelineId, stepId: step.id, mode: step.mode, dependsOnAssetIds: [...persisted.dependsOnAssetIds], sourcePrompt: prompt, generatedAt: Date.now() } } });
         step.outputAssetId = asset.id; persisted.outputAssetId = asset.id; step.status = 'completed'; persisted.status = 'COMPLETED'; persisted.completedAt = Date.now(); record.updatedAt = persisted.completedAt;
         persistPipeline(record, `Completed creative pipeline step ${step.id} → ${asset.id}`); onProgress(index, step);
       } catch (error) {
@@ -129,12 +105,10 @@ export class CreativeOrchestrator {
         persistPipeline(record, `Failed creative pipeline step ${step.id}: ${message}`); eventBus.emit('CORE_STATE_CHANGE', 'ERROR'); onProgress(index, step); return false;
       }
     }
-
     record.status = 'COMPLETED'; record.completedAt = Date.now(); record.updatedAt = record.completedAt; persistPipeline(record, `Completed cross-mode creative pipeline ${pipelineId}`);
     VersionManager.takeSnapshot(`Cross-mode creative pipeline ${pipelineId}`);
     record.snapshotVersionId = ProjectManager.getProject().versions[0]?.versionId; record.updatedAt = Date.now(); persistPipeline(record);
-    eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
-    return true;
+    eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS'); return true;
   }
 
   private static generateStep(step: CreativePlanStep, pipelineId: string, dependencyAssetIds: string[], prompt: string): { assetType: '3d' | 'animation' | 'graphic' | 'sfx' | 'music'; data: Mio3DScene | MioAnimationProject | MioGraphicDocument | MioSFXPatch | MioMusicProject; validation: ValidationResult } {
