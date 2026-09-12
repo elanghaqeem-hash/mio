@@ -6,7 +6,6 @@ import { setupIpcHandlers } from './ipc/handlers';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let isQuitting = false;
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -85,7 +84,6 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.SHOW_NOTIFICATION, (event, args) => handlers.handleShowNotification(event, args[0]));
   secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => handlers.handleEmergencyStop(event, args[0]));
   secureHandle(IPC_CHANNELS.QUIT_APP, () => {
-    isQuitting = true;
     handlers.revokeAllWorkspaceAuthority();
     app.quit();
   });
@@ -168,10 +166,7 @@ function createTray() {
     { type: 'separator' },
     {
       label: 'Quit Mio completely',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
+      click: () => app.quit(),
     },
   ]);
 
