@@ -73,6 +73,7 @@ function reasonSummary(reasons: KnowledgeReviewReason[]): string {
 export class KnowledgeReviewInbox {
   public static build(project: MioProject): KnowledgeReviewInboxItem[] {
     const conflictIds = conflictAssetIds(project);
+    const severityOrder: Record<KnowledgeReviewSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
     return project.assets
       .filter((asset) => activeDocument(project, asset))
       .map((asset) => {
@@ -98,7 +99,7 @@ export class KnowledgeReviewInbox {
         };
       })
       .filter((item) => item.reasons.length > 0)
-      .sort((a, b) => ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }[a.severity] - ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }[b.severity])) || a.assetName.localeCompare(b.assetName));
+      .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity] || a.assetName.localeCompare(b.assetName));
   }
 
   public static timeline(project: MioProject, assetId?: string): KnowledgeTimelineEvent[] {
