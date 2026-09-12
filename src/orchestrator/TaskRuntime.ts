@@ -66,7 +66,7 @@ class TaskRuntimeController {
 
   public resume(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || task.status !== 'PAUSED' || emergencyStop.isEmergencyStopped()) return task ? this.clone(task) : undefined;
-    task.status = 'PENDING'; task.updatedAt = Date.now(); this.emitTaskEvent(taskId, 'RESUMED'); this.publishSnapshot(); return this.clone(task);
+    task.status = 'RUNNING'; task.updatedAt = Date.now(); this.emitTaskEvent(taskId, 'RESUMED'); this.publishSnapshot(); return this.clone(task);
   }
 
   public startStep(taskId: string, stepId: string): RuntimeTask | undefined {
