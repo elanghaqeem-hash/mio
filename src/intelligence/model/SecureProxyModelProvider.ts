@@ -31,6 +31,7 @@ export class SecureProxyModelProvider implements ModelProvider {
         provider: this.id,
         model: this.model,
         messages: request.messages,
+        applicationContext: request.applicationContext,
         temperature: request.temperature,
         maxOutputTokens: request.maxOutputTokens,
       }),
