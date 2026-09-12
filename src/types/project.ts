@@ -2,8 +2,25 @@ import { MioSystemMode } from './core';
 import { SecurityEvent } from './security';
 
 export type AssetOrigin = 'GENERATED' | 'VERIFIED' | 'USER-EDITED' | 'IMPORTED' | 'AI-SUGGESTED';
-
 export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'document' | 'reference';
+export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
+export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
+
+export interface KnowledgeSourceGovernanceRecord {
+  assetId: string;
+  included: boolean;
+  trust: KnowledgeSourceTrust;
+  reviewedAt?: number;
+  reviewNote?: string;
+  freshUntil?: number;
+  supersededByAssetId?: string;
+  updatedAt: number;
+}
+
+export interface KnowledgeGovernanceState {
+  sources: Record<string, KnowledgeSourceGovernanceRecord>;
+  updatedAt: number;
+}
 
 export interface ProjectAsset {
   id: string;
@@ -15,7 +32,7 @@ export interface ProjectAsset {
   updatedAt: number;
   sizeBytes?: number;
   filePath: string;
-  data: any; // specific data payload for the asset type
+  data: any;
   verified: boolean;
   notes?: string;
 }
@@ -24,7 +41,7 @@ export interface ProjectVersion {
   versionId: string;
   timestamp: number;
   description: string;
-  snapshot: string; // JSON serialized state
+  snapshot: string;
 }
 
 export interface MioProject {
@@ -39,4 +56,5 @@ export interface MioProject {
   versions: ProjectVersion[];
   activityLog: { timestamp: number; message: string; mode: MioSystemMode }[];
   securityLog: SecurityEvent[];
+  knowledgeGovernance: KnowledgeGovernanceState;
 }
