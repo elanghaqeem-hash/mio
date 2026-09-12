@@ -4,6 +4,9 @@ import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { taskRuntime } from '../../orchestrator/TaskRuntime';
 import { taskScheduler, type TaskSchedulerSnapshot } from '../../orchestrator/TaskScheduler';
+import { executionLedger } from '../../security/ExecutionLedger';
+import { resourceGovernor } from '../../security/ResourceGovernor';
+import type { ExecutionLedgerSnapshot, ResourceUsageEvent } from '../../types/resources';
 import type { RuntimeTask, TaskRuntimeSnapshot } from '../../types/tasks';
 
 const statusTone: Record<RuntimeTask['status'], string> = {
@@ -19,20 +22,30 @@ const statusTone: Record<RuntimeTask['status'], string> = {
 export const TaskMonitorView: React.FC = () => {
   const [snapshot, setSnapshot] = useState<TaskRuntimeSnapshot>(() => taskRuntime.snapshot());
   const [scheduler, setScheduler] = useState<TaskSchedulerSnapshot>(() => taskScheduler.snapshot());
+  const [ledger, setLedger] = useState<ExecutionLedgerSnapshot>(() => executionLedger.snapshot());
+  const [lastResourceEvent, setLastResourceEvent] = useState<ResourceUsageEvent | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string>('');
 
   useEffect(() => eventBus.on<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', setSnapshot), []);
   useEffect(() => eventBus.on<TaskSchedulerSnapshot>('TASK_SCHEDULER_UPDATED', setScheduler), []);
+  useEffect(() => eventBus.on<ExecutionLedgerSnapshot>('EXECUTION_LEDGER_UPDATED', setLedger), []);
+  useEffect(() => eventBus.on<ResourceUsageEvent>('RESOURCE_USAGE_EVENT', setLastResourceEvent), []);
 
   const selectedTask = useMemo(() => snapshot.tasks.find((task) => task.id === selectedTaskId) ?? snapshot.tasks[0] ?? null, [snapshot.tasks, selectedTaskId]);
   const failedCount = snapshot.tasks.filter((task) => task.status === 'FAILED').length;
+  const selectedResource = selectedTask
+    ? (lastResourceEvent?.taskId === selectedTask.id ? lastResourceEvent.state : resourceGovernor.get(selectedTask.id))
+    : undefined;
+  const selectedLedger = selectedTask
+    ? ledger.entries.filter((entry) => entry.taskId === selectedTask.id).slice(0, 12)
+    : [];
 
   const retryTask = async (taskId: string) => {
     setActionNotice('');
     try {
       await taskScheduler.retry(taskId);
-      setActionNotice('Retry execution completed. Inspect the task status and steps below.');
+      setActionNotice('Retry execution completed. Inspect the task status and resource usage below.');
     } catch (error) {
       setActionNotice(error instanceof Error ? error.message : String(error));
     }
@@ -42,8 +55,8 @@ export const TaskMonitorView: React.FC = () => {
     <div className="h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden flex flex-col">
       <div className="p-4 border-b border-gray-800 bg-[#0d121d] flex items-center justify-between">
         <div>
-          <div className="text-sm font-bold text-cyan-300 tracking-wide">TASK QUEUE // RUNTIME OBSERVABILITY</div>
-          <div className="text-[10px] text-gray-500 mt-1">Persistent history, concurrency-limited dispatch, dependency gating, cooperative pause, retry, cancellation, and STOP MIO.</div>
+          <div className="text-sm font-bold text-cyan-300 tracking-wide">TASK QUEUE // GOVERNED RUNTIME</div>
+          <div className="text-[10px] text-gray-500 mt-1">Persistent lifecycle, bounded resources, queue scheduling, dependency gates, execution history, cancellation, and STOP MIO.</div>
         </div>
         <div className="flex items-center gap-2">
           <span className="px-2 py-1 rounded border border-cyan-500/30 text-cyan-300 bg-cyan-950/20">RUNNING {scheduler.activeTaskIds.length}/{scheduler.concurrencyLimit}</span>
@@ -61,11 +74,12 @@ export const TaskMonitorView: React.FC = () => {
           {snapshot.tasks.map((task) => {
             const queued = scheduler.queuedTaskIds.includes(task.id);
             const running = scheduler.activeTaskIds.includes(task.id);
+            const budget = resourceGovernor.get(task.id);
             return (
               <button key={task.id} onClick={() => { setSelectedTaskId(task.id); setActionNotice(''); }} className={`w-full text-left p-3 rounded-xl border transition ${selectedTask?.id === task.id ? 'border-cyan-500/50 bg-cyan-950/20' : 'border-gray-800 bg-[#0d121d] hover:border-gray-700'}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><div className="text-gray-200 font-bold truncate">{task.title}</div><div className="text-[10px] text-gray-500 mt-1">{task.mode} • {task.id}</div></div>
-                  <div className="flex gap-1">{queued && <span className="px-1.5 py-0.5 rounded border border-gray-600 text-[9px] text-gray-300">QUEUED</span>}{running && <span className="px-1.5 py-0.5 rounded border border-cyan-500/40 text-[9px] text-cyan-300">SLOT</span>}<span className={`px-2 py-0.5 rounded border text-[9px] ${statusTone[task.status]}`}>{task.status}</span></div>
+                  <div className="flex gap-1">{queued && <span className="px-1.5 py-0.5 rounded border border-gray-600 text-[9px] text-gray-300">QUEUED</span>}{running && <span className="px-1.5 py-0.5 rounded border border-cyan-500/40 text-[9px] text-cyan-300">SLOT</span>}{budget?.exhausted && <span className="px-1.5 py-0.5 rounded border border-red-500/40 text-[9px] text-red-300">BUDGET</span>}<span className={`px-2 py-0.5 rounded border text-[9px] ${statusTone[task.status]}`}>{task.status}</span></div>
                 </div>
                 <div className="mt-3 h-1.5 rounded-full bg-gray-800 overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${task.progress}%` }} /></div>
                 <div className="mt-1 flex justify-between text-[9px] text-gray-500"><span>{task.progress}%</span><span>retry {task.retryCount}/{task.maxRetries}</span></div>
@@ -99,6 +113,19 @@ export const TaskMonitorView: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-xl border border-gray-800 bg-[#0d121d]">
+                <div className="flex items-center justify-between mb-3"><div className="text-cyan-300 font-bold">RESOURCE GOVERNANCE</div><div className={`text-[9px] ${selectedResource?.exhausted ? 'text-red-300' : 'text-emerald-300'}`}>{selectedResource ? (selectedResource.exhausted ? 'EXHAUSTED' : 'WITHIN BUDGET') : 'NOT DISPATCHED'}</div></div>
+                {selectedResource ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="p-2 rounded border border-gray-800 bg-[#111726]"><div className="text-[9px] text-gray-500">TOOLS</div><div className="text-gray-200 mt-1">{selectedResource.usage.toolCalls}/{selectedResource.budget.maxToolCalls}</div></div>
+                    <div className="p-2 rounded border border-gray-800 bg-[#111726]"><div className="text-[9px] text-gray-500">NETWORK</div><div className="text-gray-200 mt-1">{selectedResource.usage.networkCalls}/{selectedResource.budget.maxNetworkCalls}</div></div>
+                    <div className="p-2 rounded border border-gray-800 bg-[#111726]"><div className="text-[9px] text-gray-500">MODEL</div><div className="text-gray-200 mt-1">{selectedResource.usage.modelCalls}/{selectedResource.budget.maxModelCalls}</div></div>
+                    <div className="p-2 rounded border border-gray-800 bg-[#111726]"><div className="text-[9px] text-gray-500">DURATION LIMIT</div><div className="text-gray-200 mt-1">{Math.round(selectedResource.budget.maxDurationMs / 1000)}s</div></div>
+                    {selectedResource.exhaustedReason && <div className="col-span-4 p-2 rounded border border-red-500/30 bg-red-950/20 text-red-300">{selectedResource.exhaustedReason}</div>}
+                  </div>
+                ) : <div className="text-gray-600">Resource budget is registered when the scheduler evaluates this task for dispatch.</div>}
+              </div>
+
+              <div className="p-4 rounded-xl border border-gray-800 bg-[#0d121d]">
                 <div className="text-cyan-300 font-bold mb-3">EXECUTION STEPS</div>
                 <div className="space-y-2">
                   {selectedTask.steps.map((step, index) => (
@@ -109,6 +136,21 @@ export const TaskMonitorView: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-gray-800 bg-[#0d121d]">
+                <div className="text-cyan-300 font-bold mb-3">EXECUTION LEDGER</div>
+                {selectedLedger.length === 0 ? <div className="text-gray-600">No persisted execution records for this task yet.</div> : (
+                  <div className="space-y-1.5">
+                    {selectedLedger.map((entry) => (
+                      <div key={entry.id} className="grid grid-cols-[72px_82px_1fr] gap-2 p-2 rounded border border-gray-800 bg-[#111726] text-[9px]">
+                        <span className="text-gray-500">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                        <span className={entry.outcome === 'BLOCKED' || entry.outcome === 'FAILED' ? 'text-red-300' : entry.outcome === 'COMPLETED' ? 'text-emerald-300' : 'text-cyan-300'}>{entry.category}</span>
+                        <span className="text-gray-300">{entry.action} • {entry.outcome}{entry.details ? ` — ${entry.details}` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
