@@ -26,13 +26,19 @@ export const App: React.FC = () => {
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [activeMode, setActiveMode] = useState<MioSystemMode>('CHAT');
   const [dryRunRequest, setDryRunRequest] = useState<DryRunRequest | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileContextOpen, setMobileContextOpen] = useState(false);
   const [showWizard, setShowWizard] = useState<boolean>(() => {
     return localStorage.getItem('mio_v2_setup_completed') !== 'true';
   });
 
   useEffect(() => {
     const unsubState = eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state));
-    const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => setActiveMode(mode));
+    const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => {
+      setActiveMode(mode);
+      setMobileNavOpen(false);
+      setMobileContextOpen(false);
+    });
     const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => {
       setDryRunRequest(req);
     });
@@ -43,6 +49,17 @@ export const App: React.FC = () => {
       unsubPerm();
     };
   }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+    setMobileContextOpen(false);
+  }, [activeMode]);
+
+  const selectMode = (mode: MioSystemMode) => {
+    setActiveMode(mode);
+    setMobileNavOpen(false);
+    setMobileContextOpen(false);
+  };
 
   const renderActiveWorkspace = () => {
     switch (activeMode) {
@@ -76,35 +93,68 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-200 overflow-hidden font-sans select-none">
-      {/* Top Header Bar */}
+    <div className="mio-app-shell flex flex-col h-[100dvh] min-h-[100svh] w-full max-w-full bg-[#07090e] text-slate-200 overflow-hidden font-sans select-none">
       <TopBar
         coreState={coreState}
         activeMode={activeMode}
-        onOpenSecurity={() => setActiveMode('SECURITY')}
+        onOpenSecurity={() => selectMode('SECURITY')}
+        onToggleNavigation={() => {
+          setMobileNavOpen((open) => !open);
+          setMobileContextOpen(false);
+        }}
+        onToggleContext={() => {
+          setMobileContextOpen((open) => !open);
+          setMobileNavOpen(false);
+        }}
       />
 
-      {/* Main Multi-Mode Workspace Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Navigation Panel */}
-        <ModeNavigation activeMode={activeMode} onSelectMode={setActiveMode} />
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden relative">
+        <div className="hidden lg:flex shrink-0">
+          <ModeNavigation activeMode={activeMode} onSelectMode={selectMode} />
+        </div>
 
-        {/* Central Workspace */}
-        <main className="flex-1 h-full overflow-hidden relative flex flex-col">
+        <main className="mio-workspace flex-1 min-w-0 min-h-0 h-full overflow-auto lg:overflow-hidden relative flex flex-col overscroll-contain">
           {renderActiveWorkspace()}
         </main>
 
-        {/* Right Context & Telemetry Panel */}
-        <ContextPanel />
+        <div className="hidden xl:flex shrink-0">
+          <ContextPanel />
+        </div>
+
+        {mobileNavOpen && (
+          <div className="lg:hidden fixed inset-x-0 bottom-0 top-[var(--mio-mobile-header-height)] z-40 flex">
+            <button
+              type="button"
+              aria-label="Close workspace navigation"
+              onClick={() => setMobileNavOpen(false)}
+              className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+            />
+            <div className="relative h-full max-w-[88vw] shadow-2xl shadow-black/60">
+              <ModeNavigation activeMode={activeMode} onSelectMode={selectMode} mobile />
+            </div>
+          </div>
+        )}
+
+        {mobileContextOpen && (
+          <div className="xl:hidden fixed inset-x-0 bottom-0 top-[var(--mio-mobile-header-height)] z-40 flex justify-end">
+            <button
+              type="button"
+              aria-label="Close context panel"
+              onClick={() => setMobileContextOpen(false)}
+              className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+            />
+            <div className="relative h-full max-w-[92vw] shadow-2xl shadow-black/60">
+              <ContextPanel mobile />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Security Dry-Run / Permission Modal */}
       <PermissionModal
         request={dryRunRequest}
         onClose={() => setDryRunRequest(null)}
       />
 
-      {/* First-Run Desktop Setup Wizard */}
       {showWizard && (
         <FirstRunWizard onComplete={() => setShowWizard(false)} />
       )}
