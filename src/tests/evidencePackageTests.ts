@@ -17,8 +17,8 @@ function projectFixture(): MioProject {
     createdAt: now,
     lastModified: now,
     assets: [
-      { id: 'source_a', name: 'BCM Policy', type: 'document', origin: 'IMPORTED', version: 1, verified: true, createdAt: now, updatedAt: now, filePath: 'workspace://evidence/bcm-policy.md', data: { content: 'Business continuity recovery target is four hours for critical payment processing. Recovery exercises are performed every quarter.' } },
-      { id: 'source_b', name: 'BCM Review', type: 'document', origin: 'IMPORTED', version: 1, verified: false, createdAt: now, updatedAt: now, filePath: 'research://example/bcm-review', data: { content: 'Critical payment processing recovery target is six hours according to the external review.', security: { suspicious: false, detectedThreats: [] } } },
+      { id: 'source_a', name: 'BCM Policy', type: 'document', origin: 'IMPORTED', version: 1, verified: true, createdAt: now, updatedAt: now, filePath: 'workspace://evidence/bcm-policy.md', data: { content: 'Critical payment processing recovery target is 4 hours. Recovery exercises are performed every quarter.' } },
+      { id: 'source_b', name: 'BCM Review', type: 'document', origin: 'IMPORTED', version: 1, verified: false, createdAt: now, updatedAt: now, filePath: 'research://example/bcm-review', data: { content: 'Critical payment processing recovery target is 6 hours according to the external review.', security: { suspicious: false, detectedThreats: [] } } },
     ],
     references: [],
     versions: [],
@@ -43,7 +43,7 @@ export async function runEvidencePackageTests(): Promise<{ passed: number; total
   const results: TestResult[] = [];
   const project = projectFixture();
   const context = ProjectKnowledgeIndex.retrieve(project, 'critical payment recovery target', { contextBudgetChars: 4800 });
-  const response = 'Critical payment recovery target is four hours. The external review states six hours.';
+  const response = 'Critical payment recovery target is 4 hours. The external review states 6 hours.';
   const audit = EvidenceGrounding.audit(response, context.applicationContext);
   const pkg = EvidencePackageBuilder.build({ project, query: 'critical payment recovery target', responseText: response, projectContext: context, evidenceAudit: audit, createdAt: 1234567890 });
 
@@ -65,7 +65,7 @@ export async function runEvidencePackageTests(): Promise<{ passed: number; total
     assert((pkg.evidenceAudit?.claims.length ?? 0) > 0, 'claim audit missing');
   }));
   results.push(await test('Evidence package captures relevant conflict review signals without truth claim', () => {
-    assert(pkg.conflicts.length >= 1, 'expected potential conflict snapshot');
+    assert(pkg.conflicts.some((conflict) => conflict.reason === 'NUMERIC_MISMATCH'), 'expected numeric potential conflict snapshot');
     assert(pkg.disclosures.some((item) => item.includes('not a general truth guarantee')), 'truthfulness disclosure missing');
   }));
   results.push(await test('Evidence package contains persisted source provenance timeline', () => {
