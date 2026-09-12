@@ -85,7 +85,7 @@ Validated results:
 At Gate 1:
 
 - Initial application JS: approximately 277.64 kB (gzip ~85.02 kB)
-- `TaskScheduler` lazy/output chunk: approximately 3.50 kB (gzip ~1.44 kB)
+- `TaskScheduler` output chunk: approximately 3.50 kB (gzip ~1.44 kB)
 - Existing Studio3D chunk remains the known large bundle (~545 kB) and is not introduced by TP 0.8.
 
 ## Known Non-Blocking Technical Debt
@@ -108,11 +108,11 @@ At Gate 1:
 - [x] Cooperative pause boundary
 - [x] Scheduler observability in Task Monitor
 - [x] New deterministic tests
-- [x] Gate 1: lint/build/tests pass
-- [ ] Gate 2 on checkpoint commit
+- [x] Gate 1: lint/build/tests pass (64/64)
+- [ ] Gate 2 on this checkpoint commit
 - [ ] PR ready for review
 - [ ] Merge to `refactor/mio-web-lab-v2`
 
 ## Next Architecture Direction
 
-After TP 0.8 is merged, the next milestone should focus on **Resource Governance & Execution History** rather than expanding autonomy. Recommended scope: task resource budgets, per-task timeout/budget metadata, structured execution/audit history, bounded network/tool usage, scheduler fairness/priority, and user-visible resource controls. This continues the master principle: MIO may reason autonomously, but execution remains bounded, observable, recoverable, and user-controlled.
+After TP 0.8 is merged, the next milestone should focus on **Resource Governance & Execution Ledger** rather than expanding autonomy. Recommended scope: task resource budgets, per-task timeout/budget metadata, structured execution/audit history, bounded network/tool usage, scheduler fairness/priority, and user-visible resource controls. This continues the master principle: MIO may reason autonomously, but execution remains bounded, observable, recoverable, and user-controlled.
