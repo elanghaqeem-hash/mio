@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Database, ExternalLink, FileText, Globe2, RefreshCw, Search, ShieldAlert } from 'lucide-react';
 import { ResearchEngine } from '../../research/ResearchEngine';
 import { ResearchKnowledgePromotion } from '../../research/ResearchKnowledgePromotion';
-import { ResearchRevalidation } from '../../research/ResearchRevalidation';
+import { ResearchRevalidation, type RevalidationQueueItem } from '../../research/ResearchRevalidation';
 import { ResearchReport } from '../../types/research';
 
 export const ResearchStudioView: React.FC = () => {
@@ -12,8 +12,7 @@ export const ResearchStudioView: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promotionState, setPromotionState] = useState<Record<string, string>>({});
-  const [queueRevision, setQueueRevision] = useState(0);
-  const revalidationQueue = useMemo(() => ResearchRevalidation.queue(), [queueRevision]);
+  const [revalidationQueue, setRevalidationQueue] = useState<RevalidationQueueItem[]>(() => ResearchRevalidation.queue());
 
   const handleSearch = async () => {
     if (!query.trim() || isSearching) return;
@@ -34,7 +33,7 @@ export const ResearchStudioView: React.FC = () => {
     const result = ResearchKnowledgePromotion.promote(report, sourceId);
     if (result.status === 'PROMOTED') {
       setPromotionState((current) => ({ ...current, [sourceId]: 'PROMOTED · PROJECT TRUST = QUARANTINED' }));
-      setQueueRevision((value) => value + 1);
+      setRevalidationQueue(ResearchRevalidation.queue());
     } else if (result.status === 'ALREADY_PROMOTED') setPromotionState((current) => ({ ...current, [sourceId]: 'ALREADY PROMOTED · GOVERNED IN PROJECT' }));
     else setPromotionState((current) => ({ ...current, [sourceId]: 'PROMOTION FAILED · SOURCE NOT FOUND' }));
   };
