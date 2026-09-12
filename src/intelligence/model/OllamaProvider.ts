@@ -1,4 +1,5 @@
 import { ModelProvider, ModelRequest, ModelResponse } from '../../types/models';
+import { serializeApplicationContext } from './ApplicationContextSerializer';
 
 export class OllamaProvider implements ModelProvider {
   public readonly id = 'ollama' as const;
@@ -12,6 +13,11 @@ export class OllamaProvider implements ModelProvider {
   ) {}
 
   public async generate(request: ModelRequest, signal?: AbortSignal): Promise<ModelResponse> {
+    const applicationContext = serializeApplicationContext(request.applicationContext);
+    const messages = applicationContext
+      ? [{ role: 'user' as const, content: applicationContext }, ...request.messages]
+      : request.messages;
+
     const response = await fetch(`${this.endpoint.replace(/\/$/, '')}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -19,7 +25,7 @@ export class OllamaProvider implements ModelProvider {
       body: JSON.stringify({
         model: this.model,
         stream: false,
-        messages: request.messages,
+        messages,
         options: {
           temperature: request.temperature,
           num_predict: request.maxOutputTokens,
