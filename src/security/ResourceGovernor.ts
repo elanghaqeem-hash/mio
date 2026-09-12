@@ -13,7 +13,6 @@ const DEFAULT_BUDGETS: Record<MioSystemMode, TaskResourceBudget> = {
   GRAPHIC: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   SFX: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   MUSIC: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
-  RESEARCH_STUDIO: { maxDurationMs: 90_000, maxToolCalls: 4, maxNetworkCalls: 8, maxModelCalls: 2 },
   SECURITY: { maxDurationMs: 45_000, maxToolCalls: 4, maxNetworkCalls: 1, maxModelCalls: 1 },
   SETTINGS: { maxDurationMs: 30_000, maxToolCalls: 2, maxNetworkCalls: 1, maxModelCalls: 1 },
   TASKS: { maxDurationMs: 30_000, maxToolCalls: 2, maxNetworkCalls: 1, maxModelCalls: 1 },
@@ -28,9 +27,7 @@ export class ResourceGovernorController {
     const budget = { ...DEFAULT_BUDGETS[mode], ...override };
     const now = Date.now();
     const state: TaskResourceState = {
-      taskId,
-      mode,
-      budget,
+      taskId, mode, budget,
       usage: { toolCalls: 0, networkCalls: 0, modelCalls: 0, startedAt: now, lastUpdatedAt: now },
       exhausted: false,
     };
@@ -46,13 +43,7 @@ export class ResourceGovernorController {
   public authorize(taskId: string, operation: ResourceOperation, mode?: MioSystemMode): { allowed: boolean; reason?: string; state: TaskResourceState } {
     const state = this.states.get(taskId) ?? this.registerTask(taskId, mode ?? 'CHAT');
     const reason = this.exhaustionReason(state, operation);
-    if (reason) {
-      state.exhausted = true;
-      state.exhaustedReason = reason;
-      state.usage.lastUpdatedAt = Date.now();
-      this.emit(taskId, operation, 'BLOCK', reason);
-      return { allowed: false, reason, state: this.clone(state) };
-    }
+    if (reason) return this.block(state, operation, reason);
     this.emit(taskId, operation, 'ALLOW');
     return { allowed: true, state: this.clone(state) };
   }
@@ -72,15 +63,10 @@ export class ResourceGovernorController {
   public consumeToolCall(taskId: string, networkAccess: boolean, mode?: MioSystemMode): { allowed: boolean; reason?: string; state: TaskResourceState } {
     const state = this.states.get(taskId) ?? this.registerTask(taskId, mode ?? 'CHAT');
     const durationReason = this.exhaustionReason(state, 'SCHEDULER_DISPATCH');
-    const toolReason = state.usage.toolCalls >= state.budget.maxToolCalls
-      ? `Tool-call budget exhausted (${state.usage.toolCalls}/${state.budget.maxToolCalls})`
-      : undefined;
-    const networkReason = networkAccess && state.usage.networkCalls >= state.budget.maxNetworkCalls
-      ? `Network-call budget exhausted (${state.usage.networkCalls}/${state.budget.maxNetworkCalls})`
-      : undefined;
+    const toolReason = state.usage.toolCalls >= state.budget.maxToolCalls ? `Tool-call budget exhausted (${state.usage.toolCalls}/${state.budget.maxToolCalls})` : undefined;
+    const networkReason = networkAccess && state.usage.networkCalls >= state.budget.maxNetworkCalls ? `Network-call budget exhausted (${state.usage.networkCalls}/${state.budget.maxNetworkCalls})` : undefined;
     const reason = durationReason ?? toolReason ?? networkReason;
     if (reason) return this.block(state, networkReason ? 'NETWORK_CALL' : 'TOOL_CALL', reason);
-
     state.usage.toolCalls += 1;
     if (networkAccess) state.usage.networkCalls += 1;
     state.usage.lastUpdatedAt = Date.now();
@@ -92,15 +78,10 @@ export class ResourceGovernorController {
   public consumeModelCall(taskId: string, networkAccess: boolean, mode?: MioSystemMode): { allowed: boolean; reason?: string; state: TaskResourceState } {
     const state = this.states.get(taskId) ?? this.registerTask(taskId, mode ?? 'CHAT');
     const durationReason = this.exhaustionReason(state, 'SCHEDULER_DISPATCH');
-    const modelReason = state.usage.modelCalls >= state.budget.maxModelCalls
-      ? `Model-call budget exhausted (${state.usage.modelCalls}/${state.budget.maxModelCalls})`
-      : undefined;
-    const networkReason = networkAccess && state.usage.networkCalls >= state.budget.maxNetworkCalls
-      ? `Network-call budget exhausted (${state.usage.networkCalls}/${state.budget.maxNetworkCalls})`
-      : undefined;
+    const modelReason = state.usage.modelCalls >= state.budget.maxModelCalls ? `Model-call budget exhausted (${state.usage.modelCalls}/${state.budget.maxModelCalls})` : undefined;
+    const networkReason = networkAccess && state.usage.networkCalls >= state.budget.maxNetworkCalls ? `Network-call budget exhausted (${state.usage.networkCalls}/${state.budget.maxNetworkCalls})` : undefined;
     const reason = durationReason ?? modelReason ?? networkReason;
     if (reason) return this.block(state, networkReason ? 'NETWORK_CALL' : 'MODEL_CALL', reason);
-
     state.usage.modelCalls += 1;
     if (networkAccess) state.usage.networkCalls += 1;
     state.usage.lastUpdatedAt = Date.now();
@@ -110,8 +91,7 @@ export class ResourceGovernorController {
   }
 
   public get(taskId: string): TaskResourceState | undefined {
-    const state = this.states.get(taskId);
-    return state ? this.clone(state) : undefined;
+    const state = this.states.get(taskId); return state ? this.clone(state) : undefined;
   }
 
   public resetTask(taskId: string): void {
@@ -133,9 +113,7 @@ export class ResourceGovernorController {
   }
 
   private block(state: TaskResourceState, operation: ResourceOperation, reason: string): { allowed: false; reason: string; state: TaskResourceState } {
-    state.exhausted = true;
-    state.exhaustedReason = reason;
-    state.usage.lastUpdatedAt = Date.now();
+    state.exhausted = true; state.exhaustedReason = reason; state.usage.lastUpdatedAt = Date.now();
     this.emit(state.taskId, operation, 'BLOCK', reason);
     return { allowed: false, reason, state: this.clone(state) };
   }
@@ -143,14 +121,7 @@ export class ResourceGovernorController {
   private emit(taskId: string, operation: ResourceOperation, decision: ResourceUsageEvent['decision'], reason?: string): void {
     const state = this.states.get(taskId);
     if (!state) return;
-    eventBus.emit<ResourceUsageEvent>('RESOURCE_USAGE_EVENT', {
-      taskId,
-      operation,
-      decision,
-      timestamp: Date.now(),
-      reason,
-      state: this.clone(state),
-    });
+    eventBus.emit<ResourceUsageEvent>('RESOURCE_USAGE_EVENT', { taskId, operation, decision, timestamp: Date.now(), reason, state: this.clone(state) });
   }
 
   private clone(state: TaskResourceState): TaskResourceState {
