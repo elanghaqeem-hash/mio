@@ -8,6 +8,9 @@ export interface ToolExecutionContext {
   mode: MioSystemMode;
   projectId?: string;
   requestedBy: 'USER' | 'AGENT';
+  resourceId?: string;
+  path?: string;
+  networkOrigin?: string;
   signal?: AbortSignal;
 }
 

@@ -1,6 +1,7 @@
 import { eventBus } from '../core/EventBus';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
+import type { CapabilityDecisionEvent } from '../types/capabilities';
 import type { ExecutionLedgerEntry, ExecutionLedgerSnapshot, ResourceUsageEvent } from '../types/resources';
 import type { TaskRuntimeEvent } from '../types/tasks';
 
@@ -31,6 +32,16 @@ export class ExecutionLedgerController {
         action: event.operation,
         outcome: event.decision === 'ALLOW' ? 'ALLOWED' : 'BLOCKED',
         details: event.reason,
+      });
+    });
+
+    eventBus.on<CapabilityDecisionEvent>('CAPABILITY_DECISION', (event) => {
+      this.record({
+        taskId: event.taskId,
+        category: 'SECURITY',
+        action: `CAPABILITY:${event.capabilityId}`,
+        outcome: event.allowed ? 'ALLOWED' : 'BLOCKED',
+        details: event.reason ?? `${event.descriptor?.kind ?? 'UNKNOWN'} capability allowed in ${event.mode ?? 'unknown'} mode`,
       });
     });
   }

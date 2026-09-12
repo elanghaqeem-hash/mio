@@ -7,6 +7,7 @@ import { TaskPlanner } from '../orchestrator/TaskPlanner';
 import { createDefaultToolRegistry } from '../orchestrator/tools/createDefaultToolRegistry';
 import { ToolRouter } from '../orchestrator/tools/ToolRouter';
 import { ProjectManager } from '../project/ProjectManager';
+import { defaultCapabilityRegistry } from '../security/CapabilityRegistry';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { PolicyEngine } from '../security/PolicyEngine';
 import { MioSystemMode } from '../types/core';
@@ -54,6 +55,20 @@ export class AgentOrchestrator {
     const project = ProjectManager.getProject();
     const taskId = taskRuntime.create(taskPlan, prompt, project.id).id;
 
+    const agentCapability = defaultCapabilityRegistry.authorize('agent.orchestrator', {
+      taskId,
+      mode,
+      projectId: project.id,
+      requestedBy: 'AGENT',
+      resourceId: `project:${project.id}`,
+    });
+    if (!agentCapability.allowed) {
+      const reason = agentCapability.reason ?? 'Agent orchestration capability denied';
+      taskRuntime.fail(taskId, reason);
+      eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
+      return this.withTask(this.response(`Directive cannot enter the agent runtime: "${prompt}"`, plan, 'CAPABILITY_BLOCKED', 'No task execution was scheduled.', 'BLOCKED', reason, ['Review capability manifest and active mode'], mode, emotionalContext), taskId);
+    }
+
     taskRuntime.startStep(taskId, 'understand'); taskRuntime.completeStep(taskId, 'understand');
     taskRuntime.startStep(taskId, 'route'); taskRuntime.completeStep(taskId, 'route');
     eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId} planned for ${mode} mode`, mode });
@@ -74,6 +89,19 @@ export class AgentOrchestrator {
     plan: string[]; project: ReturnType<typeof ProjectManager.getProject>; taskId: string; emotionalContext?: string;
   }): Promise<StructuredAgentResponse> {
     const { prompt, normalizedInput, sensitive, conversation, mode, plan, project, taskId, emotionalContext } = input;
+
+    const agentCapability = defaultCapabilityRegistry.authorize('agent.orchestrator', {
+      taskId,
+      mode,
+      projectId: project.id,
+      requestedBy: 'AGENT',
+      resourceId: `project:${project.id}`,
+    });
+    if (!agentCapability.allowed) {
+      const reason = agentCapability.reason ?? 'Agent capability revoked or unavailable';
+      taskRuntime.fail(taskId, reason);
+      return this.withTask(this.response(`Agent execution blocked: "${prompt}"`, plan, 'CAPABILITY_BLOCKED', 'No privileged sub-action was executed.', 'BLOCKED', reason, ['Review capability manifest before retrying'], mode, emotionalContext), taskId);
+    }
 
     if (sensitive) {
       taskRuntime.waitForPermission(taskId);
