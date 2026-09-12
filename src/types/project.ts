@@ -1,5 +1,6 @@
 import { MioSystemMode } from './core';
 import { SecurityEvent } from './security';
+import type { CreativePipelineRecord } from './creativePipeline';
 
 export type AssetOrigin = 'GENERATED' | 'VERIFIED' | 'USER-EDITED' | 'IMPORTED' | 'AI-SUGGESTED';
 export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'document' | 'reference';
@@ -102,6 +103,7 @@ export interface MioProject {
   assets: ProjectAsset[];
   references: { id: string; name: string; url?: string; localPath?: string }[];
   versions: ProjectVersion[];
+  creativePipelines?: CreativePipelineRecord[];
   activityLog: { timestamp: number; message: string; mode: MioSystemMode }[];
   securityLog: SecurityEvent[];
   knowledgeGovernance: KnowledgeGovernanceState;
