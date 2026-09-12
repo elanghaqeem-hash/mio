@@ -46,7 +46,11 @@ export class ToolRouter {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
-    if (tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE') eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+    const permissionGated = tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE';
+    if (permissionGated) {
+      eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+      taskRuntime.waitForPermission(context.taskId);
+    }
 
     const approved = await PermissionEngine.requestPermission({
       action: `TOOL:${tool.id}`,
@@ -67,6 +71,7 @@ export class ToolRouter {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
+    taskRuntime.start(context.taskId);
     const abortController = new AbortController();
     const unregisterCancellation = taskRuntime.registerCancellationHandler(context.taskId, () => abortController.abort());
     const executionContext: ToolExecutionContext = { ...context, signal: abortController.signal };
