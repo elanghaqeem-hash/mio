@@ -19,13 +19,13 @@ export class CrossrefProvider implements SearchProvider {
   public readonly id = 'crossref';
   public readonly displayName = 'Crossref';
 
-  public async search(plan: ResearchQueryPlan): Promise<RawResearchResult[]> {
+  public async search(plan: ResearchQueryPlan, signal?: AbortSignal): Promise<RawResearchResult[]> {
     const endpoint = new URL('https://api.crossref.org/works');
     endpoint.searchParams.set('query.bibliographic', plan.normalizedQuery);
     endpoint.searchParams.set('rows', String(Math.min(plan.maxResults, 6)));
     endpoint.searchParams.set('select', 'DOI,URL,title,author,published,abstract,publisher');
 
-    const response = await fetch(endpoint.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(endpoint.toString(), { headers: { Accept: 'application/json' }, signal });
     if (!response.ok) throw new Error(`Crossref search failed: HTTP ${response.status}`);
 
     const data = (await response.json()) as CrossrefResponse;
