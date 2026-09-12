@@ -6,16 +6,17 @@ import { MemoryPolicy } from '../memory/MemoryPolicy';
 
 const MEMORY_STORAGE_KEY = 'long-term-memory';
 
-interface PersistedMemoryState {
-  enabled: boolean;
-  memories: MemoryItem[];
-}
-
 export interface PendingMemoryCandidate {
   id: string;
   createdAt: number;
   item: Omit<MemoryItem, 'id' | 'timestamp'>;
   reason: string;
+}
+
+interface PersistedMemoryState {
+  enabled: boolean;
+  memories: MemoryItem[];
+  pendingCandidates?: PendingMemoryCandidate[];
 }
 
 export type MemoryWriteResult =
@@ -36,9 +37,11 @@ export class MioMemoryManager {
       if (stored) {
         this.enabled = stored.enabled !== false;
         this.memories = Array.isArray(stored.memories) ? stored.memories : [];
+        this.pendingCandidates = Array.isArray(stored.pendingCandidates) ? stored.pendingCandidates : [];
       }
       this.initialized = true;
       eventBus.emit('MEMORY_UPDATED', this.getMemories());
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
     } catch (error) {
       console.error('[MemoryManager] Persistence initialization failed; continuing with runtime memory.', error);
       eventBus.emit('STORAGE_ERROR', {
@@ -97,6 +100,8 @@ export class MioMemoryManager {
       };
       this.pendingCandidates.push(candidate);
       eventBus.emit('MEMORY_REVIEW_REQUIRED', candidate);
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+      void this.flush();
       return { status: 'REVIEW_REQUIRED', candidateId: candidate.id, reason: candidate.reason };
     }
 
@@ -120,6 +125,8 @@ export class MioMemoryManager {
       candidateId,
       source: candidate.item.source,
     });
+    eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+    void this.flush();
     return memory;
   }
 
@@ -129,6 +136,8 @@ export class MioMemoryManager {
     const removed = this.pendingCandidates.length < before;
     if (removed) {
       eventBus.emit('MEMORY_POLICY_EVENT', { decision: 'REJECTED_BY_USER', candidateId });
+      eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
+      void this.flush();
     }
     return removed;
   }
@@ -160,6 +169,7 @@ export class MioMemoryManager {
     this.memories = [];
     this.pendingCandidates = [];
     eventBus.emit('MEMORY_UPDATED', this.getMemories());
+    eventBus.emit('MEMORY_REVIEW_QUEUE_UPDATED', this.getPendingCandidates());
     void this.flush();
   }
 
@@ -168,6 +178,7 @@ export class MioMemoryManager {
       const state: PersistedMemoryState = {
         enabled: this.enabled,
         memories: this.memories,
+        pendingCandidates: this.pendingCandidates,
       };
       await this.storage.set('memory', MEMORY_STORAGE_KEY, state);
     } catch (error) {
