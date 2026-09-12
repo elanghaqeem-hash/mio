@@ -76,6 +76,10 @@ export class ToolRouter {
       };
     }
 
+    if (tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE') {
+      eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+    }
+
     const approved = await PermissionEngine.requestPermission({
       action: `TOOL:${tool.id}`,
       target: context.projectId ?? 'Current Workspace',
@@ -87,6 +91,7 @@ export class ToolRouter {
 
     if (!approved) {
       this.audit('warning', 'PERMISSION', tool.id, 'Tool execution rejected by permission gate', true);
+      eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
       return {
         success: false,
         toolId: tool.id,
@@ -108,6 +113,7 @@ export class ToolRouter {
       const outputValid = tool.validateOutput ? tool.validateOutput(output) : true;
       if (!outputValid) {
         this.audit('error', 'TOOL_VALIDATION', tool.id, 'Tool output failed validation', true);
+        eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
         return {
           success: false,
           toolId: tool.id,
@@ -130,6 +136,7 @@ export class ToolRouter {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.audit('error', 'TOOL_EXECUTION', tool.id, message, true);
+      eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
       return {
         success: false,
         toolId: tool.id,
