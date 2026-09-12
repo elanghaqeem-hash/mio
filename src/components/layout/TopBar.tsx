@@ -15,12 +15,13 @@ interface TopBarProps {
 export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSecurity }) => {
   const [network, setNetwork] = useState<NetworkState>(ModelRouter.getNetworkState());
   const [isStopped, setIsStopped] = useState<boolean>(emergencyStop.isEmergencyStopped());
+  const isDesktop = typeof window !== 'undefined' && Boolean(window.mioDesktop);
 
   useEffect(() => {
     const unsubStop = eventBus.on('EMERGENCY_STOP_TRIGGERED', () => setIsStopped(true));
     const unsubReset = eventBus.on('EMERGENCY_STOP_RESET', () => setIsStopped(false));
 
-    // Listen for system tray emergency stop
+    // Listen for system tray emergency stop only when running in Electron.
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
       unregisterTrayStop = window.mioDesktop.onEmergencyStopTriggered((reason) => {
@@ -57,7 +58,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
   const handleClose = () => window.mioDesktop?.closeWindow();
 
   return (
-    <header className="h-14 bg-[#090d16] border-b border-gray-800 flex items-center justify-between px-4 select-none z-30 font-mono text-xs" style={{ WebkitAppRegion: 'drag' } as any}>
+    <header className="h-14 bg-[#090d16] border-b border-gray-800 flex items-center justify-between px-4 select-none z-30 font-mono text-xs" style={{ WebkitAppRegion: isDesktop ? 'drag' : 'no-drag' } as any}>
       {/* Left: Branding & Core Mini Orb */}
       <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
         <MioCoreVisualizer state={coreState} size={36} interactive={false} />
@@ -67,7 +68,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
               MIO <span className="text-cyan-400 ml-1">V2</span>
             </span>
             <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
-              DESKTOP ENVIRONMENT
+              {isDesktop ? 'DESKTOP ENVIRONMENT' : 'WEB ENVIRONMENT'}
             </span>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-gray-400">
@@ -123,30 +124,32 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
           </button>
         )}
 
-        {/* Native Desktop Window Action Buttons */}
-        <div className="flex items-center gap-1 border-l border-gray-800 pl-3">
-          <button
-            onClick={handleMinimize}
-            className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
-            title="Minimize to taskbar"
-          >
-            <Minus size={13} />
-          </button>
-          <button
-            onClick={handleMaximize}
-            className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
-            title="Maximize / Restore window"
-          >
-            <Square size={12} />
-          </button>
-          <button
-            onClick={handleClose}
-            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-950/60 rounded transition cursor-pointer"
-            title="Close Application"
-          >
-            <X size={14} />
-          </button>
-        </div>
+        {/* Native window actions exist only inside the Electron shell. */}
+        {isDesktop && (
+          <div className="flex items-center gap-1 border-l border-gray-800 pl-3">
+            <button
+              onClick={handleMinimize}
+              className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
+              title="Minimize to taskbar"
+            >
+              <Minus size={13} />
+            </button>
+            <button
+              onClick={handleMaximize}
+              className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
+              title="Maximize / Restore window"
+            >
+              <Square size={12} />
+            </button>
+            <button
+              onClick={handleClose}
+              className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-950/60 rounded transition cursor-pointer"
+              title="Close Application"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
