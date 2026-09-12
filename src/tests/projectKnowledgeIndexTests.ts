@@ -84,7 +84,7 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
   check((budgetBounded.applicationContext?.sources.reduce((sum, source) => sum + source.text.length, 0) ?? 0) <= 1200, 'Context payload remains bounded even when the first relevant chunk exceeds the nominal minimum budget');
 
   const audit = EvidenceGrounding.audit(
-    'The recovery time objective is four hours. Management has definitely approved unlimited recovery spending. Escalation is required.',
+    'The recovery time objective is four hours. Saturn has rings made of ice. Escalation is required.',
     bcm.applicationContext,
   );
   check(audit.method === 'LEXICAL_EVIDENCE_HEURISTIC', 'Evidence audit identifies its bounded heuristic method truthfully');
