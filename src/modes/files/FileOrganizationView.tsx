@@ -1,126 +1,87 @@
-import React, { useState } from 'react';
-import { Folder, File, Copy, Trash2, RotateCcw, ShieldCheck, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Folder, File, RotateCcw, CheckCircle2, ArrowRight, RefreshCw } from 'lucide-react';
 import { PermissionEngine } from '../../security/PermissionEngine';
-import { eventBus } from '../../core/EventBus';
 
-interface ManagedFile {
-  id: string;
-  name: string;
-  category: '3D' | 'ANIMATION' | 'GRAPHIC' | 'AUDIO' | 'DOCUMENT';
-  sizeKb: number;
-  duplicateOf?: string;
-  suggestedPath: string;
+interface ManagedFile { name: string; category: string; sourcePath: string; suggestedPath: string; }
+interface MoveRecord { from: string; to: string; }
+
+function categoryFor(name: string): string {
+  const ext = name.toLowerCase().split('.').pop() || '';
+  if (['obj','glb','gltf','fbx','stl'].includes(ext)) return '3D';
+  if (['wav','mp3','ogg','m4a'].includes(ext)) return 'AUDIO';
+  if (['png','jpg','jpeg','svg','webp'].includes(ext)) return 'GRAPHIC';
+  if (['json','mioproject','mioanim','mio3d','miosfx','miomusic','mioart'].includes(ext)) return 'MIO';
+  return 'DOCUMENTS';
 }
 
 export const FileOrganizationView: React.FC = () => {
-  const [files, setFiles] = useState<ManagedFile[]>([
-    { id: 'f1', name: 'vanguard_mesh_backup_v1.obj', category: '3D', sizeKb: 2450, duplicateOf: 'vanguard_mesh_final.obj', suggestedPath: 'PROJECT/ARCHIVE/vanguard_mesh_backup_v1.obj' },
-    { id: 'f2', name: 'thruster_laser_raw.wav', category: 'AUDIO', sizeKb: 1240, suggestedPath: 'PROJECT/SFX/thruster_laser_raw.wav' },
-    { id: 'f3', name: 'briefing_poster_draft.png', category: 'GRAPHIC', sizeKb: 3100, suggestedPath: 'PROJECT/GRAPHIC/briefing_poster_draft.png' },
-    { id: 'f4', name: 'notes_temp.txt', category: 'DOCUMENT', sizeKb: 14, suggestedPath: 'PROJECT/DOCS/notes_temp.txt' },
-  ]);
+  const [workspace, setWorkspace] = useState<string | null>(null);
+  const [files, setFiles] = useState<ManagedFile[]>([]);
+  const [history, setHistory] = useState<MoveRecord[]>([]);
+  const [log, setLog] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
 
-  const [transactionLog, setTransactionLog] = useState<string[]>([
-    'Directory indexed: 4 project files within sandbox',
-  ]);
-
-  const handleOrganize = async () => {
-    const authorized = await PermissionEngine.requestPermission({
-      action: 'BATCH_FILE_REORGANIZATION',
-      target: 'PROJECT/ directory structure',
-      level: 'L3_MODIFY',
-      changes: files.map((f) => `Move "${f.name}" to "${f.suggestedPath}"`),
-      risks: ['Moves 4 files to categorized subdirectories'],
-      expectedResult: 'Clean semantic hierarchy established',
-    });
-
-    if (authorized) {
-      setTransactionLog((prev) => [
-        `Executed reorganization: 4 files organized into semantic folders`,
-        ...prev,
-      ]);
-      eventBus.emit('ACTIVITY_LOG', {
-        timestamp: Date.now(),
-        message: 'Organized workspace files into structured project sandbox directories',
-        mode: 'FILES',
+  const scan = async () => {
+    if (!window.mioDesktop) return;
+    setBusy(true);
+    try {
+      let root = await window.mioDesktop.getWorkspace();
+      if (!root) root = await window.mioDesktop.selectDirectory();
+      setWorkspace(root || null);
+      if (!root) { setFiles([]); return; }
+      const result = await window.mioDesktop.listDirectory(root);
+      if (!result.success) throw new Error(result.error);
+      const rows: ManagedFile[] = (result.files || []).filter((x: any) => x.type === 'file').map((x: any) => {
+        const category = categoryFor(x.name);
+        const sep = root.includes('\\') ? '\\' : '/';
+        return { name: x.name, category, sourcePath: `${root}${sep}${x.name}`, suggestedPath: `${root}${sep}${category}${sep}${x.name}` };
       });
-    }
+      setFiles(rows); setLog((prev) => [`Scanned ${rows.length} regular files from authorized workspace`, ...prev]);
+    } catch (err: any) { setLog((prev) => [`SCAN FAILED: ${err?.message || String(err)}`, ...prev]); }
+    finally { setBusy(false); }
   };
 
-  const handleRollback = () => {
-    setTransactionLog((prev) => ['Rollback executed: Restored original directory layout', ...prev]);
+  useEffect(() => { void scan(); }, []);
+
+  const organize = async () => {
+    if (!window.mioDesktop || !workspace || files.length === 0) return;
+    const approved = await PermissionEngine.requestPermission({ action: 'BATCH_FILE_REORGANIZATION', target: workspace, level: 'L4_EXECUTE', changes: files.map((f) => `${f.sourcePath} -> ${f.suggestedPath}`), risks: ['Moves files inside the authorized workspace; overwrite remains blocked'], expectedResult: `${files.length} files categorized` });
+    if (!approved) return;
+    setBusy(true);
+    const completed: MoveRecord[] = [];
+    try {
+      for (const file of files) {
+        const result = await window.mioDesktop.moveFile(file.sourcePath, file.suggestedPath);
+        if (!result.success) throw new Error(`${file.name}: ${result.error}`);
+        completed.push({ from: file.sourcePath, to: file.suggestedPath });
+      }
+      setHistory(completed); setLog((prev) => [`Moved ${completed.length} files successfully. Rollback is available for this transaction.`, ...prev]);
+      await scan();
+    } catch (err: any) {
+      setLog((prev) => [`ORGANIZE FAILED after ${completed.length} moves: ${err?.message || String(err)}. Use rollback for completed moves.`, ...prev]);
+      setHistory(completed);
+    } finally { setBusy(false); }
   };
 
-  return (
-    <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden p-4">
-      <div className="flex items-center justify-between mb-4 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
-        <div className="flex items-center gap-2 text-cyan-300">
-          <Folder size={16} />
-          <span className="font-bold text-sm">FILE ORGANIZATION WORKSPACE // SANDBOX MANAGEMENT</span>
-        </div>
+  const rollback = async () => {
+    if (!window.mioDesktop || history.length === 0) return;
+    const approved = await PermissionEngine.requestPermission({ action: 'ROLLBACK_FILE_REORGANIZATION', target: workspace || 'workspace', level: 'L4_EXECUTE', changes: history.map((m) => `${m.to} -> ${m.from}`), risks: ['Restores files to their original paths; overwrite remains blocked'], expectedResult: 'Restore previous workspace layout' });
+    if (!approved) return;
+    setBusy(true);
+    try {
+      for (const move of [...history].reverse()) {
+        const result = await window.mioDesktop.moveFile(move.to, move.from);
+        if (!result.success) throw new Error(result.error);
+      }
+      setHistory([]); setLog((prev) => ['Rollback completed successfully.', ...prev]); await scan();
+    } catch (err: any) { setLog((prev) => [`ROLLBACK FAILED: ${err?.message || String(err)}`, ...prev]); }
+    finally { setBusy(false); }
+  };
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRollback}
-            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1.5 cursor-pointer"
-          >
-            <RotateCcw size={13} /> Rollback
-          </button>
-          <button
-            onClick={handleOrganize}
-            className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded flex items-center gap-1.5 cursor-pointer shadow-md shadow-cyan-500/20"
-          >
-            <CheckCircle2 size={14} /> Execute Organization
-          </button>
-        </div>
-      </div>
-
-      {/* File Classification Table */}
-      <div className="flex-1 bg-[#0d121d] rounded-xl border border-gray-800 overflow-hidden flex flex-col mb-4">
-        <div className="grid grid-cols-12 bg-[#111726] p-3 border-b border-gray-800 font-bold text-gray-400">
-          <div className="col-span-4">FILE NAME</div>
-          <div className="col-span-2">TYPE</div>
-          <div className="col-span-2">SIZE</div>
-          <div className="col-span-4">SUGGESTED PATH</div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className="grid grid-cols-12 p-3 border-b border-gray-800/60 hover:bg-gray-800/20 items-center text-gray-300"
-            >
-              <div className="col-span-4 flex items-center gap-2 truncate">
-                <File size={14} className="text-cyan-400" />
-                <span className="truncate">{file.name}</span>
-                {file.duplicateOf && (
-                  <span className="text-[10px] text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
-                    <Copy size={10} /> Duplicate
-                  </span>
-                )}
-              </div>
-              <div className="col-span-2 text-cyan-300 font-bold">{file.category}</div>
-              <div className="col-span-2 text-gray-400">{file.sizeKb} KB</div>
-              <div className="col-span-4 text-emerald-400 truncate flex items-center gap-1">
-                <ArrowRight size={12} /> {file.suggestedPath}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Transaction Log */}
-      <div className="h-36 bg-[#0a0e17] rounded-xl border border-gray-800 p-3 overflow-y-auto">
-        <span className="text-gray-400 font-bold block mb-2 text-[11px]">TRANSACTION AUDIT LOG</span>
-        <div className="space-y-1 text-[10px] text-gray-400">
-          {transactionLog.map((log, i) => (
-            <div key={i} className="flex items-center gap-1.5">
-              <span className="text-cyan-500">[{new Date().toLocaleTimeString()}]</span>
-              <span>{log}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden p-4">
+    <div className="flex items-center justify-between mb-4 bg-[#0d121d] p-3 rounded-xl border border-gray-800"><div className="flex items-center gap-2 text-cyan-300"><Folder size={16}/><span className="font-bold text-sm">FILE SANDBOX // REAL WORKSPACE OPERATIONS</span></div><div className="flex gap-2"><button onClick={scan} disabled={busy} className="px-3 py-1.5 bg-gray-800 rounded text-gray-300 flex gap-1"><RefreshCw size={13}/>Scan</button><button onClick={rollback} disabled={busy||history.length===0} className="px-3 py-1.5 bg-gray-800 rounded text-gray-300 disabled:opacity-40 flex gap-1"><RotateCcw size={13}/>Rollback</button><button onClick={organize} disabled={busy||files.length===0} className="px-4 py-1.5 bg-cyan-500 text-black font-bold rounded disabled:opacity-40 flex gap-1"><CheckCircle2 size={14}/>Execute</button></div></div>
+    <div className="mb-3 text-[10px] text-gray-500 break-all">AUTHORIZED WORKSPACE: {workspace || 'NONE — select a workspace to enable file operations'}</div>
+    <div className="flex-1 bg-[#0d121d] rounded-xl border border-gray-800 overflow-hidden flex flex-col mb-4"><div className="grid grid-cols-12 bg-[#111726] p-3 border-b border-gray-800 font-bold text-gray-400"><div className="col-span-5">FILE</div><div className="col-span-2">CATEGORY</div><div className="col-span-5">TARGET</div></div><div className="flex-1 overflow-y-auto">{files.length===0?<div className="p-6 text-center text-gray-500">No regular files found at workspace root.</div>:files.map((f)=><div key={f.sourcePath} className="grid grid-cols-12 p-3 border-b border-gray-800/60 text-gray-300"><div className="col-span-5 flex gap-2 truncate"><File size={14} className="text-cyan-400"/><span className="truncate">{f.name}</span></div><div className="col-span-2 text-cyan-300">{f.category}</div><div className="col-span-5 text-emerald-400 truncate flex gap-1"><ArrowRight size={12}/>{f.suggestedPath}</div></div>)}</div></div>
+    <div className="h-36 bg-[#0a0e17] rounded-xl border border-gray-800 p-3 overflow-y-auto"><span className="text-gray-400 font-bold block mb-2">TRANSACTION LOG</span>{log.map((x,i)=><div key={i} className="text-[10px] text-gray-400 mb-1">{x}</div>)}</div>
+  </div>;
 };
