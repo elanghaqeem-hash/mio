@@ -35,6 +35,12 @@ jobs:
       - name: Security/unit tests
         run: npm test
 
+      - name: Validate Cloudflare Pages Functions
+        run: |
+          node --check functions/api/capabilities.js
+          node --check functions/api/research.js
+          node --check functions/api/ai.js
+
       - name: Web build
         run: npm run build
 
