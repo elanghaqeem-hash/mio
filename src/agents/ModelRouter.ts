@@ -93,34 +93,38 @@ export class ModelRouter {
       if (taskId && !taskRuntime.isCancelled(taskId)) taskRuntime.start(taskId);
     }
 
-    try {
-      if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
-      if (remoteGrant && requiredScope && !PermissionEngine.validateGrant(remoteGrant.id, requiredScope)) {
-        throw new Error('Remote model authorization expired or was revoked before execution');
-      }
-      if (taskId) {
-        const resourceDecision = resourceGovernor.consumeModelCall(taskId, remoteAccess, mode);
-        if (!resourceDecision.allowed) throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
-      }
+    if (taskId && taskRuntime.isCancelled(taskId)) {
+      if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Task cancelled before model execution');
+      throw new Error('Model request cancelled before execution');
+    }
 
-      try {
-        return await this.executeProvider(provider, request, timeoutMs);
-      } catch (error) {
-        if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
-        if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
-        eventBus.emit('ACTIVITY_LOG', {
-          timestamp: Date.now(),
-          message: `Model provider ${provider.id} unavailable; using explicit offline fallback`,
-          mode: 'CHAT',
-        });
-        if (taskId) {
-          const fallbackDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
-          if (!fallbackDecision.allowed) throw new Error(fallbackDecision.reason ?? 'Resource budget blocked local model fallback');
-        }
-        return this.executeProvider(new LocalHeuristicProvider(), request, Math.min(timeoutMs, 5000));
+    if (taskId) {
+      const resourceDecision = resourceGovernor.consumeModelCall(taskId, remoteAccess, mode);
+      if (!resourceDecision.allowed) {
+        if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Resource budget blocked model execution');
+        throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
       }
-    } finally {
-      if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Single-operation model grant consumed');
+    }
+
+    if (remoteGrant && requiredScope && !PermissionEngine.consumeGrant(remoteGrant.id, requiredScope)) {
+      throw new Error('Remote model authorization expired, was revoked, or no longer matches provider scope');
+    }
+
+    try {
+      return await this.executeProvider(provider, request, timeoutMs);
+    } catch (error) {
+      if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
+      if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: Date.now(),
+        message: `Model provider ${provider.id} unavailable; using explicit offline fallback`,
+        mode: 'CHAT',
+      });
+      if (taskId) {
+        const fallbackDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
+        if (!fallbackDecision.allowed) throw new Error(fallbackDecision.reason ?? 'Resource budget blocked local model fallback');
+      }
+      return this.executeProvider(new LocalHeuristicProvider(), request, Math.min(timeoutMs, 5000));
     }
   }
 
@@ -142,9 +146,7 @@ export class ModelRouter {
   private static async executeProvider(provider: ModelProvider, request: ModelRequest, timeoutMs: number): Promise<ModelResponse> {
     const controller = new AbortController();
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
-    const unregisterCancellation = taskId
-      ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort())
-      : () => undefined;
+    const unregisterCancellation = taskId ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort()) : () => undefined;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
 
