@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MioCoreState, MioSystemMode } from './types/core';
+import { MioCoreState, MioSystemMode, NetworkState } from './types/core';
 import { DryRunRequest } from './types/security';
 import { eventBus } from './core/EventBus';
 import { TopBar } from './components/layout/TopBar';
@@ -20,6 +20,7 @@ import { SecurityDashboardView } from './modes/security/SecurityDashboardView';
 import { ProjectOverviewView } from './modes/project/ProjectOverviewView';
 import { SettingsView } from './modes/settings/SettingsView';
 import { ProjectManager } from './project/ProjectManager';
+import { ModelRouter } from './agents/ModelRouter';
 
 const validModes: MioSystemMode[] = ['CHAT','RESEARCH','FILES','MOTION','3D','ANIMATION','GRAPHIC','SFX','MUSIC','PROJECT','SECURITY','SETTINGS'];
 
@@ -33,7 +34,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const completed = await window.mioDesktop?.getSetting('setup.completed', false);
+        const [completed, network] = await Promise.all([
+          window.mioDesktop?.getSetting('setup.completed', false),
+          window.mioDesktop?.getSetting('system.network', 'OFFLINE'),
+        ]);
+        ModelRouter.setNetworkState((network === 'ONLINE' ? 'ONLINE' : 'OFFLINE') as NetworkState);
         setShowWizard(completed !== true);
         await ProjectManager.hydrate();
       } finally { setBootReady(true); }
