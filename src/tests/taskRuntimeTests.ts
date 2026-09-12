@@ -97,7 +97,7 @@ export async function runTaskRuntimeTests(): Promise<SuiteResult> {
   taskRuntime.fail(retryId, 'synthetic failure');
   taskRuntime.scheduleRetry(retryId);
   check(taskRuntime.get(retryId)?.status === 'PENDING' && taskRuntime.get(retryId)?.retryCount === 1, 'TaskRuntime schedules retries within configured retry budget');
-  check(taskRuntime.get(retryId)?.steps.every((step) => step.status === 'PENDING' && !step.resultBinding), 'Retry clears prior step state and stale result bindings before re-execution');
+  check(taskRuntime.get(retryId)?.steps.every((step) => step.status === 'PENDING' && !step.resultBinding) === true, 'Retry clears prior step state and stale result bindings before re-execution');
   taskRuntime.fail(retryId, 'second failure');
   taskRuntime.scheduleRetry(retryId);
   check(taskRuntime.get(retryId)?.retryCount === 1, 'TaskRuntime refuses retries beyond configured retry budget');
