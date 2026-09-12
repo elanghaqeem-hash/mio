@@ -19,6 +19,7 @@ const FileOrganizationView = lazy(() => import('./modes/files/FileOrganizationVi
 const MotionTrackingView = lazy(() => import('./modes/motion/MotionTrackingView').then((m) => ({ default: m.MotionTrackingView })));
 const SecurityDashboardView = lazy(() => import('./modes/security/SecurityDashboardView').then((m) => ({ default: m.SecurityDashboardView })));
 const ProjectOverviewView = lazy(() => import('./modes/project/ProjectOverviewView').then((m) => ({ default: m.ProjectOverviewView })));
+const TaskMonitorView = lazy(() => import('./modes/tasks/TaskMonitorView').then((m) => ({ default: m.TaskMonitorView })));
 const SettingsView = lazy(() => import('./modes/settings/SettingsView').then((m) => ({ default: m.SettingsView })));
 
 const WorkspaceLoader = () => (
@@ -53,6 +54,7 @@ export const App: React.FC = () => {
       case 'MOTION': return <MotionTrackingView />;
       case 'SECURITY': return <SecurityDashboardView />;
       case 'PROJECT': return <ProjectOverviewView />;
+      case 'TASKS': return <TaskMonitorView />;
       case 'SETTINGS': return <SettingsView />;
       default: return <ChatStudioView />;
     }
