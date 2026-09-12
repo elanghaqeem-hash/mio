@@ -2,13 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 export interface MioDesktopAPI {
-  // Window Management
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<boolean>;
   closeWindow: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
 
-  // System & Environment Telemetry
   getSystemInfo: () => Promise<{
     platform: string;
     arch: string;
@@ -19,24 +17,22 @@ export interface MioDesktopAPI {
   }>;
   getAppVersion: () => Promise<string>;
 
-  // Notifications
   showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<void>;
-
-  // Emergency Stop & Application Lifecycle
   triggerEmergencyStop: (reason: string) => Promise<void>;
   quitApp: () => Promise<void>;
 
-  // Controlled File Sandbox (Scoped)
   selectDirectory: () => Promise<string | null>;
+  getWorkspace: () => Promise<string | null>;
   readFile: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   writeFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
-  listDirectory: (dirPath: string) => Promise<{ success: boolean; files?: string[]; error?: string }>;
+  listDirectory: (dirPath: string) => Promise<{ success: boolean; files?: Array<{ name: string; type: 'file' | 'directory' }>; error?: string }>;
+  moveFile: (sourcePath: string, destinationPath: string) => Promise<{ success: boolean; error?: string }>;
 
-  // Event Listeners from Main Process (e.g. Tray actions, Stop shortcuts)
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
+  onNavigate: (callback: (mode: string) => void) => () => void;
 }
 
-const desktopAPI: MioDesktopAPI = {
+const desktopAPI: MioDesktopAPI = Object.freeze({
   minimizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
   maximizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
   closeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
@@ -46,22 +42,26 @@ const desktopAPI: MioDesktopAPI = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
   showNotification: (options) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_NOTIFICATION, options),
-
   triggerEmergencyStop: (reason) => ipcRenderer.invoke(IPC_CHANNELS.EMERGENCY_STOP, reason),
   quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.QUIT_APP),
 
   selectDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.FS_SELECT_DIRECTORY),
+  getWorkspace: () => ipcRenderer.invoke(IPC_CHANNELS.FS_GET_WORKSPACE),
   readFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke(IPC_CHANNELS.FS_WRITE_FILE, filePath, content),
   listDirectory: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_DIRECTORY, dirPath),
+  moveFile: (sourcePath, destinationPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_MOVE_FILE, sourcePath, destinationPath),
 
   onEmergencyStopTriggered: (callback) => {
-    const handler = (_: any, reason: string) => callback(reason);
+    const handler = (_: Electron.IpcRendererEvent, reason: string) => callback(reason);
     ipcRenderer.on('mio:event:emergencyStop', handler);
-    return () => {
-      ipcRenderer.removeListener('mio:event:emergencyStop', handler);
-    };
+    return () => ipcRenderer.removeListener('mio:event:emergencyStop', handler);
   },
-};
+  onNavigate: (callback) => {
+    const handler = (_: Electron.IpcRendererEvent, mode: string) => callback(mode);
+    ipcRenderer.on('mio:navigate', handler);
+    return () => ipcRenderer.removeListener('mio:navigate', handler);
+  },
+});
 
 contextBridge.exposeInMainWorld('mioDesktop', desktopAPI);
