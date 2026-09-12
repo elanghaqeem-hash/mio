@@ -17,8 +17,6 @@ export const SecurityDashboardView: React.FC = () => {
     const unsubMem = eventBus.on<MemoryItem[]>('MEMORY_UPDATED', (mems) => setMemories(mems));
     const unsubSec = eventBus.on<SecurityEvent[]>('SECURITY_AUDIT_UPDATED', (events) => setSecurityEvents(events));
     const unsubGrants = eventBus.on<AuthorizationGrant[]>('AUTHORIZATION_GRANTS_UPDATED', (grants) => setActiveGrants(grants));
-    setSecurityEvents(securityAuditLog.getEvents());
-    setActiveGrants(PermissionEngine.getActiveGrants());
     return () => { unsubMem(); unsubSec(); unsubGrants(); };
   }, []);
 
