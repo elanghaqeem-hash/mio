@@ -129,7 +129,13 @@ class TaskRuntimeController {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
     this.cancellationHandlers.get(taskId)?.forEach((handler) => { try { handler(); } catch (error) { console.error(`[TaskRuntime] cancellation handler failed for ${taskId}`, error); } });
     this.cancellationHandlers.delete(taskId); task.status = 'CANCELLED'; task.cancellationReason = reason; task.completedAt = Date.now(); task.updatedAt = task.completedAt;
-    task.steps.forEach((step) => { if (step.status === 'PENDING' || step.status === 'RUNNING') { step.status = 'CANCELLED'; step.completedAt = Date.now(); if (step.status === 'RUNNING' && !step.resultBinding) step.resultBinding = { kind: 'CONTROL', operationId: `runtime:${step.id}`, outcome: 'CANCELLED', recordedAt: Date.now() }; } });
+    task.steps.forEach((step) => {
+      const wasRunning = step.status === 'RUNNING';
+      if (step.status === 'PENDING' || wasRunning) {
+        if (wasRunning && !step.resultBinding) step.resultBinding = { kind: 'CONTROL', operationId: `runtime:${step.id}`, outcome: 'CANCELLED', recordedAt: Date.now() };
+        step.status = 'CANCELLED'; step.completedAt = Date.now();
+      }
+    });
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'CANCELLED', reason); this.publishSnapshot(); return this.clone(task);
   }
 
