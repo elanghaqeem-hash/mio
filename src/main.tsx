@@ -6,6 +6,7 @@ import { MemoryContextManager } from './memory/MemoryContextManager';
 import { ProjectManager } from './project/ProjectManager';
 import { MioMemoryManager } from './security/MemoryManager';
 import { executionLedger } from './security/ExecutionLedger';
+import { securityAuditLog } from './security/SecurityAuditLog';
 import { taskRuntime } from './orchestrator/TaskRuntime';
 
 interface ErrorBoundaryProps { children: ReactNode; }
@@ -43,6 +44,7 @@ async function bootstrapMio(): Promise<void> {
     MioMemoryManager.initialize(),
     MemoryContextManager.initializeProject(project.id),
     executionLedger.initialize(),
+    securityAuditLog.initialize(),
     taskRuntime.initialize(),
   ]);
 
