@@ -1,8 +1,11 @@
 # TP 0.12 — Desktop Capability Bridge & Secure IPC Service Adapters
 
-Status: IMPLEMENTED / GATE 1 PASSED / GATE 2 PENDING
+Status: IMPLEMENTED / GATE 1 PASSED / GATE 2 PASSED / FINAL VALIDATION PENDING
 Branch: `milestone/mio-web-lab-tp-0.12`
 Base: `refactor/mio-web-lab-v2`
+PR: #13
+Gate 1 validated head: `57953195e7c2a50c0320188cdf4303fd7b6c37de`
+Gate 2 validated checkpoint head: `c60a96bc9fca84f9d0308238429a252b665fae78`
 
 ## Objective
 
@@ -44,7 +47,7 @@ The absolute workspace root never becomes agent/service input and is not returne
 - bounded directory listing (default 1000 entries);
 - per-workspace and global revocation.
 
-Workspace authority is session authority. It is revoked when the window closes or the explicit quit IPC path is used and is not persisted for replay after restart.
+Workspace authority is session authority and is not persisted for replay after restart.
 
 ## Narrow IPC bridge
 
@@ -62,12 +65,12 @@ Every registered IPC invocation is checked against the current main window and i
 
 TP 0.12 preserves `contextIsolation: true` and `nodeIntegration: false`, and changes `webSecurity` to `true`.
 
-Additional navigation controls:
+Additional controls:
 - new-window requests are denied;
-- top-level navigation is limited to the explicit Vite dev URL during development or local `file://` application content;
+- top-level navigation is limited to the explicit Vite development URL or local `file://` application content;
 - F12 DevTools shortcut is development-only.
 
-`sandbox` remains `false` in this milestone because the current preload is emitted as CommonJS with a relative module dependency. Enabling Electron renderer sandbox safely requires bundling/restructuring preload first; TP 0.12 documents this rather than enabling a flag that could silently break the desktop runtime.
+`sandbox` remains `false` because the current preload is emitted as CommonJS with a relative module dependency. Enabling Electron renderer sandbox safely requires a bundled/sandbox-compatible preload architecture; this limitation is explicit rather than hidden.
 
 ## Capability model
 
@@ -75,11 +78,9 @@ Two narrow desktop services are introduced:
 - `service.desktop.workspace.read-text`;
 - `service.desktop.workspace.list`.
 
-They are `UNAVAILABLE` in the default web capability registry and only become `AVAILABLE` through `createDesktopCapabilityRegistry()`.
+They remain `UNAVAILABLE` in the default web registry and become `AVAILABLE` only through `createDesktopCapabilityRegistry()`.
 
-Generic `service.filesystem` remains `UNAVAILABLE`, including on desktop. `service.os` remains `UNAVAILABLE`.
-
-No generic filesystem or OS authority is granted by this milestone.
+Generic `service.filesystem` remains `UNAVAILABLE`, including on desktop. `service.os` remains `UNAVAILABLE`. No generic filesystem or OS authority is granted.
 
 ## Scope binding
 
@@ -89,11 +90,11 @@ For desktop workspace services:
 - `context.resourceId` must equal `input.workspaceId`;
 - `context.path` must equal `input.relativePath`.
 
-This closes a confused-deputy path where a benign approved scope could otherwise be paired with different service input at execution time. The scope binding is re-checked again inside the sandbox execution boundary.
+The binding is checked before authorization execution and re-checked inside the sandbox execution boundary, closing a confused-deputy path.
 
 ## CI hardening
 
-The MIO Validation Gate now compiles both runtimes:
+The Validation Gate now compiles both runtimes:
 
 ```text
 npm run lint
@@ -104,39 +105,29 @@ npm test
 
 Electron main/preload TypeScript can no longer regress while web-only CI remains green.
 
-## Validation Gate 1
+## Validation
 
-Validated head before checkpoint cleanup: `57953195e7c2a50c0320188cdf4303fd7b6c37de`.
-
-Results:
+### Gate 1
 - dependency install/audit: PASS — 0 vulnerabilities;
-- lint: PASS — 0 errors, 39 warnings at that head;
+- lint: PASS — 0 errors, 39 warnings before cleanup;
 - web TypeScript + Vite production build: PASS;
 - Electron main/preload TypeScript build: PASS;
+- total automated validations: **103/103 PASS**.
+
+### Gate 2 — checkpoint head `c60a96bc9fca84f9d0308238429a252b665fae78`
+- dependency install/audit: PASS — 0 vulnerabilities;
+- lint: PASS — **0 errors, 38 warnings**;
+- web build: PASS;
+- Electron build: PASS;
 - total automated validations: **103/103 PASS**;
 - original system/security suite: **23/23 PASS**;
-- all TP 0.1–0.11 suites remain green.
+- all TP 0.1–0.11 validations remain green.
 
-New TP 0.12 validations verify:
-- workspace authorization returns opaque ID without absolute root disclosure;
-- bounded text read works inside authorized workspace;
-- absolute paths are rejected;
-- parent traversal is rejected;
-- symlink breakout is rejected after canonical resolution;
-- file-size bounds are enforced;
-- directory-entry bounds are enforced;
-- revoked workspace authority cannot be reused;
-- desktop workspace capabilities remain unavailable in web registry;
-- desktop registry enables only narrow workspace services;
-- generic filesystem and OS capability remain unavailable;
-- desktop read flows through capability/resource/permission/sandbox/scope/output-validation gates;
-- actual service input cannot differ from the approved resource/path scope.
-
-A small cleanup after Gate 1 removed the obsolete `isQuitting` warning introduced by the main-process refactor. Gate 2 must validate the checkpoint head after that cleanup.
+TP 0.12 tests verify opaque authority IDs, bounded in-root reads, absolute-path rejection, parent traversal rejection, symlink breakout rejection, size/list limits, revocation, runtime-specific capability availability, generic filesystem/OS denial, end-to-end SecureServiceGateway execution, and service input/scope mismatch rejection.
 
 ## Build observation
 
-Gate 1 output:
+Gate 2 output:
 - initial application JS: ~292.14 kB minified / ~88.65 kB gzip;
 - ChatStudio: ~32.52 kB / ~10.06 kB gzip;
 - TaskScheduler: ~3.76 kB / ~1.53 kB gzip;
@@ -145,14 +136,14 @@ Gate 1 output:
 
 ## Known boundaries
 
-- Desktop workspace read/list infrastructure is implemented, but current Files UI is not yet refactored into a complete project-file browser using these services.
+- Desktop workspace read/list infrastructure is implemented, but the Files UI is not yet a complete authorized workspace browser.
 - Workspace authority is in-memory and requires explicit re-authorization after restart.
-- No desktop write/delete/move/rename capability is enabled in TP 0.12.
+- No desktop write/delete/move/rename capability is enabled.
 - No shell/process execution capability is enabled.
 - Electron renderer sandbox remains disabled pending a bundled/sandbox-compatible preload architecture.
-- Service calls continue to consume the privileged tool-call budget introduced earlier.
+- Service invocations still consume the privileged tool-call budget.
 - The execution ledger remains audit metadata rather than a cryptographically tamper-evident ledger.
-- Existing UI lint warnings and the Studio3D chunk-size warning remain separate known technical debt.
+- Existing UI lint warnings, Vite config-loader warning, and Studio3D chunk-size warning remain separate technical debt.
 
 ## Definition of Done
 
@@ -161,8 +152,7 @@ Gate 1 output:
 - [x] Canonical root and target `realpath` validation
 - [x] Parent traversal protection
 - [x] Symlink breakout protection
-- [x] Bounded text read
-- [x] Bounded directory listing
+- [x] Bounded text read and directory listing
 - [x] Workspace revocation
 - [x] Sender/main-frame IPC validation
 - [x] Narrow typed preload bridge
@@ -173,11 +163,12 @@ Gate 1 output:
 - [x] Input-to-approved-scope binding
 - [x] Generic filesystem/OS capability remains unavailable
 - [x] Electron build added to CI
-- [x] Gate 1: 103/103 tests PASS
-- [ ] Gate 2 on checkpoint head
+- [x] Gate 1: 103/103 PASS
+- [x] Gate 2: 103/103 PASS
+- [ ] Final validation on this documentation head
 - [ ] PR ready for review
 - [ ] Merge to `refactor/mio-web-lab-v2`
 
 ## Recommended next milestone
 
-TP 0.13 should implement **Project Workspace File Browser & Read-Only Knowledge Ingestion**. It should connect the approved desktop workspace authority to the Files/Project UI, expose explicit user-visible authorized roots, allow bounded read/list and controlled document ingestion, quarantine external/untrusted document content before memory promotion, and preserve web-runtime fallback. Write/delete/move/rename should remain a separate later milestone with preview, rollback/trash, L3/L4 permission semantics, and dedicated destructive-operation tests.
+TP 0.13 should implement **Project Workspace File Browser & Read-Only Knowledge Ingestion**: connect authorized workspace authority to the Files/Project UI, expose user-visible authorized roots, provide bounded read/list and controlled document ingestion, quarantine untrusted document content before memory promotion, and preserve web-runtime fallback. Write/delete/move/rename should remain a later milestone with preview, rollback/trash, explicit permission semantics, and destructive-operation tests.
