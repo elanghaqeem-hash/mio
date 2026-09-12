@@ -16,6 +16,7 @@ interface QueueEntry<T = unknown> {
 export class TaskScheduler {
   private readonly queue: QueueEntry[] = [];
   private readonly active = new Set<string>();
+  private readonly runnerRegistry = new Map<string, QueueRunner<unknown>>();
   private concurrencyLimit: number;
 
   constructor(concurrencyLimit: number = 2) {
@@ -23,6 +24,7 @@ export class TaskScheduler {
     eventBus.on<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', () => this.pump());
     eventBus.on<{ taskId: string; type: string }>('TASK_RUNTIME_EVENT', (event) => {
       if (event.type === 'CANCELLED') this.rejectQueuedTask(event.taskId, new Error('Task cancelled before scheduled execution'));
+      if (event.type === 'COMPLETED' || event.type === 'CANCELLED') this.runnerRegistry.delete(event.taskId);
     });
     emergencyStop.registerAbortHandler(() => this.rejectAllQueued(new Error('STOP MIO cancelled queued execution')));
   }
@@ -35,14 +37,26 @@ export class TaskScheduler {
   public getConcurrencyLimit(): number { return this.concurrencyLimit; }
   public getActiveTaskIds(): string[] { return Array.from(this.active); }
   public getQueuedTaskIds(): string[] { return this.queue.map((entry) => entry.taskId); }
+  public canRetry(taskId: string): boolean { return this.runnerRegistry.has(taskId) && taskRuntime.get(taskId)?.status === 'FAILED'; }
 
   public execute<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
     if (emergencyStop.isEmergencyStopped()) return Promise.reject(new Error('STOP MIO is active'));
     if (!taskRuntime.get(taskId)) return Promise.reject(new Error(`Unknown runtime task '${taskId}'`));
-    if (this.active.has(taskId) || this.queue.some((entry) => entry.taskId === taskId)) {
-      return Promise.reject(new Error(`Task '${taskId}' is already scheduled`));
-    }
+    if (this.active.has(taskId) || this.queue.some((entry) => entry.taskId === taskId)) return Promise.reject(new Error(`Task '${taskId}' is already scheduled`));
 
+    this.runnerRegistry.set(taskId, runner as QueueRunner<unknown>);
+    return this.enqueue(taskId, runner);
+  }
+
+  public retry<T = unknown>(taskId: string): Promise<T> {
+    const runner = this.runnerRegistry.get(taskId) as QueueRunner<T> | undefined;
+    if (!runner) return Promise.reject(new Error('Retry runner is unavailable after restart; re-submit the directive to create a new authorized execution.'));
+    const scheduled = taskRuntime.scheduleRetry(taskId);
+    if (!scheduled || scheduled.status !== 'PENDING') return Promise.reject(new Error(`Retry unavailable for task '${taskId}'`));
+    return this.enqueue(taskId, runner);
+  }
+
+  private enqueue<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.queue.push({ taskId, runner, resolve, reject, enqueuedAt: Date.now() });
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId}: QUEUED`, mode: 'PROJECT' });
@@ -50,15 +64,8 @@ export class TaskScheduler {
     });
   }
 
-  public scheduleRetry<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
-    const scheduled = taskRuntime.scheduleRetry(taskId);
-    if (!scheduled || scheduled.status !== 'PENDING') return Promise.reject(new Error(`Retry unavailable for task '${taskId}'`));
-    return this.execute(taskId, runner);
-  }
-
   private pump(): void {
     if (emergencyStop.isEmergencyStopped()) return;
-
     for (let index = 0; index < this.queue.length && this.active.size < this.concurrencyLimit;) {
       const entry = this.queue[index];
       const runtimeTask = taskRuntime.get(entry.taskId);
@@ -68,7 +75,6 @@ export class TaskScheduler {
         entry.reject(new Error('Task is no longer executable'));
         continue;
       }
-
       if (runtimeTask.status === 'PAUSED' || !taskRuntime.dependenciesSatisfied(entry.taskId)) {
         index += 1;
         continue;
@@ -87,9 +93,7 @@ export class TaskScheduler {
       const value = await entry.runner();
       entry.resolve(value);
     } catch (error) {
-      if (!taskRuntime.isCancelled(entry.taskId) && taskRuntime.get(entry.taskId)?.status !== 'FAILED') {
-        taskRuntime.fail(entry.taskId, error instanceof Error ? error.message : String(error));
-      }
+      if (!taskRuntime.isCancelled(entry.taskId) && taskRuntime.get(entry.taskId)?.status !== 'FAILED') taskRuntime.fail(entry.taskId, error instanceof Error ? error.message : String(error));
       entry.reject(error);
     } finally {
       this.active.delete(entry.taskId);
