@@ -1,10 +1,11 @@
 # TP 0.10 — Scoped Authorization & Bounded Autonomy Checkpoint
 
-Status: IMPLEMENTED / GATE 1 PASSED / GATE 2 PENDING
+Status: IMPLEMENTED / GATE 1 PASSED / GATE 2 PASSED
 Branch: `milestone/mio-web-lab-tp-0.10`
 Base: `refactor/mio-web-lab-v2`
 PR: #11
 Gate 1 validated head: `92b0c9c7da7ec560be35ad05b55e7e60ee402474`
+Gate 2 validated checkpoint: `16343c6133db58ae753c53259157da22d5e0c77a`
 
 ## Objective
 
@@ -101,11 +102,12 @@ User approval creates only the disclosed bounded grant. Review or cancel produce
 
 Authorization state is deliberately not persisted as executable authority across application restart.
 
-## Validation Gate 1
+## Validation Gates
 
-GitHub Actions `MIO Validation Gate` passed on head `92b0c9c7da7ec560be35ad05b55e7e60ee402474`.
+Gate 1 passed on head `92b0c9c7da7ec560be35ad05b55e7e60ee402474`.
+Gate 2 passed on checkpoint commit `16343c6133db58ae753c53259157da22d5e0c77a`.
 
-Results:
+Results remained:
 - dependency install/audit: PASS — 0 vulnerabilities;
 - lint: PASS — 0 errors, 41 existing warnings;
 - TypeScript + Vite production build: PASS;
@@ -126,7 +128,7 @@ New TP 0.10 validation verifies:
 
 ## Build observation
 
-Gate 1 output:
+Gate output:
 - initial application JS: ~291.88 kB minified / ~88.56 kB gzip;
 - ChatStudio chunk: ~25.12 kB / ~8.50 kB gzip;
 - TaskScheduler chunk: ~3.76 kB / ~1.53 kB gzip;
@@ -156,7 +158,8 @@ Gate 1 output:
 - [x] STOP MIO global grant revocation
 - [x] Deterministic scope-escalation/reuse tests
 - [x] Gate 1: lint/build/tests pass (81/81)
-- [ ] Gate 2 on this checkpoint commit
+- [x] Gate 2 on checkpoint commit
+- [ ] Final validation on finalized checkpoint metadata
 - [ ] PR ready for review
 - [ ] Merge to `refactor/mio-web-lab-v2`
 
