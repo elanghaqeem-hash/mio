@@ -37,7 +37,6 @@ export class CapabilityRegistry {
     if (descriptor.scopeFields.includes('RESOURCE') && !context.resourceId) return this.deny(capabilityId, 'Resource scope is required', descriptor);
     if (descriptor.scopeFields.includes('PATH') && !context.path) return this.deny(capabilityId, 'Path scope is required', descriptor);
     if (descriptor.scopeFields.includes('NETWORK_ORIGIN') && !context.networkOrigin) return this.deny(capabilityId, 'Network-origin scope is required', descriptor);
-    if (descriptor.networkAccess && !context.networkOrigin) return this.deny(capabilityId, 'Network capability requires an explicit network origin', descriptor);
 
     const decision: CapabilityDecision = { allowed: true, capabilityId, descriptor: this.clone(descriptor) };
     eventBus.emit('CAPABILITY_DECISION', { ...decision, taskId: context.taskId, mode: context.mode, timestamp: Date.now() });
@@ -98,7 +97,7 @@ export function createDefaultCapabilityRegistry(): CapabilityRegistry {
     permissionLevel: 'L4_EXECUTE',
     availability: 'AVAILABLE',
     networkAccess: true,
-    scopeFields: ['TASK', 'PROJECT', 'TOOL', 'NETWORK_ORIGIN'],
+    scopeFields: ['TASK', 'PROJECT', 'TOOL'],
     timeoutMs: 20000,
   });
   registry.register({
