@@ -164,15 +164,19 @@ export class ToolRouter {
 
       const outputValid = tool.validateOutput ? tool.validateOutput(output) : true;
       if (!outputValid) {
+        taskRuntime.bindStepResult(context.taskId, 'execute', { kind: 'TOOL', operationId: tool.id, outcome: 'FAILED', validationStatus: 'FAILED' });
         this.audit('error', 'TOOL_VALIDATION', tool.id, 'Tool output failed validation', true);
         eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
         return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool output validation failed', validation: 'FAILED' };
       }
 
+      const validation = tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED';
+      taskRuntime.bindStepResult(context.taskId, 'execute', { kind: 'TOOL', operationId: tool.id, outcome: 'SUCCESS', validationStatus: validation });
       this.audit('info', 'TOOL_EXECUTION', tool.id, `Capability executed successfully for task ${context.taskId} under bounded grant ${grant.id}`, false);
-      return { success: true, toolId: tool.id, startedAt, completedAt: Date.now(), data: output, validation: tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED' };
+      return { success: true, toolId: tool.id, startedAt, completedAt: Date.now(), data: output, validation };
     } catch (error) {
       const message = abortController.signal.aborted ? 'Tool execution cancelled' : error instanceof Error ? error.message : String(error);
+      taskRuntime.bindStepResult(context.taskId, 'execute', { kind: 'TOOL', operationId: tool.id, outcome: abortController.signal.aborted ? 'CANCELLED' : 'FAILED', validationStatus: 'FAILED' });
       this.audit(abortController.signal.aborted ? 'warning' : 'error', 'TOOL_EXECUTION', tool.id, message, true);
       eventBus.emit('CORE_STATE_CHANGE', abortController.signal.aborted ? 'WARNING' : 'ERROR');
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: message, validation: 'FAILED' };

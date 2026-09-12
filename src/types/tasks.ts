@@ -11,6 +11,14 @@ export type TaskRuntimeStatus =
 
 export type TaskStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'CANCELLED';
 
+export interface TaskStepResultBinding {
+  kind: 'CONTROL' | 'TOOL' | 'MODEL' | 'VALIDATION';
+  operationId: string;
+  outcome: 'SUCCESS' | 'FAILED' | 'BLOCKED' | 'CANCELLED';
+  validationStatus?: string;
+  recordedAt: number;
+}
+
 export interface RuntimeTaskStep {
   id: string;
   label: string;
@@ -20,6 +28,7 @@ export interface RuntimeTaskStep {
   startedAt?: number;
   completedAt?: number;
   error?: string;
+  resultBinding?: TaskStepResultBinding;
 }
 
 export interface RuntimeTask {
@@ -57,7 +66,10 @@ export interface TaskRuntimeEvent {
     | 'PAUSED'
     | 'RESUMED'
     | 'STEP_STARTED'
+    | 'STEP_RESULT_BOUND'
     | 'STEP_COMPLETED'
+    | 'STEP_BLOCKED'
+    | 'COMPLETION_BLOCKED'
     | 'COMPLETED'
     | 'FAILED'
     | 'CANCELLED'

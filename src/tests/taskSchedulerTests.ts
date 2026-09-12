@@ -20,6 +20,17 @@ const makePlan = (id: string): TaskPlan => ({
   ],
 });
 
+const completeSyntheticTask = (id: string) => {
+  taskRuntime.start(id);
+  taskRuntime.startStep(id, 'understand'); taskRuntime.completeStep(id, 'understand');
+  taskRuntime.startStep(id, 'route'); taskRuntime.completeStep(id, 'route');
+  taskRuntime.startStep(id, 'execute');
+  taskRuntime.bindStepResult(id, 'execute', { kind: 'CONTROL', operationId: 'scheduler.test', outcome: 'SUCCESS', validationStatus: 'TEST' });
+  taskRuntime.completeStep(id, 'execute');
+  taskRuntime.startStep(id, 'validate'); taskRuntime.completeStep(id, 'validate');
+  taskRuntime.complete(id);
+};
+
 const cleanupRuntime = () => {
   emergencyStop.reset();
   taskRuntime.cancelAllActive('scheduler test cleanup');
@@ -76,6 +87,7 @@ export async function runTaskSchedulerTests(): Promise<SuiteResult> {
   const recovered = taskRuntime.get(recoverId);
   check(recovered?.status === 'FAILED' && recovered.error?.includes('interrupted') === true, 'Runtime restart recovers non-terminal task as FAILED instead of silently resuming execution');
   check(recovered?.steps.find((step) => step.id === 'execute')?.status === 'FAILED', 'Recovery marks interrupted running step as FAILED');
+  check(recovered?.steps.find((step) => step.id === 'execute')?.resultBinding?.validationStatus === 'INTERRUPTED', 'Recovery binds interrupted execution outcome for auditability');
 
   cleanupRuntime();
   const scheduler = new TaskScheduler(1);
@@ -86,12 +98,12 @@ export async function runTaskSchedulerTests(): Promise<SuiteResult> {
 
   let releaseFirst: (() => void) | undefined;
   const firstPromise = scheduler.execute(firstId, () => new Promise<string>((resolve) => {
-    releaseFirst = () => { taskRuntime.complete(firstId); resolve('first'); };
+    releaseFirst = () => { completeSyntheticTask(firstId); resolve('first'); };
   }));
   let secondStarted = false;
   const secondPromise = scheduler.execute(secondId, async () => {
     secondStarted = true;
-    taskRuntime.complete(secondId);
+    completeSyntheticTask(secondId);
     return 'second';
   });
   await Promise.resolve();
@@ -111,13 +123,13 @@ export async function runTaskSchedulerTests(): Promise<SuiteResult> {
   let dependentStarted = false;
   const dependentPromise = dependencyScheduler.execute(dependentId, async () => {
     dependentStarted = true;
-    taskRuntime.complete(dependentId);
+    completeSyntheticTask(dependentId);
     return 'dependent';
   });
   await Promise.resolve();
   check(!dependentStarted && dependencyScheduler.getQueuedTaskIds().includes(dependentId), 'Scheduler holds dependent task while prerequisite is incomplete');
   const dependencyPromise = dependencyScheduler.execute(dependencyId, async () => {
-    taskRuntime.complete(dependencyId);
+    completeSyntheticTask(dependencyId);
     return 'dependency';
   });
   await dependencyPromise;
@@ -133,7 +145,7 @@ export async function runTaskSchedulerTests(): Promise<SuiteResult> {
     await retryScheduler.execute(retryId, async () => {
       attempt += 1;
       if (attempt === 1) throw new Error('synthetic first failure');
-      taskRuntime.complete(retryId);
+      completeSyntheticTask(retryId);
       return 'success';
     });
   } catch {
@@ -147,7 +159,10 @@ export async function runTaskSchedulerTests(): Promise<SuiteResult> {
   const pauseId = `pause_boundary_${Date.now()}`;
   taskRuntime.create(makePlan(pauseId), 'pause boundary');
   taskRuntime.start(pauseId);
+  taskRuntime.startStep(pauseId, 'understand'); taskRuntime.completeStep(pauseId, 'understand');
+  taskRuntime.startStep(pauseId, 'route'); taskRuntime.completeStep(pauseId, 'route');
   taskRuntime.startStep(pauseId, 'execute');
+  taskRuntime.bindStepResult(pauseId, 'execute', { kind: 'CONTROL', operationId: 'pause.test', outcome: 'SUCCESS', validationStatus: 'TEST' });
   taskRuntime.pause(pauseId);
   taskRuntime.completeStep(pauseId, 'execute');
   check(taskRuntime.get(pauseId)?.status === 'PAUSED', 'Completing an in-flight step preserves cooperative PAUSED state');

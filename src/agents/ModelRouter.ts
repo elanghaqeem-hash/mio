@@ -188,8 +188,10 @@ export class ModelRouter {
       const result = await provider.generate(request, controller.signal);
       if (controller.signal.aborted) throw new Error(taskId && taskRuntime.isCancelled(taskId) ? 'Model request cancelled' : `Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
       if (!result.text.trim()) throw new Error(`Model provider '${provider.id}' returned empty text`);
+      if (taskId) taskRuntime.bindStepResult(taskId, 'execute', { kind: 'MODEL', operationId: `${provider.id}:${result.model}`, outcome: 'SUCCESS', validationStatus: 'NON_EMPTY_RESPONSE' });
       return result;
     } catch (error) {
+      if (taskId) taskRuntime.bindStepResult(taskId, 'execute', { kind: 'MODEL', operationId: provider.id, outcome: controller.signal.aborted ? 'CANCELLED' : 'FAILED', validationStatus: 'FAILED' });
       if (controller.signal.aborted) {
         if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
         throw new Error(`Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
