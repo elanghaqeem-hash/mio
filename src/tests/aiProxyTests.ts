@@ -13,11 +13,35 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     }
   };
 
-  const request = (provider: string = 'openai') =>
+  const request = (provider: string = 'openai', includeApplicationContext = false) =>
     new Request('https://mio.test/api/ai/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, model: 'test-model', messages: [{ role: 'user', content: 'hello' }] }),
+      body: JSON.stringify({
+        provider,
+        model: 'test-model',
+        messages: [
+          { role: 'system', content: 'trusted system instruction' },
+          { role: 'user', content: 'hello' },
+        ],
+        ...(includeApplicationContext ? {
+          applicationContext: {
+            kind: 'PROJECT_KNOWLEDGE',
+            policy: 'DATA_ONLY',
+            projectId: 'project_test',
+            contextBudgetChars: 1200,
+            sources: [{
+              id: 'knowledge_1',
+              assetId: 'asset_1',
+              label: 'BCM Plan.md',
+              sourceUri: 'workspace://ws/docs/bcm.md',
+              trust: 'QUARANTINED',
+              score: 4,
+              text: 'External project fact: recovery time objective is four hours.',
+            }],
+          },
+        } : {}),
+      }),
     });
 
   const missingSecret = await onRequestPost({ request: request(), env: {} });
@@ -50,6 +74,13 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     assert(success.status === 200 && body.text === 'normalized answer' && body.source === 'CLOUD_PROXY', 'AI proxy normalizes successful provider output for the browser');
     assert(upstreamAuthorization === 'Bearer server-secret', 'AI proxy applies provider secret only on the server-side upstream request');
     assert(!upstreamBody.includes('server-secret'), 'Server secret is not embedded inside the provider request payload');
+
+    await onRequestPost({ request: request('openai', true), env: { OPENAI_API_KEY: 'server-secret', OPENAI_MODEL: 'server-model' } });
+    const parsed = JSON.parse(upstreamBody) as { instructions?: string; input?: Array<{ role?: string; content?: string }> };
+    const contextInput = parsed.input?.find((item) => item.content?.includes('[MIO_APPLICATION_CONTEXT]'));
+    assert(Boolean(contextInput) && contextInput?.role === 'user', 'Typed project context is materialized as provider input data rather than system authority');
+    assert(!parsed.instructions?.includes('MIO_APPLICATION_CONTEXT'), 'Project application context is never merged into provider instructions');
+    assert(contextInput?.content?.includes('policy=DATA_ONLY') === true && contextInput.content.includes('trust="QUARANTINED"'), 'Provider-boundary context preserves DATA_ONLY policy and source trust metadata');
   } finally {
     globalThis.fetch = originalFetch;
   }
