@@ -1,0 +1,41 @@
+name: Cloudflare Web Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Cloudflare web bundle
+        run: npm run build
+
+      - name: Verify Pages output
+        run: test -f dist/index.html
+
+      - name: Upload web build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mio-cloudflare-dist
+          path: dist
+          if-no-files-found: error
