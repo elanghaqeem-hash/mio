@@ -12,6 +12,8 @@ dist
 dist-electron
 release
 out
+
+# MediaPipe WASM is generated from the locked npm package; the pose model is tracked.
 public/mediapipe/wasm/
 
 # Editor directories and files
