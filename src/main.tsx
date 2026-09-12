@@ -2,6 +2,7 @@ import React, { StrictMode, Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
+import { MemoryContextManager } from './memory/MemoryContextManager';
 import { ProjectManager } from './project/ProjectManager';
 import { MioMemoryManager } from './security/MemoryManager';
 import { executionLedger } from './security/ExecutionLedger';
@@ -11,17 +12,9 @@ interface ErrorBoundaryProps { children: ReactNode; }
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
+  constructor(props: ErrorBoundaryProps) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error: Error): ErrorBoundaryState { return { hasError: true, error }; }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Mio V2 UI Catch:', error, errorInfo);
-  }
-
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) { console.error('Mio V2 UI Catch:', error, errorInfo); }
   render() {
     if (this.state.hasError) {
       return (
@@ -44,19 +37,17 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 async function bootstrapMio(): Promise<void> {
+  await ProjectManager.initialize();
+  const project = ProjectManager.getProject();
   await Promise.all([
-    ProjectManager.initialize(),
     MioMemoryManager.initialize(),
+    MemoryContextManager.initializeProject(project.id),
     executionLedger.initialize(),
     taskRuntime.initialize(),
   ]);
 
   createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </StrictMode>,
+    <StrictMode><ErrorBoundary><App /></ErrorBoundary></StrictMode>,
   );
 }
 
