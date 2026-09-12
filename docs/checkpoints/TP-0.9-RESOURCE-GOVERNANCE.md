@@ -1,9 +1,10 @@
 # TP 0.9 — Resource Governance & Execution Ledger Checkpoint
 
-Status: IMPLEMENTED / GATE 1 PASSED
+Status: IMPLEMENTED / GATE 1 PASSED / GATE 2 PENDING
 Branch: `milestone/mio-web-lab-tp-0.9`
 Base: `refactor/mio-web-lab-v2`
 PR: #10
+Gate 1 validated head: `1475733648c12e31efef60961ccfce1c6eb039c1`
 
 ## Objective
 
@@ -16,14 +17,16 @@ User Directive
   -> Intent / TaskPlanner
   -> TaskRuntime
   -> TaskScheduler
-  -> ResourceGovernor
+  -> security/ResourceGovernor
   -> Policy / Permission
   -> ToolRouter / ModelRouter
   -> Sandbox / Provider
   -> Result Validation
   -> TaskRuntime terminal state
-  -> Execution Ledger / Task Monitor
+  -> security/ExecutionLedger / Task Monitor
 ```
+
+`security/ResourceGovernor` and `security/ExecutionLedger` are the only canonical resource governance and structured execution-history implementations. Duplicate orchestrator implementations created during development were removed before Gate 1.
 
 ## Implemented resource governance
 
@@ -59,13 +62,14 @@ The Task Monitor now shows:
 ## Enforcement points
 
 - `TaskScheduler` checks the resource governor before dispatch.
-- `ToolRouter` applies resource accounting before tool execution while preserving Policy, Risk, Permission, Sandbox, validation, and audit gates.
+- `ToolRouter` applies resource preflight and atomic tool/network accounting while preserving Policy, Risk, Permission, Sandbox, validation, and audit gates.
 - `ModelRouter` applies model/network resource accounting without bypassing remote-provider permission checks.
 - STOP MIO and task cancellation remain stronger controls and still abort supported in-flight work.
+- Resource allowance never grants permission and cannot bypass the security path.
 
 ## Validation Gate 1
 
-GitHub Actions `MIO Validation Gate` passed on the implementation head.
+GitHub Actions `MIO Validation Gate` passed on head `1475733648c12e31efef60961ccfce1c6eb039c1`.
 
 Results:
 - dependency install/audit: PASS — 0 vulnerabilities;
@@ -85,7 +89,7 @@ New TP 0.9 validation includes:
 - execution-ledger persistence through StorageProvider;
 - retry resource reset while retaining the configured budget.
 
-A legacy ToolRouter timeout test initially failed because all independent test scenarios reused one task ID and therefore correctly shared a resource budget under the new governor. The test harness was corrected to isolate each scenario with a unique task ID; production budget enforcement was not relaxed.
+A legacy ToolRouter timeout test initially failed because independent test scenarios reused one task ID and therefore correctly shared a resource budget under the new governor. The test harness was corrected to isolate each scenario with a unique task ID; production budget enforcement was not relaxed.
 
 ## Build observation
 
@@ -98,23 +102,26 @@ Gate 1 output:
 ## Known boundaries
 
 - Resource counters are attempt/session scoped; they are not replayed as executable authority after restart.
-- Network accounting is currently capability-call based (for example, a network-backed research tool is accounted as a governed network-capable operation) rather than byte/token/network-packet metering.
+- Network accounting is capability-call based rather than byte/token/network-packet metering.
 - The Execution Ledger is persistent, but it is an audit/history surface rather than a tamper-evident cryptographic log at this Technology Preview stage.
 - Existing 41 lint warnings remain technical-debt baseline and were not increased by TP 0.9.
 - Existing Vite config-loader and Studio3D chunk-size warnings remain non-blocking known debt.
 
 ## Definition of Done
 
+- [x] Canonical security-layer ResourceGovernor
 - [x] Per-task duration/tool/network/model budgets
 - [x] Fail-closed scheduler resource gate
 - [x] ToolRouter resource enforcement
 - [x] ModelRouter resource enforcement
+- [x] Atomic network-backed tool/model accounting
 - [x] Retry resource-reset semantics
-- [x] Persistent execution ledger
+- [x] Canonical persistent ExecutionLedger
 - [x] Resource observability in Task Monitor
+- [x] Duplicate governance/history paths removed
 - [x] Deterministic TP 0.9 tests
 - [x] Gate 1: lint/build/tests pass (72/72)
-- [ ] Gate 2 on checkpoint commit
+- [ ] Gate 2 on this checkpoint commit
 - [ ] PR ready for review
 - [ ] Merge to `refactor/mio-web-lab-v2`
 
