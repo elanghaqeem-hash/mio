@@ -2,6 +2,7 @@ import { eventBus } from '../core/EventBus';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
+import { taskRuntime } from '../orchestrator/TaskRuntime';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { NetworkState } from '../types/core';
 import { ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig } from '../types/models';
@@ -15,28 +16,17 @@ export class ModelRouter {
     allowOfflineFallback: true,
   };
 
-  public static setNetworkState(state: NetworkState) {
-    this.networkState = state;
-  }
-
-  public static getNetworkState(): NetworkState {
-    return this.networkState;
-  }
-
-  public static configure(config: Partial<ModelRouterConfig>) {
-    this.config = { ...this.config, ...config };
-  }
-
-  public static getConfig(): ModelRouterConfig {
-    return { ...this.config };
-  }
-
-  public static isOffline(): boolean {
-    return this.networkState === 'OFFLINE' || this.config.provider === 'local_heuristic';
-  }
+  public static setNetworkState(state: NetworkState) { this.networkState = state; }
+  public static getNetworkState(): NetworkState { return this.networkState; }
+  public static configure(config: Partial<ModelRouterConfig>) { this.config = { ...this.config, ...config }; }
+  public static getConfig(): ModelRouterConfig { return { ...this.config }; }
+  public static isOffline(): boolean { return this.networkState === 'OFFLINE' || this.config.provider === 'local_heuristic'; }
 
   public static async generate(request: ModelRequest, timeoutMs: number = 30000): Promise<ModelResponse> {
     const provider = this.createProvider();
+    const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
+
+    if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
 
     if (provider.requiresNetwork && this.networkState !== 'ONLINE') {
       if (!this.config.allowOfflineFallback) throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
@@ -56,9 +46,12 @@ export class ModelRouter {
       if (!approved) throw new Error('Remote model execution permission denied');
     }
 
+    if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
+
     try {
       return await this.executeProvider(provider, request, timeoutMs);
     } catch (error) {
+      if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
       if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
       eventBus.emit('ACTIVITY_LOG', {
         timestamp: Date.now(),
@@ -73,28 +66,32 @@ export class ModelRouter {
     const config = this.config;
     if (config.provider === 'local_heuristic') return new LocalHeuristicProvider();
     if (config.provider === 'ollama') return new OllamaProvider(config.ollamaEndpoint, config.model);
-
-    return new SecureProxyModelProvider({
-      provider: config.provider,
-      endpoint: config.proxyEndpoint ?? '/api/ai/generate',
-      model: config.model,
-    });
+    return new SecureProxyModelProvider({ provider: config.provider, endpoint: config.proxyEndpoint ?? '/api/ai/generate', model: config.model });
   }
 
   private static async executeProvider(provider: ModelProvider, request: ModelRequest, timeoutMs: number): Promise<ModelResponse> {
     const controller = new AbortController();
+    const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
+    const unregisterCancellation = taskId
+      ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort())
+      : () => undefined;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
 
     try {
       const result = await provider.generate(request, controller.signal);
+      if (controller.signal.aborted) throw new Error(taskId && taskRuntime.isCancelled(taskId) ? 'Model request cancelled' : `Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
       if (!result.text.trim()) throw new Error(`Model provider '${provider.id}' returned empty text`);
       return result;
     } catch (error) {
-      if (controller.signal.aborted) throw new Error(`Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
+      if (controller.signal.aborted) {
+        if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
+        throw new Error(`Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
+      }
       throw error;
     } finally {
       clearTimeout(timer);
+      unregisterCancellation();
     }
   }
 }
