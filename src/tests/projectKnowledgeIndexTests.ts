@@ -20,6 +20,7 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
     references: [], versions: [], activityLog: [], securityLog: [],
     knowledgeGovernance: {
       updatedAt: now,
+      history: [],
       sources: {
         asset_bcm_1: { assetId: 'asset_bcm_1', included: true, trust: 'VERIFIED', reviewedAt: now, freshUntil: now + 86_400_000, updatedAt: now },
         asset_bcm_duplicate: { assetId: 'asset_bcm_duplicate', included: true, trust: 'QUARANTINED', updatedAt: now },
@@ -27,21 +28,9 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
       },
     },
     assets: [
-      {
-        id: 'asset_bcm_1', name: 'BCM Plan.md', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now,
-        filePath: 'workspace://ws_test/docs/bcm.md', verified: false,
-        data: { content: '[UNTRUSTED_EXTERNAL_DATA]\nBusiness continuity recovery time objective is four hours and crisis response procedures require escalation.\n[/UNTRUSTED_EXTERNAL_DATA]', quarantine: true },
-      },
-      {
-        id: 'asset_bcm_duplicate', name: 'BCM Copy.md', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now,
-        filePath: 'workspace://ws_test/docs/bcm-copy.md', verified: false,
-        data: { content: '[UNTRUSTED_EXTERNAL_DATA]\nBusiness continuity recovery time objective is four hours and crisis response procedures require escalation.\n[/UNTRUSTED_EXTERNAL_DATA]', quarantine: true },
-      },
-      {
-        id: 'asset_finance', name: 'Budget.txt', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now,
-        filePath: 'workspace://ws_test/docs/budget.txt', verified: true,
-        data: { content: 'Annual budget assumptions, operating expense baseline, and revenue forecast.' },
-      },
+      { id: 'asset_bcm_1', name: 'BCM Plan.md', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now, filePath: 'workspace://ws_test/docs/bcm.md', verified: false, data: { content: '[UNTRUSTED_EXTERNAL_DATA]\nBusiness continuity recovery time objective is four hours and crisis response procedures require escalation.\n[/UNTRUSTED_EXTERNAL_DATA]', quarantine: true } },
+      { id: 'asset_bcm_duplicate', name: 'BCM Copy.md', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now, filePath: 'workspace://ws_test/docs/bcm-copy.md', verified: false, data: { content: '[UNTRUSTED_EXTERNAL_DATA]\nBusiness continuity recovery time objective is four hours and crisis response procedures require escalation.\n[/UNTRUSTED_EXTERNAL_DATA]', quarantine: true } },
+      { id: 'asset_finance', name: 'Budget.txt', type: 'document', origin: 'IMPORTED', version: 1, createdAt: now, updatedAt: now, filePath: 'workspace://ws_test/docs/budget.txt', verified: true, data: { content: 'Annual budget assumptions, operating expense baseline, and revenue forecast.' } },
     ],
   };
 
@@ -83,10 +72,7 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
   check((budgetBounded.applicationContext?.contextBudgetChars ?? 0) === 600, 'Retrieval records the active project context character budget');
   check((budgetBounded.applicationContext?.sources.reduce((sum, source) => sum + source.text.length, 0) ?? 0) <= 1200, 'Context payload remains bounded even when the first relevant chunk exceeds the nominal minimum budget');
 
-  const audit = EvidenceGrounding.audit(
-    'The recovery time objective is four hours. Saturn has rings made of ice. Escalation is required.',
-    bcm.applicationContext,
-  );
+  const audit = EvidenceGrounding.audit('The recovery time objective is four hours. Saturn has rings made of ice. Escalation is required.', bcm.applicationContext);
   check(audit.method === 'LEXICAL_EVIDENCE_HEURISTIC', 'Evidence audit identifies its bounded heuristic method truthfully');
   check(audit.supported >= 1, 'Evidence audit marks claims with multiple source-term overlaps as SUPPORTED');
   check(audit.unsupported >= 1, 'Evidence audit surfaces response claims without source support as UNSUPPORTED');
