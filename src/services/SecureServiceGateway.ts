@@ -10,6 +10,7 @@ import type { CapabilityExecutionContext } from '../types/capabilities';
 export interface MioServiceDefinition<I = unknown, O = unknown> {
   id: string;
   validateInput: (input: unknown) => input is I;
+  validateScope?: (input: I, context: CapabilityExecutionContext) => boolean;
   execute: (input: I, context: CapabilityExecutionContext & { signal: AbortSignal }) => Promise<O>;
   validateOutput?: (output: O) => boolean;
 }
@@ -57,6 +58,7 @@ export class SecureServiceGateway {
     const policy = PolicyEngine.validateInstruction(`${serviceId} ${JSON.stringify(input)}`);
     if (!policy.allowed) return this.fail(serviceId, startedAt, policy.reason ?? 'Policy rejected service request');
     if (!service.validateInput(input)) return this.fail(serviceId, startedAt, 'Service input validation failed');
+    if (service.validateScope && !service.validateScope(input, context)) return this.fail(serviceId, startedAt, 'Service input does not match approved capability scope');
     if (taskRuntime.isCancelled(context.taskId)) return this.fail(serviceId, startedAt, 'Task cancelled before service execution');
 
     const serviceBudget = resourceGovernor.authorize(context.taskId, 'TOOL_CALL', context.mode);
@@ -118,6 +120,7 @@ export class SecureServiceGateway {
           if (!PermissionEngine.consumeGrant(grant.id, requiredScope)) throw new Error('Scoped service authorization expired, was revoked, or no longer matches execution scope');
           const runtimeCapability = this.capabilities.authorize(serviceId, context);
           if (!runtimeCapability.allowed) throw new Error(runtimeCapability.reason ?? 'Service capability became unavailable before execution');
+          if (service.validateScope && !service.validateScope(input, context)) throw new Error('Service scope changed before execution');
           if (controller.signal.aborted) throw new Error('Service execution cancelled');
           const result = await service.execute(input, { ...context, signal: controller.signal }) as T;
           if (controller.signal.aborted) throw new Error('Service execution cancelled');
