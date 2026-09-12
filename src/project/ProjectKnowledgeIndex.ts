@@ -135,14 +135,15 @@ export class ProjectKnowledgeIndex {
       .map((chunk): ProjectKnowledgeHit => {
         const haystack = chunk.text.toLowerCase();
         const name = chunk.assetName.toLowerCase();
-        const score = queryTerms.reduce((sum, term) => {
+        const lexicalScore = queryTerms.reduce((sum, term) => {
           const contentMatches = haystack.split(term).length - 1;
           const nameBoost = name.includes(term) ? 2 : 0;
-          const trustBoost = chunk.trust === 'VERIFIED' ? 0.25 : 0;
-          const stalePenalty = chunk.freshness === 'STALE' ? 0.5 : 0;
-          return sum + Math.min(contentMatches, 5) + nameBoost + trustBoost - stalePenalty;
+          return sum + Math.min(contentMatches, 5) + nameBoost;
         }, 0);
-        return { ...chunk, score };
+        if (lexicalScore <= 0) return { ...chunk, score: 0 };
+        const trustBoost = chunk.trust === 'VERIFIED' ? 0.25 : 0;
+        const stalePenalty = chunk.freshness === 'STALE' ? 0.5 : 0;
+        return { ...chunk, score: Math.max(0.01, lexicalScore + trustBoost - stalePenalty) };
       })
       .filter((hit) => hit.score > 0)
       .sort((a, b) => b.score - a.score || a.assetName.localeCompare(b.assetName));
