@@ -1,4 +1,4 @@
-import { MioProject, ProjectAsset, AssetType, AssetOrigin, KnowledgeSourceGovernanceRecord, KnowledgeSourceTrust } from '../types/project';
+import { MioProject, ProjectAsset, AssetType, AssetOrigin, KnowledgeGovernanceAction, KnowledgeSourceGovernanceRecord, KnowledgeSourceTrust } from '../types/project';
 import { eventBus } from '../core/EventBus';
 import { StorageProvider } from '../storage/StorageProvider';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
@@ -17,7 +17,7 @@ const createInitialProject = (name = 'MIO Web Lab Workspace', description = 'Per
   versions: [],
   activityLog: [{ timestamp: Date.now(), message: 'Project initialized in controlled MIO workspace', mode: 'PROJECT' }],
   securityLog: [],
-  knowledgeGovernance: { sources: {}, updatedAt: Date.now() },
+  knowledgeGovernance: { sources: {}, history: [], updatedAt: Date.now() },
 });
 
 export class ProjectManager {
@@ -62,7 +62,10 @@ export class ProjectManager {
   public static addAsset(asset: Omit<ProjectAsset, 'id' | 'createdAt' | 'updatedAt' | 'version'>): ProjectAsset {
     const newAsset: ProjectAsset = { ...asset, id: `asset_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, version: 1, createdAt: Date.now(), updatedAt: Date.now() };
     this.currentProject.assets.push(newAsset);
-    if (newAsset.type === 'document') this.ensureKnowledgeGovernance(newAsset);
+    if (newAsset.type === 'document') {
+      this.ensureKnowledgeGovernance(newAsset);
+      this.appendGovernanceEvent(newAsset.id, 'REGISTERED', 'SYSTEM', { trust: newAsset.verified ? 'VERIFIED' : 'QUARANTINED', included: true, note: `Registered ${newAsset.origin} document source` });
+    }
     this.currentProject.activityLog.unshift({ timestamp: Date.now(), message: `Added ${newAsset.origin} asset: ${newAsset.name}`, mode: 'PROJECT' });
     this.commitProjectUpdate();
     return newAsset;
@@ -79,10 +82,7 @@ export class ProjectManager {
   }
 
   public static getAssetByType(type: AssetType): ProjectAsset | undefined { return this.currentProject.assets.find((asset) => asset.type === type); }
-
-  public static getKnowledgeGovernance(assetId: string): KnowledgeSourceGovernanceRecord | undefined {
-    return this.currentProject.knowledgeGovernance.sources[assetId];
-  }
+  public static getKnowledgeGovernance(assetId: string): KnowledgeSourceGovernanceRecord | undefined { return this.currentProject.knowledgeGovernance.sources[assetId]; }
 
   public static setKnowledgeSourceIncluded(assetId: string, included: boolean): boolean {
     const asset = this.currentProject.assets.find((item) => item.id === assetId && item.type === 'document');
@@ -91,6 +91,7 @@ export class ProjectManager {
     record.included = included;
     record.updatedAt = Date.now();
     this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, included ? 'INCLUDED' : 'EXCLUDED', 'USER', { included, trust: record.trust });
     this.commitProjectUpdate(`${included ? 'Included' : 'Excluded'} knowledge source: ${asset.name}`);
     return true;
   }
@@ -106,6 +107,7 @@ export class ProjectManager {
     record.updatedAt = Date.now();
     asset.verified = trust === 'VERIFIED';
     this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, 'REVIEWED', 'USER', { trust, included: record.included, note, freshUntil });
     this.commitProjectUpdate(`Reviewed knowledge source ${asset.name} as ${trust}`);
     return true;
   }
@@ -120,6 +122,7 @@ export class ProjectManager {
     record.included = false;
     record.updatedAt = Date.now();
     this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, 'SUPERSEDED', 'USER', { trust: record.trust, included: false, replacementAssetId, note: `Replaced by ${replacement.name}` });
     this.commitProjectUpdate(`Superseded knowledge source ${asset.name} with ${replacement.name}`);
     return true;
   }
@@ -141,15 +144,24 @@ export class ProjectManager {
     }
   }
 
+  private static appendGovernanceEvent(assetId: string, action: KnowledgeGovernanceAction, actor: 'USER' | 'SYSTEM', details: { trust?: KnowledgeSourceTrust; included?: boolean; note?: string; freshUntil?: number; replacementAssetId?: string } = {}): void {
+    const timestamp = Date.now();
+    this.currentProject.knowledgeGovernance.history.unshift({
+      id: `kg_${timestamp}_${Math.random().toString(36).substring(2, 7)}`,
+      assetId,
+      action,
+      timestamp,
+      actor,
+      ...details,
+    });
+    this.currentProject.knowledgeGovernance.history = this.currentProject.knowledgeGovernance.history.slice(0, 500);
+    this.currentProject.knowledgeGovernance.updatedAt = timestamp;
+  }
+
   private static ensureKnowledgeGovernance(asset: ProjectAsset): KnowledgeSourceGovernanceRecord {
     const existing = this.currentProject.knowledgeGovernance.sources[asset.id];
     if (existing) return existing;
-    const record: KnowledgeSourceGovernanceRecord = {
-      assetId: asset.id,
-      included: true,
-      trust: asset.verified ? 'VERIFIED' : 'QUARANTINED',
-      updatedAt: Date.now(),
-    };
+    const record: KnowledgeSourceGovernanceRecord = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', updatedAt: Date.now() };
     this.currentProject.knowledgeGovernance.sources[asset.id] = record;
     this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
     return record;
@@ -164,17 +176,12 @@ export class ProjectManager {
       activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
       securityLog: Array.isArray(project.securityLog) ? project.securityLog : [],
       knowledgeGovernance: project.knowledgeGovernance && typeof project.knowledgeGovernance.sources === 'object'
-        ? project.knowledgeGovernance
-        : { sources: {}, updatedAt: Date.now() },
+        ? { ...project.knowledgeGovernance, history: Array.isArray(project.knowledgeGovernance.history) ? project.knowledgeGovernance.history : [] }
+        : { sources: {}, history: [], updatedAt: Date.now() },
     };
     for (const asset of normalized.assets.filter((item) => item.type === 'document')) {
       if (!normalized.knowledgeGovernance.sources[asset.id]) {
-        normalized.knowledgeGovernance.sources[asset.id] = {
-          assetId: asset.id,
-          included: true,
-          trust: asset.verified ? 'VERIFIED' : 'QUARANTINED',
-          updatedAt: asset.updatedAt || Date.now(),
-        };
+        normalized.knowledgeGovernance.sources[asset.id] = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', updatedAt: asset.updatedAt || Date.now() };
       }
     }
     return normalized;
