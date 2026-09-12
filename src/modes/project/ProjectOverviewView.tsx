@@ -7,6 +7,7 @@ import { FolderGit2, Play, RotateCcw, Box, Film, Palette, Volume2, Music, Shield
 import { eventBus } from '../../core/EventBus';
 import { KnowledgeGovernancePanel } from './KnowledgeGovernancePanel';
 import { KnowledgeCorroborationPanel } from './KnowledgeCorroborationPanel';
+import { KnowledgeLineagePanel } from './KnowledgeLineagePanel';
 
 export const ProjectOverviewView: React.FC = () => {
   const [project, setProject] = useState<MioProject>(ProjectManager.getProject());
@@ -54,6 +55,7 @@ export const ProjectOverviewView: React.FC = () => {
 
       <KnowledgeGovernancePanel project={project} />
       <KnowledgeCorroborationPanel project={project} />
+      <KnowledgeLineagePanel project={project} />
 
       <div className="rounded-xl border border-gray-800 bg-[#0d121d] p-4">
         <div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 font-bold text-gray-300">PROJECT ASSET SANDBOX ({project.assets.length})</span><span className="text-[10px] text-gray-500">PROJECT-SCOPED ASSET INVENTORY</span></div>
