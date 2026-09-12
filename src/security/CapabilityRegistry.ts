@@ -73,7 +73,11 @@ export class CapabilityRegistry {
   }
 }
 
-export function createDefaultCapabilityRegistry(): CapabilityRegistry {
+export interface CapabilityRegistryOptions {
+  desktopWorkspaceBridge?: boolean;
+}
+
+export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptions = {}): CapabilityRegistry {
   const registry = new CapabilityRegistry();
   registry.register({
     id: 'agent.orchestrator',
@@ -114,10 +118,38 @@ export function createDefaultCapabilityRegistry(): CapabilityRegistry {
     scopeFields: ['TASK', 'PROJECT', 'TOOL'],
     timeoutMs: 20000,
   });
+
+  const desktopAvailability = options.desktopWorkspaceBridge ? 'AVAILABLE' : 'UNAVAILABLE';
+  registry.register({
+    id: 'service.desktop.workspace.read-text',
+    kind: 'SERVICE',
+    description: 'Read bounded UTF-8 text from an explicitly user-authorized desktop workspace using workspaceId plus relative path.',
+    ownerLayer: 'SERVICE',
+    modes: ['FILES', 'PROJECT'],
+    riskLevel: 'LOW',
+    permissionLevel: 'L0_OBSERVE',
+    availability: desktopAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'PATH'],
+    timeoutMs: 10000,
+  });
+  registry.register({
+    id: 'service.desktop.workspace.list',
+    kind: 'SERVICE',
+    description: 'List a bounded directory inside an explicitly user-authorized desktop workspace using workspaceId plus relative path.',
+    ownerLayer: 'SERVICE',
+    modes: ['FILES', 'PROJECT'],
+    riskLevel: 'LOW',
+    permissionLevel: 'L0_OBSERVE',
+    availability: desktopAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'PATH'],
+    timeoutMs: 10000,
+  });
   registry.register({
     id: 'service.filesystem',
     kind: 'SERVICE',
-    description: 'Privileged filesystem service gateway. No web-lab handler is registered in TP 0.11.',
+    description: 'Generic unrestricted filesystem access is intentionally unavailable. Use bounded desktop workspace capabilities instead.',
     ownerLayer: 'SERVICE',
     modes: ['FILES', 'PROJECT'],
     riskLevel: 'HIGH',
@@ -130,7 +162,7 @@ export function createDefaultCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     id: 'service.os',
     kind: 'SERVICE',
-    description: 'Privileged operating-system integration gateway. Not available in the web runtime.',
+    description: 'Privileged operating-system integration gateway. Destructive/process authority remains unavailable in TP 0.12.',
     ownerLayer: 'SERVICE',
     modes: ['PROJECT', 'TASKS'],
     riskLevel: 'CRITICAL',
@@ -141,6 +173,10 @@ export function createDefaultCapabilityRegistry(): CapabilityRegistry {
     timeoutMs: 15000,
   });
   return registry;
+}
+
+export function createDesktopCapabilityRegistry(): CapabilityRegistry {
+  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true });
 }
 
 export const defaultCapabilityRegistry = createDefaultCapabilityRegistry();

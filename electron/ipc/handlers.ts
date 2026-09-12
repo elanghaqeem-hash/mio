@@ -1,17 +1,27 @@
-import { BrowserWindow, dialog, Notification, app } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
+import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'electron';
 import * as os from 'os';
+import { WorkspaceSandbox } from './workspaceSandbox';
+
+export interface WorkspacePathRequest {
+  workspaceId: string;
+  relativePath: string;
+}
+
+const MAX_NOTIFICATION_TEXT = 2000;
+const MAX_STOP_REASON = 500;
+const MAX_WORKSPACE_ID = 128;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
-  const isPathSafe = (targetPath: string): boolean => {
-    const normalized = path.normalize(targetPath);
-    // Disallow accessing root critical Windows directories
-    const winDir = process.env.WINDIR || 'C:\\Windows';
-    if (normalized.toLowerCase().startsWith(winDir.toLowerCase())) {
-      return false;
-    }
-    return true;
+  const workspaceSandbox = new WorkspaceSandbox();
+
+  const validateWorkspaceId = (workspaceId: unknown): workspaceId is string => {
+    return typeof workspaceId === 'string' && workspaceId.length > 0 && workspaceId.length <= MAX_WORKSPACE_ID && /^ws_[a-zA-Z0-9-]+$/.test(workspaceId);
+  };
+
+  const validateWorkspacePathRequest = (request: unknown): request is WorkspacePathRequest => {
+    if (!request || typeof request !== 'object') return false;
+    const value = request as Partial<WorkspacePathRequest>;
+    return validateWorkspaceId(value.workspaceId) && typeof value.relativePath === 'string' && value.relativePath.length <= 4096;
   };
 
   return {
@@ -24,98 +34,86 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       if (mainWindow.isMaximized()) {
         mainWindow.unmaximize();
         return false;
-      } else {
-        mainWindow.maximize();
-        return true;
       }
+      mainWindow.maximize();
+      return true;
     },
     handleClose: () => {
       if (mainWindow) mainWindow.close();
     },
-    handleIsMaximized: () => {
-      return mainWindow ? mainWindow.isMaximized() : false;
-    },
+    handleIsMaximized: () => mainWindow ? mainWindow.isMaximized() : false,
 
     // System Telemetry
-    handleGetSystemInfo: () => {
-      return {
-        platform: process.platform,
-        arch: process.arch,
-        osVersion: os.release(),
-        totalMemMb: Math.round(os.totalmem() / (1024 * 1024)),
-        freeMemMb: Math.round(os.freemem() / (1024 * 1024)),
-        cpuCores: os.cpus().length,
-      };
-    },
-    handleGetAppVersion: () => {
-      return app.getVersion();
-    },
+    handleGetSystemInfo: () => ({
+      platform: process.platform,
+      arch: process.arch,
+      osVersion: os.release(),
+      totalMemMb: Math.round(os.totalmem() / (1024 * 1024)),
+      freeMemMb: Math.round(os.freemem() / (1024 * 1024)),
+      cpuCores: os.cpus().length,
+    }),
+    handleGetAppVersion: () => app.getVersion(),
 
     // Desktop Notifications
-    handleShowNotification: (_: any, options: { title: string; body: string; silent?: boolean }) => {
+    handleShowNotification: (_event: IpcMainInvokeEvent, options: unknown) => {
+      if (!options || typeof options !== 'object') return { success: false, error: 'Invalid notification payload' };
+      const value = options as { title?: unknown; body?: unknown; silent?: unknown };
+      if (typeof value.title !== 'string' || typeof value.body !== 'string') return { success: false, error: 'Notification title/body must be strings' };
+      if (value.title.length > MAX_NOTIFICATION_TEXT || value.body.length > MAX_NOTIFICATION_TEXT) return { success: false, error: 'Notification payload exceeds bounded length' };
       if (Notification.isSupported()) {
-        const notif = new Notification({
-          title: options.title || 'Mio V2 Notification',
-          body: options.body || '',
-          silent: options.silent || false,
-        });
-        notif.show();
+        new Notification({ title: value.title || 'Mio V2 Notification', body: value.body, silent: value.silent === true }).show();
       }
+      return { success: true };
     },
 
     // Emergency Stop
-    handleEmergencyStop: (_: any, reason: string) => {
-      console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${reason}`);
-      if (mainWindow) {
-        mainWindow.webContents.send('mio:event:emergencyStop', reason);
-      }
+    handleEmergencyStop: (_event: IpcMainInvokeEvent, reason: unknown) => {
+      const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
+      console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
+      if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', safeReason);
+      return { success: true };
     },
 
-    // Scoped File Access (L0-L5 sandbox)
-    handleSelectDirectory: async () => {
-      const res = await dialog.showOpenDialog(mainWindow, {
+    // Workspace authority is created only by an explicit native directory picker.
+    handleAuthorizeWorkspace: async () => {
+      const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory'],
-        title: 'Select Authorized Workspace Directory for Mio',
+        title: 'Authorize Workspace Directory for Mio',
       });
-      if (res.canceled || res.filePaths.length === 0) return null;
-      return res.filePaths[0];
-    },
-
-    handleReadFile: async (_: any, filePath: string) => {
-      if (!isPathSafe(filePath)) {
-        return { success: false, error: 'Path rejected by Security Sandbox' };
-      }
+      if (result.canceled || result.filePaths.length === 0) return { success: false, cancelled: true };
       try {
-        const content = await fs.promises.readFile(filePath, 'utf-8');
-        return { success: true, data: content };
-      } catch (err: any) {
-        return { success: false, error: err.message };
+        const workspace = await workspaceSandbox.authorizeRoot(result.filePaths[0]);
+        return { success: true, workspace };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
     },
 
-    handleWriteFile: async (_: any, filePath: string, content: string) => {
-      if (!isPathSafe(filePath)) {
-        return { success: false, error: 'Path rejected by Security Sandbox' };
-      }
+    handleRevokeWorkspace: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
+      if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace authority id' };
+      return { success: workspaceSandbox.revoke(workspaceId) };
+    },
+
+    handleReadWorkspaceText: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateWorkspacePathRequest(request)) return { success: false, error: 'Invalid workspace text-read request' };
       try {
-        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.promises.writeFile(filePath, content, 'utf-8');
-        return { success: true };
-      } catch (err: any) {
-        return { success: false, error: err.message };
+        const result = await workspaceSandbox.readText(request.workspaceId, request.relativePath);
+        return { success: true, data: result.data, bytes: result.bytes };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
     },
 
-    handleListDirectory: async (_: any, dirPath: string) => {
-      if (!isPathSafe(dirPath)) {
-        return { success: false, error: 'Directory path rejected by Security Sandbox' };
-      }
+    handleListWorkspace: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateWorkspacePathRequest(request)) return { success: false, error: 'Invalid workspace directory-list request' };
       try {
-        const files = await fs.promises.readdir(dirPath);
-        return { success: true, files };
-      } catch (err: any) {
-        return { success: false, error: err.message };
+        const entries = await workspaceSandbox.listDirectory(request.workspaceId, request.relativePath);
+        return { success: true, entries };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
     },
+
+    revokeAllWorkspaceAuthority: () => workspaceSandbox.revokeAll(),
   };
 }

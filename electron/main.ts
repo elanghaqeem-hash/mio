@@ -1,14 +1,12 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron';
-import * as path from 'path';
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, Menu, nativeImage, Tray } from 'electron';
 import * as fs from 'fs';
+import * as path from 'path';
 import { IPC_CHANNELS } from './ipc/channels';
 import { setupIpcHandlers } from './ipc/handlers';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let isQuitting = false;
 
-// Enforce single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
@@ -31,91 +29,94 @@ function createWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 700,
     backgroundColor: '#07090e',
-    frame: false, // Custom titlebar rendered in React TopBar
+    frame: false,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false, // Allows local file:// ES module execution
+      webSecurity: true,
     },
   });
 
   mainWindow.show();
   mainWindow.focus();
 
-  // Log renderer console messages to userData/renderer.log for debugging
-  mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowedDevUrl = process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL);
+    const allowedFileUrl = url.startsWith('file://');
+    if (!allowedDevUrl && !allowedFileUrl) event.preventDefault();
+  });
+
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     const logMsg = `[Renderer Console] [Level ${level}]: ${message} (${sourceId}:${line})\n`;
     try {
       fs.appendFileSync(path.join(app.getPath('userData'), 'renderer.log'), logMsg);
-    } catch (e) {}
+    } catch {
+      // Diagnostic logging must never block the application lifecycle.
+    }
   });
 
   const handlers = setupIpcHandlers(mainWindow);
+  const assertTrustedSender = (event: IpcMainInvokeEvent) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+      throw new Error('Rejected IPC invocation from untrusted renderer frame');
+    }
+  };
+  const secureHandle = (
+    channel: string,
+    handler: (event: IpcMainInvokeEvent, args: unknown[]) => unknown | Promise<unknown>,
+  ) => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      assertTrustedSender(event);
+      return handler(event, args);
+    });
+  };
 
-  // Register IPC listeners
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, handlers.handleMinimize);
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, handlers.handleMaximize);
-  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, handlers.handleClose);
-  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, handlers.handleIsMaximized);
-
-  ipcMain.handle(IPC_CHANNELS.GET_SYSTEM_INFO, handlers.handleGetSystemInfo);
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, handlers.handleGetAppVersion);
-
-  ipcMain.handle(IPC_CHANNELS.SHOW_NOTIFICATION, handlers.handleShowNotification);
-  ipcMain.handle(IPC_CHANNELS.EMERGENCY_STOP, handlers.handleEmergencyStop);
-  ipcMain.handle(IPC_CHANNELS.QUIT_APP, () => {
-    isQuitting = true;
+  secureHandle(IPC_CHANNELS.WINDOW_MINIMIZE, () => handlers.handleMinimize());
+  secureHandle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => handlers.handleMaximize());
+  secureHandle(IPC_CHANNELS.WINDOW_CLOSE, () => handlers.handleClose());
+  secureHandle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, () => handlers.handleIsMaximized());
+  secureHandle(IPC_CHANNELS.GET_SYSTEM_INFO, () => handlers.handleGetSystemInfo());
+  secureHandle(IPC_CHANNELS.GET_APP_VERSION, () => handlers.handleGetAppVersion());
+  secureHandle(IPC_CHANNELS.SHOW_NOTIFICATION, (event, args) => handlers.handleShowNotification(event, args[0]));
+  secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => handlers.handleEmergencyStop(event, args[0]));
+  secureHandle(IPC_CHANNELS.QUIT_APP, () => {
+    handlers.revokeAllWorkspaceAuthority();
     app.quit();
   });
+  secureHandle(IPC_CHANNELS.FS_AUTHORIZE_WORKSPACE, () => handlers.handleAuthorizeWorkspace());
+  secureHandle(IPC_CHANNELS.FS_REVOKE_WORKSPACE, (event, args) => handlers.handleRevokeWorkspace(event, args[0]));
+  secureHandle(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, (event, args) => handlers.handleReadWorkspaceText(event, args[0]));
+  secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE, (event, args) => handlers.handleListWorkspace(event, args[0]));
 
-  ipcMain.handle(IPC_CHANNELS.FS_SELECT_DIRECTORY, handlers.handleSelectDirectory);
-  ipcMain.handle(IPC_CHANNELS.FS_READ_FILE, handlers.handleReadFile);
-  ipcMain.handle(IPC_CHANNELS.FS_WRITE_FILE, handlers.handleWriteFile);
-  ipcMain.handle(IPC_CHANNELS.FS_LIST_DIRECTORY, handlers.handleListDirectory);
-
-  // Robust Page Loading: Prefer dev server only if explicit VITE_DEV_SERVER_URL or accessible, otherwise load dist/index.html
   const distHtmlPath = path.join(__dirname, '../dist/index.html');
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(devUrl).catch(() => {
-      mainWindow?.loadFile(distHtmlPath);
-    });
+    mainWindow.loadURL(devUrl).catch(() => mainWindow?.loadFile(distHtmlPath));
   } else if (fs.existsSync(distHtmlPath)) {
     mainWindow.loadFile(distHtmlPath);
   } else {
-    mainWindow.loadURL(devUrl).catch(() => {
-      mainWindow?.loadFile(distHtmlPath);
-    });
+    mainWindow.loadURL(devUrl).catch(() => mainWindow?.loadFile(distHtmlPath));
   }
 
-  // Keyboard shortcut F12 to toggle DevTools
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12' && input.type === 'keyDown') {
+    if (isDev && input.key === 'F12' && input.type === 'keyDown') {
       mainWindow?.webContents.toggleDevTools();
       event.preventDefault();
     }
   });
 
-  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     console.error(`[Mio Window] Failed to load: ${errorCode} (${errorDescription})`);
-    if (fs.existsSync(distHtmlPath)) {
-      mainWindow?.loadFile(distHtmlPath);
-    }
-  });
-
-  // Hide instead of close if user configures background execution
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      // For standard desktop behavior, can hide or close
-      // Default to standard close unless minimized to tray
-    }
+    if (fs.existsSync(distHtmlPath)) mainWindow?.loadFile(distHtmlPath);
   });
 
   mainWindow.on('closed', () => {
+    handlers.revokeAllWorkspaceAuthority();
     mainWindow = null;
   });
 
@@ -123,7 +124,6 @@ function createWindow(): BrowserWindow {
 }
 
 function createTray() {
-  // Create 16x16 monochrome cyan tray icon representation
   const icon = nativeImage.createEmpty();
   tray = new Tray(icon);
   tray.setToolTip('Mio V2 — AI Operating Environment');
@@ -141,9 +141,7 @@ function createTray() {
     {
       label: 'STOP MIO (Emergency Interrupt)',
       click: () => {
-        if (mainWindow) {
-          mainWindow.webContents.send('mio:event:emergencyStop', 'Triggered from System Tray');
-        }
+        if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', 'Triggered from System Tray');
       },
     },
     { type: 'separator' },
@@ -168,10 +166,7 @@ function createTray() {
     { type: 'separator' },
     {
       label: 'Quit Mio completely',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
+      click: () => app.quit(),
     },
   ]);
 
@@ -189,14 +184,10 @@ app.whenReady().then(() => {
   createTray();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
