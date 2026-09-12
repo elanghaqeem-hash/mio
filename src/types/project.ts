@@ -7,7 +7,14 @@ export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
 export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
 export type KnowledgeSourcePriority = 'PRIMARY' | 'STANDARD' | 'LOW';
 export type KnowledgeConflictResolutionStatus = 'ACCEPTED_VARIANCE' | 'PREFER_SOURCE' | 'RESOLVED_BY_SUPERSESSION';
-export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED' | 'CORROBORATION_GROUP_CREATED' | 'CONFLICT_REVIEWED';
+export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED' | 'CORROBORATION_GROUP_CREATED' | 'CONFLICT_REVIEWED' | 'LINEAGE_UPDATED';
+
+export interface KnowledgeSourceLineage {
+  upstreamSourceKey?: string;
+  derivedFromAssetIds: string[];
+  note?: string;
+  reviewedAt: number;
+}
 
 export interface KnowledgeSourceGovernanceRecord {
   assetId: string;
@@ -18,6 +25,7 @@ export interface KnowledgeSourceGovernanceRecord {
   reviewNote?: string;
   freshUntil?: number;
   supersededByAssetId?: string;
+  lineage?: KnowledgeSourceLineage;
   updatedAt: number;
 }
 
@@ -49,6 +57,8 @@ export interface KnowledgeGovernanceEvent {
   freshUntil?: number;
   replacementAssetId?: string;
   conflictKey?: string;
+  upstreamSourceKey?: string;
+  derivedFromAssetIds?: string[];
   actor: 'USER' | 'SYSTEM';
 }
 
