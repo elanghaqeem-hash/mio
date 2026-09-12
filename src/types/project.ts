@@ -5,6 +5,7 @@ export type AssetOrigin = 'GENERATED' | 'VERIFIED' | 'USER-EDITED' | 'IMPORTED' 
 export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'document' | 'reference';
 export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
 export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
+export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED';
 
 export interface KnowledgeSourceGovernanceRecord {
   assetId: string;
@@ -17,8 +18,22 @@ export interface KnowledgeSourceGovernanceRecord {
   updatedAt: number;
 }
 
+export interface KnowledgeGovernanceEvent {
+  id: string;
+  assetId: string;
+  action: KnowledgeGovernanceAction;
+  timestamp: number;
+  trust?: KnowledgeSourceTrust;
+  included?: boolean;
+  note?: string;
+  freshUntil?: number;
+  replacementAssetId?: string;
+  actor: 'USER' | 'SYSTEM';
+}
+
 export interface KnowledgeGovernanceState {
   sources: Record<string, KnowledgeSourceGovernanceRecord>;
+  history: KnowledgeGovernanceEvent[];
   updatedAt: number;
 }
 
