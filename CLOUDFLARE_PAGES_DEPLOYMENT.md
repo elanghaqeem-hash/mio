@@ -14,14 +14,15 @@ In Cloudflare Dashboard:
 1. Open **Workers & Pages**.
 2. Create a **Pages** application and choose **Connect to Git**.
 3. Select repository `elanghaqeem-hash/mio`.
-4. For trial deployment, select production branch `audit/security-hardening-2026-09-12`. After review/merge, switch production to `main`.
-5. Framework preset: **Vite**.
-6. Build command: `npm run build`.
-7. Build output directory: `dist`.
-8. Root directory: repository root.
-9. Recommended build variable: `NODE_VERSION=22`.
+4. Use Pages project name **`mio-v2`** so it matches the checked-in `wrangler.toml` source of truth.
+5. For trial deployment, select production branch `audit/security-hardening-2026-09-12`. After review/merge, switch production to `main`.
+6. Framework preset: **Vite**.
+7. Build command: `npm run build`.
+8. Build output directory: `dist`.
+9. Root directory: repository root.
+10. Recommended build variable: `NODE_VERSION=22`.
 
-The checked-in `wrangler.toml` declares `pages_build_output_dir = "./dist"`. Pages Functions under `/functions` are deployed with the site. `public/_routes.json` limits Functions invocation to `/api/*`, leaving static application/assets on the normal Pages path.
+The checked-in `wrangler.toml` declares project name `mio-v2`, `pages_build_output_dir = "./dist"`, and the compatibility date. Because a Pages Wrangler file is present, keep the dashboard configuration aligned with it. Pages Functions under `/functions` are deployed with the site. `public/_routes.json` limits Functions invocation to `/api/*`, leaving static application/assets on the normal Pages path.
 
 ## 2. Zero-secret trial mode
 
@@ -39,27 +40,29 @@ Add this as an encrypted Cloudflare secret:
 
 - `BRAVE_SEARCH_API_KEY`
 
+Cloudflare UI path: **Workers & Pages → mio-v2 → Settings → Variables and Secrets → Add → Encrypt → Save**.
+
 When present, `/api/research` automatically uses Brave Search for general web coverage. If it is absent, the endpoint transparently uses Wikipedia Indonesia + Crossref.
 
 The browser never receives the Brave key. `/api/research` is an allowlisted server-side connector and is not an arbitrary URL proxy. Retrieved snippets remain `UNKNOWN / UNVERIFIED` evidence until corroborated; search retrieval alone is not labelled factual verification.
 
 ## 4. Optional cloud AI providers
 
-For every provider, configure both the secret key and model variable in Cloudflare Pages project settings.
+For every provider, configure both the secret key and model variable under **Settings → Variables and Secrets**. Encrypt API keys; model identifiers may be normal variables.
 
 ### OpenAI
 
-- Secret: `OPENAI_API_KEY`
+- Encrypted secret: `OPENAI_API_KEY`
 - Variable: `OPENAI_MODEL`
 
 ### Anthropic
 
-- Secret: `ANTHROPIC_API_KEY`
+- Encrypted secret: `ANTHROPIC_API_KEY`
 - Variable: `ANTHROPIC_MODEL`
 
 ### Google Gemini
 
-- Secret: `GEMINI_API_KEY`
+- Encrypted secret: `GEMINI_API_KEY`
 - Variable: `GEMINI_MODEL`
 
 Do **not** prefix these with `VITE_`. These values are for Pages Functions only and must not be bundled into browser JavaScript.
@@ -141,7 +144,7 @@ After Cloudflare reports the deployment successful:
 Once the Cloudflare Pages URL is known, desktop MIO can use the same research backend:
 
 1. Open Desktop MIO → Settings → Research Live Search.
-2. Enter the HTTPS Pages base URL, for example `https://mio.pages.dev`.
+2. Enter the HTTPS Pages base URL, for example `https://mio-v2.pages.dev`.
 3. Save and switch MIO to ONLINE mode.
 
 This keeps the desktop renderer from becoming an unrestricted search/API proxy while allowing both runtimes to share the hardened Research Function.
