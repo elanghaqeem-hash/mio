@@ -18,9 +18,11 @@ export const IPC_CHANNELS = {
 
   // Controlled File Sandbox (Strict L0-L5)
   FS_SELECT_DIRECTORY: 'mio:fs:selectDirectory',
+  FS_GET_WORKSPACE: 'mio:fs:getWorkspace',
   FS_READ_FILE: 'mio:fs:readFile',
   FS_WRITE_FILE: 'mio:fs:writeFile',
   FS_LIST_DIRECTORY: 'mio:fs:listDirectory',
+  FS_MOVE_FILE: 'mio:fs:moveFile',
 } as const;
 
 export type IpcChannelKey = keyof typeof IPC_CHANNELS;
