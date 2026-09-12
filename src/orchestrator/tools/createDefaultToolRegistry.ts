@@ -13,6 +13,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     riskLevel: 'LOW',
     permissionLevel: 'L1_SUGGEST',
     timeoutMs: 2000,
+    networkAccess: false,
     validateInput: (input: unknown): input is Record<string, never> => typeof input === 'object' && input !== null,
     execute: async () => {
       const project = ProjectManager.getProject();
@@ -34,6 +35,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     riskLevel: 'HIGH',
     permissionLevel: 'L4_EXECUTE',
     timeoutMs: 20000,
+    networkAccess: true,
     validateInput: (input: unknown): input is { query: string } => {
       if (!input || typeof input !== 'object') return false;
       const query = (input as { query?: unknown }).query;

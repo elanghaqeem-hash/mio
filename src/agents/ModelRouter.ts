@@ -4,6 +4,7 @@ import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
 import { taskRuntime } from '../orchestrator/TaskRuntime';
 import { PermissionEngine } from '../security/PermissionEngine';
+import { resourceGovernor } from '../security/ResourceGovernor';
 import { NetworkState } from '../types/core';
 import { ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig } from '../types/models';
 
@@ -25,15 +26,31 @@ export class ModelRouter {
   public static async generate(request: ModelRequest, timeoutMs: number = 30000): Promise<ModelResponse> {
     const provider = this.createProvider();
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
+    const mode = taskId ? taskRuntime.get(taskId)?.mode : undefined;
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
 
+    if (taskId) {
+      const modelPreflight = resourceGovernor.authorize(taskId, 'MODEL_CALL', mode);
+      if (!modelPreflight.allowed) throw new Error(modelPreflight.reason ?? 'Resource budget blocked model execution');
+    }
+
     if (provider.requiresNetwork && this.networkState !== 'ONLINE') {
       if (!this.config.allowOfflineFallback) throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
+      if (taskId) {
+        const localDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
+        if (!localDecision.allowed) throw new Error(localDecision.reason ?? 'Resource budget blocked local model fallback');
+      }
       return this.executeProvider(new LocalHeuristicProvider(), request, timeoutMs);
     }
 
-    if (provider.requiresNetwork || provider.requiresProxy) {
+    const remoteAccess = provider.requiresNetwork || provider.requiresProxy;
+    if (taskId && remoteAccess) {
+      const networkPreflight = resourceGovernor.authorize(taskId, 'NETWORK_CALL', mode);
+      if (!networkPreflight.allowed) throw new Error(networkPreflight.reason ?? 'Resource budget blocked remote model access');
+    }
+
+    if (remoteAccess) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       if (taskId) taskRuntime.waitForPermission(taskId);
       const approved = await PermissionEngine.requestPermission({
@@ -49,6 +66,10 @@ export class ModelRouter {
     }
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
+    if (taskId) {
+      const resourceDecision = resourceGovernor.consumeModelCall(taskId, remoteAccess, mode);
+      if (!resourceDecision.allowed) throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
+    }
 
     try {
       return await this.executeProvider(provider, request, timeoutMs);
@@ -60,6 +81,10 @@ export class ModelRouter {
         message: `Model provider ${provider.id} unavailable; using explicit offline fallback`,
         mode: 'CHAT',
       });
+      if (taskId) {
+        const fallbackDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
+        if (!fallbackDecision.allowed) throw new Error(fallbackDecision.reason ?? 'Resource budget blocked local model fallback');
+      }
       return this.executeProvider(new LocalHeuristicProvider(), request, Math.min(timeoutMs, 5000));
     }
   }

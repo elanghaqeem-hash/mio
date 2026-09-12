@@ -1,5 +1,6 @@
 import { eventBus } from '../../core/EventBus';
 import { taskRuntime } from '../TaskRuntime';
+import { resourceGovernor } from '../../security/ResourceGovernor';
 import { PermissionEngine } from '../../security/PermissionEngine';
 import { PolicyEngine } from '../../security/PolicyEngine';
 import { RiskAnalyzer } from '../../security/RiskAnalyzer';
@@ -46,6 +47,19 @@ export class ToolRouter {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
+    const preflight = resourceGovernor.authorize(context.taskId, 'TOOL_CALL', context.mode);
+    if (!preflight.allowed) {
+      this.audit('blocked', 'TOOL_EXECUTION', tool.id, preflight.reason ?? 'Resource budget blocked tool execution', true);
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: preflight.reason ?? 'Resource budget blocked tool execution', validation: 'FAILED' };
+    }
+    if (tool.networkAccess) {
+      const networkPreflight = resourceGovernor.authorize(context.taskId, 'NETWORK_CALL', context.mode);
+      if (!networkPreflight.allowed) {
+        this.audit('blocked', 'TOOL_EXECUTION', tool.id, networkPreflight.reason ?? 'Resource budget blocked network access', true);
+        return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: networkPreflight.reason ?? 'Resource budget blocked network access', validation: 'FAILED' };
+      }
+    }
+
     const permissionGated = tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE';
     if (permissionGated) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
@@ -69,6 +83,13 @@ export class ToolRouter {
 
     if (taskRuntime.isCancelled(context.taskId)) {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
+    }
+
+    const resourceDecision = resourceGovernor.consumeToolCall(context.taskId, tool.networkAccess === true, context.mode);
+    if (!resourceDecision.allowed) {
+      this.audit('blocked', 'TOOL_EXECUTION', tool.id, resourceDecision.reason ?? 'Resource budget blocked tool execution', true);
+      eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: resourceDecision.reason ?? 'Resource budget blocked tool execution', validation: 'FAILED' };
     }
 
     taskRuntime.start(context.taskId);

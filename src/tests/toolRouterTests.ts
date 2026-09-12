@@ -67,24 +67,24 @@ export async function runToolRouterTests(): Promise<{ passed: number; total: num
   });
 
   const router = new ToolRouter(registry);
-  const context = { taskId: 'task_test', mode: 'CHAT' as const, requestedBy: 'AGENT' as const };
+  const context = (suffix: string) => ({ taskId: `task_test_${suffix}`, mode: 'CHAT' as const, requestedBy: 'AGENT' as const });
 
-  const success = await router.execute<{ echoed: string }>('test.echo', { text: 'hello' }, context);
+  const success = await router.execute<{ echoed: string }>('test.echo', { text: 'hello' }, context('success'));
   assert(success.success && success.data?.echoed === 'hello', 'ToolRouter executes registered low-risk tool through permission and sandbox gates');
 
-  const unknown = await router.execute('test.missing', {}, context);
+  const unknown = await router.execute('test.missing', {}, context('unknown'));
   assert(!unknown.success && unknown.error?.includes('not registered') === true, 'ToolRouter rejects unknown/unregistered tool identifiers');
 
-  const invalidInput = await router.execute('test.echo', { nope: true }, context);
+  const invalidInput = await router.execute('test.echo', { nope: true }, context('invalid-input'));
   assert(!invalidInput.success && invalidInput.validation === 'FAILED', 'ToolRouter rejects invalid tool input before execution');
 
-  const insufficient = await router.execute('test.underprivileged', {}, context);
+  const insufficient = await router.execute('test.underprivileged', {}, context('underprivileged'));
   assert(!insufficient.success && insufficient.error?.includes('insufficient') === true, 'RiskAnalyzer blocks tools whose permission declaration is below risk requirement');
 
-  const badOutput = await router.execute('test.bad-output', {}, context);
+  const badOutput = await router.execute('test.bad-output', {}, context('bad-output'));
   assert(!badOutput.success && badOutput.error?.includes('output validation') === true, 'ToolRouter blocks invalid tool output');
 
-  const timeout = await router.execute('test.timeout', {}, context);
+  const timeout = await router.execute('test.timeout', {}, context('timeout'));
   assert(!timeout.success && timeout.error?.includes('timed out') === true, 'Sandbox timeout stops overlong tool execution');
 
   return { passed, total };

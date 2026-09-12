@@ -28,6 +28,7 @@ export interface MioTool<I = unknown, O = unknown> {
   riskLevel: ToolRiskLevel;
   permissionLevel: PermissionLevel;
   timeoutMs: number;
+  networkAccess?: boolean;
   validateInput: (input: unknown) => input is I;
   execute: (input: I, context: ToolExecutionContext) => Promise<O>;
   validateOutput?: (output: O) => boolean;
