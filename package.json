@@ -5,15 +5,20 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:web",
+    "build:web": "tsc -b && vite build --mode web",
+    "build:desktop-renderer": "tsc -b && vite build --mode electron",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "build:all": "npm run build && npm run build:electron",
+    "build:all": "npm run build:desktop-renderer && npm run build:electron",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
     "pack:win": "npm run build:all && electron-builder --win --dir",
     "dist:win": "npm run build:all && electron-builder --win",
     "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite();\"",
     "lint": "oxlint",
     "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=22.16.0"
   },
   "dependencies": {
     "@types/three": "^0.186.0",
