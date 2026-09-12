@@ -1,125 +1,249 @@
-import React, { useState } from 'react';
-import { Folder, File, Copy, Trash2, RotateCcw, ShieldCheck, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
-import { PermissionEngine } from '../../security/PermissionEngine';
-import { eventBus } from '../../core/EventBus';
+import React, { useCallback, useMemo, useState } from 'react';
+import { AlertTriangle, BookOpen, ChevronLeft, FileText, Folder, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
+import { ProjectManager } from '../../project/ProjectManager';
+import {
+  authorizeDesktopWorkspace,
+  createDesktopWorkspaceGateway,
+  getDesktopWorkspaceBridge,
+  revokeDesktopWorkspace,
+  type DesktopWorkspaceDescriptor,
+  type DesktopWorkspaceEntry,
+} from '../../platform/desktop/DesktopWorkspaceGateway';
+import { KnowledgeIngestionService } from '../../services/KnowledgeIngestionService';
 
-interface ManagedFile {
-  id: string;
-  name: string;
-  category: '3D' | 'ANIMATION' | 'GRAPHIC' | 'AUDIO' | 'DOCUMENT';
-  sizeKb: number;
-  duplicateOf?: string;
-  suggestedPath: string;
+interface PreviewState {
+  path: string;
+  text: string;
+  bytes: number;
+  suspicious?: boolean;
+  memoryStatus?: string;
 }
 
+let requestSequence = 0;
+const createRequestTaskId = (prefix: string) => {
+  requestSequence += 1;
+  return `${prefix}_${requestSequence}`;
+};
+const normalizeChildPath = (parent: string, child: string) => parent === '.' ? child : `${parent}/${child}`;
+const parentPath = (current: string) => {
+  if (current === '.') return '.';
+  const segments = current.split('/').filter(Boolean);
+  segments.pop();
+  return segments.length ? segments.join('/') : '.';
+};
+
 export const FileOrganizationView: React.FC = () => {
-  const [files, setFiles] = useState<ManagedFile[]>([
-    { id: 'f1', name: 'vanguard_mesh_backup_v1.obj', category: '3D', sizeKb: 2450, duplicateOf: 'vanguard_mesh_final.obj', suggestedPath: 'PROJECT/ARCHIVE/vanguard_mesh_backup_v1.obj' },
-    { id: 'f2', name: 'thruster_laser_raw.wav', category: 'AUDIO', sizeKb: 1240, suggestedPath: 'PROJECT/SFX/thruster_laser_raw.wav' },
-    { id: 'f3', name: 'briefing_poster_draft.png', category: 'GRAPHIC', sizeKb: 3100, suggestedPath: 'PROJECT/GRAPHIC/briefing_poster_draft.png' },
-    { id: 'f4', name: 'notes_temp.txt', category: 'DOCUMENT', sizeKb: 14, suggestedPath: 'PROJECT/DOCS/notes_temp.txt' },
-  ]);
+  const bridge = useMemo(() => getDesktopWorkspaceBridge(), []);
+  const gateway = useMemo(() => bridge ? createDesktopWorkspaceGateway(bridge) : undefined, [bridge]);
+  const [workspace, setWorkspace] = useState<DesktopWorkspaceDescriptor | null>(null);
+  const [currentPath, setCurrentPath] = useState('.');
+  const [entries, setEntries] = useState<DesktopWorkspaceEntry[]>([]);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [status, setStatus] = useState(bridge ? 'No workspace authorized.' : 'Desktop workspace bridge unavailable in this runtime.');
+  const [busy, setBusy] = useState(false);
 
-  const [transactionLog, setTransactionLog] = useState<string[]>([
-    'Directory indexed: 4 project files within sandbox',
-  ]);
+  const executeList = useCallback(async (authorizedWorkspace: DesktopWorkspaceDescriptor, relativePath: string) => {
+    if (!gateway) return;
+    setBusy(true);
+    try {
+      const project = ProjectManager.getProject();
+      const result = await gateway.execute<{ entries: DesktopWorkspaceEntry[] }>(
+        'service.desktop.workspace.list',
+        { workspaceId: authorizedWorkspace.id, relativePath },
+        {
+          taskId: createRequestTaskId('files_list'),
+          projectId: project.id,
+          mode: 'FILES',
+          requestedBy: 'USER',
+          resourceId: authorizedWorkspace.id,
+          path: relativePath,
+        },
+      );
+      if (!result.success || !result.data) throw new Error(result.error ?? 'Workspace listing failed');
+      setEntries(result.data.entries);
+      setCurrentPath(relativePath);
+      setPreview(null);
+      setStatus(`Read-only directory loaded: ${relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [gateway]);
 
-  const handleOrganize = async () => {
-    const authorized = await PermissionEngine.requestPermission({
-      action: 'BATCH_FILE_REORGANIZATION',
-      target: 'PROJECT/ directory structure',
-      level: 'L3_MODIFY',
-      changes: files.map((f) => `Move "${f.name}" to "${f.suggestedPath}"`),
-      risks: ['Moves 4 files to categorized subdirectories'],
-      expectedResult: 'Clean semantic hierarchy established',
-    });
-
-    if (authorized) {
-      setTransactionLog((prev) => [
-        `Executed reorganization: 4 files organized into semantic folders`,
-        ...prev,
-      ]);
-      eventBus.emit('ACTIVITY_LOG', {
-        timestamp: Date.now(),
-        message: 'Organized workspace files into structured project sandbox directories',
-        mode: 'FILES',
-      });
+  const handleAuthorize = async () => {
+    if (!bridge || !gateway) return;
+    setBusy(true);
+    try {
+      const authorized = await authorizeDesktopWorkspace(bridge);
+      if (!authorized) {
+        setStatus('Workspace selection cancelled.');
+        return;
+      }
+      setWorkspace(authorized);
+      await executeList(authorized, '.');
+      setStatus(`Workspace authorized for this session: ${authorized.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleRollback = () => {
-    setTransactionLog((prev) => ['Rollback executed: Restored original directory layout', ...prev]);
+  const handleRevoke = async () => {
+    if (!workspace || !bridge) return;
+    try {
+      await revokeDesktopWorkspace(workspace.id, bridge);
+    } finally {
+      setWorkspace(null);
+      setEntries([]);
+      setPreview(null);
+      setCurrentPath('.');
+      setStatus('Workspace authority revoked. Re-authorization is required before further access.');
+    }
   };
 
+  const handleEntry = async (entry: DesktopWorkspaceEntry) => {
+    if (!workspace || !gateway) return;
+    const relativePath = normalizeChildPath(currentPath, entry.name);
+    if (entry.type === 'DIRECTORY') {
+      await executeList(workspace, relativePath);
+      return;
+    }
+    if (entry.type !== 'FILE') {
+      setStatus('Symlinks and non-file entries are not opened by the read-only browser.');
+      return;
+    }
+    if (!KnowledgeIngestionService.isSupportedTextPath(relativePath)) {
+      setPreview(null);
+      setStatus('Preview is limited to explicitly supported text formats. Binary/office/media files are not parsed in this milestone.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const project = ProjectManager.getProject();
+      const result = await gateway.execute<{ text: string; bytes: number }>(
+        'service.desktop.workspace.read-text',
+        { workspaceId: workspace.id, relativePath },
+        {
+          taskId: createRequestTaskId('files_read'),
+          projectId: project.id,
+          mode: 'FILES',
+          requestedBy: 'USER',
+          resourceId: workspace.id,
+          path: relativePath,
+        },
+      );
+      if (!result.success || !result.data) throw new Error(result.error ?? 'File preview failed');
+      setPreview({ path: relativePath, text: result.data.text, bytes: result.data.bytes });
+      setStatus(`Read-only preview loaded: ${relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleIngest = () => {
+    if (!workspace || !preview) return;
+    try {
+      const result = KnowledgeIngestionService.ingestDocument({
+        workspaceId: workspace.id,
+        relativePath: preview.path,
+        content: preview.text,
+        bytes: preview.bytes,
+      });
+      setPreview((current) => current ? {
+        ...current,
+        suspicious: result.suspicious,
+        memoryStatus: result.memory.status,
+      } : current);
+      setStatus(result.memory.status === 'REVIEW_REQUIRED'
+        ? 'Added to project context as quarantined document. Long-term memory remains pending explicit review.'
+        : `Project context ingestion completed; memory status: ${result.memory.status}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  if (!bridge) {
+    return (
+      <div className="h-full w-full bg-[#07090e] p-6 font-mono text-xs text-gray-300">
+        <div className="max-w-3xl rounded-2xl border border-gray-800 bg-[#0d121d] p-6">
+          <div className="mb-3 flex items-center gap-2 text-cyan-300"><Unplug size={18} /><span className="font-bold">DESKTOP WORKSPACE BRIDGE UNAVAILABLE</span></div>
+          <p className="leading-6 text-gray-400">This web runtime does not expose native filesystem authority. No desktop access is simulated. Use the Electron desktop runtime to authorize a local workspace.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden p-4">
-      <div className="flex items-center justify-between mb-4 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
-        <div className="flex items-center gap-2 text-cyan-300">
-          <Folder size={16} />
-          <span className="font-bold text-sm">FILE ORGANIZATION WORKSPACE // SANDBOX MANAGEMENT</span>
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[#07090e] p-4 font-mono text-xs text-gray-300">
+      <div className="mb-4 flex items-center justify-between rounded-xl border border-gray-800 bg-[#0d121d] p-3">
+        <div>
+          <div className="flex items-center gap-2 text-cyan-300"><FolderOpen size={16} /><span className="font-bold text-sm">PROJECT WORKSPACE // READ-ONLY FILE BROWSER</span></div>
+          <div className="mt-1 text-[10px] text-gray-500">Explicit workspace authority · bounded reads · no write/delete/move operations</div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRollback}
-            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1.5 cursor-pointer"
-          >
-            <RotateCcw size={13} /> Rollback
-          </button>
-          <button
-            onClick={handleOrganize}
-            className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded flex items-center gap-1.5 cursor-pointer shadow-md shadow-cyan-500/20"
-          >
-            <CheckCircle2 size={14} /> Execute Organization
-          </button>
+        <div className="flex gap-2">
+          {workspace ? (
+            <button onClick={handleRevoke} className="flex items-center gap-1.5 rounded bg-gray-800 px-3 py-1.5 text-gray-300 hover:bg-gray-700"><LockKeyhole size={13} /> Revoke</button>
+          ) : (
+            <button disabled={busy} onClick={handleAuthorize} className="flex items-center gap-1.5 rounded bg-cyan-500 px-4 py-1.5 font-bold text-black hover:bg-cyan-400 disabled:opacity-50"><ShieldCheck size={14} /> Authorize Workspace</button>
+          )}
         </div>
       </div>
 
-      {/* File Classification Table */}
-      <div className="flex-1 bg-[#0d121d] rounded-xl border border-gray-800 overflow-hidden flex flex-col mb-4">
-        <div className="grid grid-cols-12 bg-[#111726] p-3 border-b border-gray-800 font-bold text-gray-400">
-          <div className="col-span-4">FILE NAME</div>
-          <div className="col-span-2">TYPE</div>
-          <div className="col-span-2">SIZE</div>
-          <div className="col-span-4">SUGGESTED PATH</div>
+      <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
+        <div className="col-span-7 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
+          <div className="flex items-center justify-between border-b border-gray-800 bg-[#111726] p-3">
+            <div className="flex items-center gap-2">
+              <Folder size={14} className="text-cyan-400" />
+              <span className="text-gray-300">{workspace ? `${workspace.name} / ${currentPath}` : 'No authorized workspace'}</span>
+            </div>
+            <div className="flex gap-2">
+              <button disabled={!workspace || currentPath === '.' || busy} onClick={() => workspace && executeList(workspace, parentPath(currentPath))} className="rounded bg-gray-800 p-1.5 disabled:opacity-30"><ChevronLeft size={13} /></button>
+              <button disabled={!workspace || busy} onClick={() => workspace && executeList(workspace, currentPath)} className="rounded bg-gray-800 p-1.5 disabled:opacity-30"><RefreshCw size={13} /></button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {!workspace && <div className="p-6 text-gray-500">Authorize a folder using the native desktop picker. The absolute root remains inside Electron main-process authority.</div>}
+            {workspace && entries.length === 0 && !busy && <div className="p-6 text-gray-500">No entries in this directory.</div>}
+            {entries.map((entry) => (
+              <button key={`${currentPath}/${entry.name}`} onClick={() => void handleEntry(entry)} className="grid w-full grid-cols-12 items-center border-b border-gray-800/60 p-3 text-left hover:bg-gray-800/30">
+                <div className="col-span-8 flex items-center gap-2 truncate">
+                  {entry.type === 'DIRECTORY' ? <Folder size={14} className="text-cyan-400" /> : <FileText size={14} className="text-gray-400" />}
+                  <span className="truncate">{entry.name}</span>
+                </div>
+                <div className="col-span-4 text-right text-[10px] text-gray-500">{entry.type}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className="grid grid-cols-12 p-3 border-b border-gray-800/60 hover:bg-gray-800/20 items-center text-gray-300"
-            >
-              <div className="col-span-4 flex items-center gap-2 truncate">
-                <File size={14} className="text-cyan-400" />
-                <span className="truncate">{file.name}</span>
-                {file.duplicateOf && (
-                  <span className="text-[10px] text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
-                    <Copy size={10} /> Duplicate
-                  </span>
-                )}
+        <div className="col-span-5 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
+          <div className="border-b border-gray-800 bg-[#111726] p-3 font-bold text-gray-400">READ-ONLY PREVIEW / QUARANTINE</div>
+          {preview ? (
+            <>
+              <div className="border-b border-gray-800 p-3">
+                <div className="truncate text-cyan-300">{preview.path}</div>
+                <div className="mt-1 text-[10px] text-gray-500">{preview.bytes} bytes · untrusted document content</div>
               </div>
-              <div className="col-span-2 text-cyan-300 font-bold">{file.category}</div>
-              <div className="col-span-2 text-gray-400">{file.sizeKb} KB</div>
-              <div className="col-span-4 text-emerald-400 truncate flex items-center gap-1">
-                <ArrowRight size={12} /> {file.suggestedPath}
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 text-[11px] leading-5 text-gray-300">{preview.text}</pre>
+              <div className="border-t border-gray-800 p-3">
+                {preview.suspicious && <div className="mb-2 flex items-center gap-1.5 text-amber-400"><AlertTriangle size={13} /> Suspicious instruction-like content detected and quarantined.</div>}
+                <button onClick={handleIngest} className="flex w-full items-center justify-center gap-2 rounded bg-cyan-500 px-3 py-2 font-bold text-black hover:bg-cyan-400"><BookOpen size={14} /> Add to Project Context</button>
+                <div className="mt-2 text-[10px] leading-4 text-gray-500">Content is sanitized and stored as an unverified imported project document. Any long-term memory promotion remains review-gated.</div>
               </div>
-            </div>
-          ))}
+            </>
+          ) : (
+            <div className="p-6 text-gray-500">Select a supported text file to preview it. Unsupported binary, Office, PDF, image, audio, and video files are not falsely parsed.</div>
+          )}
         </div>
       </div>
 
-      {/* Transaction Log */}
-      <div className="h-36 bg-[#0a0e17] rounded-xl border border-gray-800 p-3 overflow-y-auto">
-        <span className="text-gray-400 font-bold block mb-2 text-[11px]">TRANSACTION AUDIT LOG</span>
-        <div className="space-y-1 text-[10px] text-gray-400">
-          {transactionLog.map((log, i) => (
-            <div key={i} className="flex items-center gap-1.5">
-              <span className="text-cyan-500">[{new Date().toLocaleTimeString()}]</span>
-              <span>{log}</span>
-            </div>
-          ))}
-        </div>
+      <div className="mt-4 rounded-xl border border-gray-800 bg-[#0a0e17] px-3 py-2 text-[10px] text-gray-400">
+        <span className="mr-2 text-cyan-500">STATUS</span>{busy ? 'Processing bounded workspace request…' : status}
       </div>
     </div>
   );
