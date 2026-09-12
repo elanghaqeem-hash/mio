@@ -8,7 +8,6 @@ import { ContextPanel } from './components/layout/ContextPanel';
 import { PermissionModal } from './security/PermissionModal';
 import { FirstRunWizard } from './components/wizard/FirstRunWizard';
 
-// Studios
 import { ChatStudioView } from './modes/chat/ChatStudioView';
 import { Studio3DView } from './modes/studio3d/Studio3DView';
 import { AnimationStudioView } from './modes/animation/AnimationStudioView';
@@ -22,92 +21,58 @@ import { SecurityDashboardView } from './modes/security/SecurityDashboardView';
 import { ProjectOverviewView } from './modes/project/ProjectOverviewView';
 import { SettingsView } from './modes/settings/SettingsView';
 
+const validModes: MioSystemMode[] = ['CHAT','RESEARCH','FILES','MOTION','3D','ANIMATION','GRAPHIC','SFX','MUSIC','PROJECT','SECURITY','SETTINGS'];
+
 export const App: React.FC = () => {
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [activeMode, setActiveMode] = useState<MioSystemMode>('CHAT');
   const [dryRunRequest, setDryRunRequest] = useState<DryRunRequest | null>(null);
-  const [showWizard, setShowWizard] = useState<boolean>(() => {
-    return localStorage.getItem('mio_v2_setup_completed') !== 'true';
-  });
+  const [showWizard, setShowWizard] = useState<boolean>(() => localStorage.getItem('mio_v2_setup_completed') !== 'true');
 
   useEffect(() => {
     const unsubState = eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state));
     const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => setActiveMode(mode));
-    const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => {
-      setDryRunRequest(req);
+    const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => setDryRunRequest(req));
+    const unsubDesktopNav = window.mioDesktop?.onNavigate((mode) => {
+      if (validModes.includes(mode as MioSystemMode)) setActiveMode(mode as MioSystemMode);
     });
 
     return () => {
       unsubState();
       unsubMode();
       unsubPerm();
+      unsubDesktopNav?.();
     };
   }, []);
 
   const renderActiveWorkspace = () => {
     switch (activeMode) {
-      case 'CHAT':
-        return <ChatStudioView />;
-      case '3D':
-        return <Studio3DView />;
-      case 'ANIMATION':
-        return <AnimationStudioView />;
-      case 'GRAPHIC':
-        return <GraphicStudioView />;
-      case 'SFX':
-        return <SFXStudioView />;
-      case 'MUSIC':
-        return <MusicStudioView />;
-      case 'RESEARCH':
-        return <ResearchStudioView />;
-      case 'FILES':
-        return <FileOrganizationView />;
-      case 'MOTION':
-        return <MotionTrackingView />;
-      case 'SECURITY':
-        return <SecurityDashboardView />;
-      case 'PROJECT':
-        return <ProjectOverviewView />;
-      case 'SETTINGS':
-        return <SettingsView />;
-      default:
-        return <ChatStudioView />;
+      case 'CHAT': return <ChatStudioView />;
+      case '3D': return <Studio3DView />;
+      case 'ANIMATION': return <AnimationStudioView />;
+      case 'GRAPHIC': return <GraphicStudioView />;
+      case 'SFX': return <SFXStudioView />;
+      case 'MUSIC': return <MusicStudioView />;
+      case 'RESEARCH': return <ResearchStudioView />;
+      case 'FILES': return <FileOrganizationView />;
+      case 'MOTION': return <MotionTrackingView />;
+      case 'SECURITY': return <SecurityDashboardView />;
+      case 'PROJECT': return <ProjectOverviewView />;
+      case 'SETTINGS': return <SettingsView />;
+      default: return <ChatStudioView />;
     }
   };
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-200 overflow-hidden font-sans select-none">
-      {/* Top Header Bar */}
-      <TopBar
-        coreState={coreState}
-        activeMode={activeMode}
-        onOpenSecurity={() => setActiveMode('SECURITY')}
-      />
-
-      {/* Main Multi-Mode Workspace Layout */}
+      <TopBar coreState={coreState} activeMode={activeMode} onOpenSecurity={() => setActiveMode('SECURITY')} />
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Navigation Panel */}
         <ModeNavigation activeMode={activeMode} onSelectMode={setActiveMode} />
-
-        {/* Central Workspace */}
-        <main className="flex-1 h-full overflow-hidden relative flex flex-col">
-          {renderActiveWorkspace()}
-        </main>
-
-        {/* Right Context & Telemetry Panel */}
+        <main className="flex-1 h-full overflow-hidden relative flex flex-col">{renderActiveWorkspace()}</main>
         <ContextPanel />
       </div>
-
-      {/* Security Dry-Run / Permission Modal */}
-      <PermissionModal
-        request={dryRunRequest}
-        onClose={() => setDryRunRequest(null)}
-      />
-
-      {/* First-Run Desktop Setup Wizard */}
-      {showWizard && (
-        <FirstRunWizard onComplete={() => setShowWizard(false)} />
-      )}
+      <PermissionModal request={dryRunRequest} onClose={() => setDryRunRequest(null)} />
+      {showWizard && <FirstRunWizard onComplete={() => setShowWizard(false)} />}
     </div>
   );
 };
