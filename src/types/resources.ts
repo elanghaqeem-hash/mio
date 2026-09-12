@@ -1,3 +1,5 @@
+import type { MioSystemMode } from './core';
+
 export interface TaskResourceBudget {
   maxDurationMs: number;
   maxToolCalls: number;
@@ -15,6 +17,7 @@ export interface TaskResourceUsage {
 
 export interface TaskResourceState {
   taskId: string;
+  mode?: MioSystemMode;
   budget: TaskResourceBudget;
   usage: TaskResourceUsage;
   exhausted: boolean;
@@ -22,10 +25,30 @@ export interface TaskResourceState {
 }
 
 export type ResourceOperation = 'SCHEDULER_DISPATCH' | 'TOOL_CALL' | 'MODEL_CALL' | 'NETWORK_CALL';
+export type ResourceDecision = 'ALLOW' | 'BLOCK';
 
 export interface ResourceUsageEvent {
   taskId: string;
   operation: ResourceOperation;
+  decision: ResourceDecision;
   timestamp: number;
+  reason?: string;
   state: TaskResourceState;
+}
+
+export type ExecutionLedgerCategory = 'TASK' | 'RESOURCE' | 'SCHEDULER' | 'SECURITY';
+
+export interface ExecutionLedgerEntry {
+  id: string;
+  timestamp: number;
+  taskId?: string;
+  category: ExecutionLedgerCategory;
+  action: string;
+  outcome: 'INFO' | 'ALLOWED' | 'BLOCKED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  details?: string;
+}
+
+export interface ExecutionLedgerSnapshot {
+  entries: ExecutionLedgerEntry[];
+  updatedAt: number;
 }
