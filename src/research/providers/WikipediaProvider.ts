@@ -9,7 +9,7 @@ export class WikipediaProvider implements SearchProvider {
   public readonly id = 'wikipedia';
   public readonly displayName = 'Wikipedia';
 
-  public async search(plan: ResearchQueryPlan): Promise<RawResearchResult[]> {
+  public async search(plan: ResearchQueryPlan, signal?: AbortSignal): Promise<RawResearchResult[]> {
     const endpoint = new URL('https://en.wikipedia.org/w/api.php');
     endpoint.searchParams.set('action', 'query');
     endpoint.searchParams.set('list', 'search');
@@ -18,7 +18,7 @@ export class WikipediaProvider implements SearchProvider {
     endpoint.searchParams.set('format', 'json');
     endpoint.searchParams.set('origin', '*');
 
-    const response = await fetch(endpoint.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(endpoint.toString(), { headers: { Accept: 'application/json' }, signal });
     if (!response.ok) throw new Error(`Wikipedia search failed: HTTP ${response.status}`);
 
     const data = (await response.json()) as WikipediaSearchResponse;

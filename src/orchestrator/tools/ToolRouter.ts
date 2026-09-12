@@ -1,4 +1,5 @@
 import { eventBus } from '../../core/EventBus';
+import { taskRuntime } from '../TaskRuntime';
 import { PermissionEngine } from '../../security/PermissionEngine';
 import { PolicyEngine } from '../../security/PolicyEngine';
 import { RiskAnalyzer } from '../../security/RiskAnalyzer';
@@ -16,68 +17,39 @@ export class ToolRouter {
 
     if (!tool) {
       this.audit('blocked', 'TOOL_EXECUTION', toolId, `Unknown tool '${toolId}' rejected`, true);
-      return {
-        success: false,
-        toolId,
-        startedAt,
-        completedAt: Date.now(),
-        error: `Tool '${toolId}' is not registered`,
-        validation: 'FAILED',
-      };
+      return { success: false, toolId, startedAt, completedAt: Date.now(), error: `Tool '${toolId}' is not registered`, validation: 'FAILED' };
     }
 
     const policyCheck = PolicyEngine.validateInstruction(`${tool.id} ${JSON.stringify(input)}`);
     if (!policyCheck.allowed) {
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, policyCheck.reason ?? 'Tool request rejected by policy', true);
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: policyCheck.reason ?? 'Policy rejected tool request',
-        validation: 'FAILED',
-      };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: policyCheck.reason ?? 'Policy rejected tool request', validation: 'FAILED' };
     }
 
     if (!tool.modes.includes(context.mode)) {
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, `Tool not authorized for mode ${context.mode}`, true);
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: `Tool '${tool.id}' is not available in ${context.mode} mode`,
-        validation: 'FAILED',
-      };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: `Tool '${tool.id}' is not available in ${context.mode} mode`, validation: 'FAILED' };
     }
 
     if (!tool.validateInput(input)) {
       this.audit('blocked', 'TOOL_VALIDATION', tool.id, 'Input validation failed', true);
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: 'Tool input validation failed',
-        validation: 'FAILED',
-      };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool input validation failed', validation: 'FAILED' };
     }
 
     const risk = RiskAnalyzer.assessTool(tool);
     if (!risk.permissionSufficient) {
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, `Declared permission ${risk.declaredPermission} is below required ${risk.requiredPermission}`, true);
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: 'Tool permission declaration is insufficient for its risk level',
-        validation: 'FAILED',
-      };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool permission declaration is insufficient for its risk level', validation: 'FAILED' };
     }
 
-    if (tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE') {
+    if (taskRuntime.isCancelled(context.taskId)) {
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
+    }
+
+    const permissionGated = tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE';
+    if (permissionGated) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+      taskRuntime.waitForPermission(context.taskId);
     }
 
     const approved = await PermissionEngine.requestPermission({
@@ -92,21 +64,28 @@ export class ToolRouter {
     if (!approved) {
       this.audit('warning', 'PERMISSION', tool.id, 'Tool execution rejected by permission gate', true);
       eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: 'Permission denied',
-        validation: 'FAILED',
-      };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Permission denied', validation: 'FAILED' };
     }
+
+    if (taskRuntime.isCancelled(context.taskId)) {
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
+    }
+
+    taskRuntime.start(context.taskId);
+    const abortController = new AbortController();
+    const unregisterCancellation = taskRuntime.registerCancellationHandler(context.taskId, () => abortController.abort());
+    const executionContext: ToolExecutionContext = { ...context, signal: abortController.signal };
 
     try {
       eventBus.emit('CORE_STATE_CHANGE', 'EXECUTING');
       const output = await Sandbox.executeGuarded(
         tool.id,
-        () => tool.execute(input, context) as Promise<T>,
+        async () => {
+          if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
+          const result = await tool.execute(input, executionContext) as T;
+          if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
+          return result;
+        },
         tool.timeoutMs
       );
 
@@ -114,37 +93,18 @@ export class ToolRouter {
       if (!outputValid) {
         this.audit('error', 'TOOL_VALIDATION', tool.id, 'Tool output failed validation', true);
         eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
-        return {
-          success: false,
-          toolId: tool.id,
-          startedAt,
-          completedAt: Date.now(),
-          error: 'Tool output validation failed',
-          validation: 'FAILED',
-        };
+        return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool output validation failed', validation: 'FAILED' };
       }
 
       this.audit('info', 'TOOL_EXECUTION', tool.id, `Tool executed successfully for task ${context.taskId}`, false);
-      return {
-        success: true,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        data: output,
-        validation: tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED',
-      };
+      return { success: true, toolId: tool.id, startedAt, completedAt: Date.now(), data: output, validation: tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED' };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.audit('error', 'TOOL_EXECUTION', tool.id, message, true);
-      eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
-      return {
-        success: false,
-        toolId: tool.id,
-        startedAt,
-        completedAt: Date.now(),
-        error: message,
-        validation: 'FAILED',
-      };
+      const message = abortController.signal.aborted ? 'Tool execution cancelled' : error instanceof Error ? error.message : String(error);
+      this.audit(abortController.signal.aborted ? 'warning' : 'error', 'TOOL_EXECUTION', tool.id, message, true);
+      eventBus.emit('CORE_STATE_CHANGE', abortController.signal.aborted ? 'WARNING' : 'ERROR');
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: message, validation: 'FAILED' };
+    } finally {
+      unregisterCancellation();
     }
   }
 

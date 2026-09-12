@@ -8,6 +8,7 @@ export interface ToolExecutionContext {
   mode: MioSystemMode;
   projectId?: string;
   requestedBy: 'USER' | 'AGENT';
+  signal?: AbortSignal;
 }
 
 export interface ToolResult<T = unknown> {

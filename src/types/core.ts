@@ -31,6 +31,7 @@ export type MioSystemMode =
   | 'SFX'
   | 'MUSIC'
   | 'PROJECT'
+  | 'TASKS'
   | 'SETTINGS'
   | 'SECURITY';
 
