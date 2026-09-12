@@ -39,6 +39,12 @@ export interface CapabilityDecision {
   descriptor?: CapabilityDescriptor;
 }
 
+export interface CapabilityDecisionEvent extends CapabilityDecision {
+  taskId?: string;
+  mode?: MioSystemMode;
+  timestamp: number;
+}
+
 export interface CapabilitySnapshot {
   capabilities: CapabilityDescriptor[];
   updatedAt: number;
