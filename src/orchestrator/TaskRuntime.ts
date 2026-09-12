@@ -23,28 +23,17 @@ class TaskRuntimeController {
     try {
       const persisted = await this.storage.get<TaskRuntimeSnapshot>('runtime', RUNTIME_STORAGE_KEY);
       if (persisted?.tasks?.length) {
-        for (const raw of persisted.tasks) {
-          const recovered = this.normalizeRecoveredTask(raw);
-          this.tasks.set(recovered.id, recovered);
-        }
+        for (const raw of persisted.tasks) this.tasks.set(raw.id, this.normalizeRecoveredTask(raw));
       }
     } catch (error) {
-      eventBus.emit('STORAGE_ERROR', {
-        scope: 'TASK_RUNTIME',
-        action: 'INITIALIZE',
-        error: error instanceof Error ? error.message : String(error),
-      });
+      eventBus.emit('STORAGE_ERROR', { scope: 'TASK_RUNTIME', action: 'INITIALIZE', error: error instanceof Error ? error.message : String(error) });
     }
     this.initialized = true;
     this.publishSnapshot();
     return this.snapshot();
   }
 
-  public setStorageProvider(provider: StorageProvider): void {
-    this.storage = provider;
-    this.initialized = false;
-  }
-
+  public setStorageProvider(provider: StorageProvider): void { this.storage = provider; this.initialized = false; }
   public isInitialized(): boolean { return this.initialized; }
 
   public create(plan: TaskPlan, prompt: string, projectId?: string, maxRetries: number = 1): RuntimeTask {
@@ -125,13 +114,14 @@ class TaskRuntimeController {
     if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
     const step = task.steps.find((item) => item.id === stepId);
     if (!step) return this.clone(task);
-    step.status = 'COMPLETED'; step.completedAt = Date.now(); task.status = 'RUNNING'; task.updatedAt = Date.now();
+    const preservePause = task.status === 'PAUSED';
+    step.status = 'COMPLETED'; step.completedAt = Date.now(); task.status = preservePause ? 'PAUSED' : 'RUNNING'; task.updatedAt = Date.now();
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'STEP_COMPLETED', step.label); this.publishSnapshot(); return this.clone(task);
   }
 
   public complete(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId);
-    if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
+    if (!task || TERMINAL_STATES.has(task.status) || task.status === 'PAUSED') return task ? this.clone(task) : undefined;
     task.steps.forEach((step) => { if (step.status === 'PENDING' || step.status === 'RUNNING') { step.status = 'COMPLETED'; step.completedAt = Date.now(); } });
     task.status = 'COMPLETED'; task.progress = 100; task.completedAt = Date.now(); task.updatedAt = task.completedAt;
     this.cancellationHandlers.delete(taskId);
@@ -166,9 +156,7 @@ class TaskRuntimeController {
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'CANCELLED', reason); this.publishSnapshot(); return this.clone(task);
   }
 
-  public cancelAllActive(reason: string): void {
-    Array.from(this.tasks.values()).filter((task) => !TERMINAL_STATES.has(task.status)).forEach((task) => this.cancel(task.id, reason));
-  }
+  public cancelAllActive(reason: string): void { Array.from(this.tasks.values()).filter((task) => !TERMINAL_STATES.has(task.status)).forEach((task) => this.cancel(task.id, reason)); }
 
   public addDependency(taskId: string, dependencyTaskId: string): boolean {
     const task = this.getMutable(taskId);
@@ -189,21 +177,11 @@ class TaskRuntimeController {
     return { tasks, activeTaskIds: tasks.filter((task) => !TERMINAL_STATES.has(task.status)).map((task) => task.id), updatedAt: Date.now() };
   }
 
-  public clearCompleted(): void {
-    Array.from(this.tasks.values()).filter((task) => TERMINAL_STATES.has(task.status)).forEach((task) => this.tasks.delete(task.id));
-    this.publishSnapshot();
-  }
+  public clearCompleted(): void { Array.from(this.tasks.values()).filter((task) => TERMINAL_STATES.has(task.status)).forEach((task) => this.tasks.delete(task.id)); this.publishSnapshot(); }
 
   public async flush(): Promise<void> {
-    try {
-      await this.storage.set('runtime', RUNTIME_STORAGE_KEY, this.snapshot());
-    } catch (error) {
-      eventBus.emit('STORAGE_ERROR', {
-        scope: 'TASK_RUNTIME',
-        action: 'WRITE',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    try { await this.storage.set('runtime', RUNTIME_STORAGE_KEY, this.snapshot()); }
+    catch (error) { eventBus.emit('STORAGE_ERROR', { scope: 'TASK_RUNTIME', action: 'WRITE', error: error instanceof Error ? error.message : String(error) }); }
   }
 
   private normalizeRecoveredTask(task: RuntimeTask): RuntimeTask {
@@ -214,7 +192,6 @@ class TaskRuntimeController {
       retryCount: Number.isFinite(task.retryCount) ? task.retryCount : 0,
       maxRetries: Number.isFinite(task.maxRetries) ? task.maxRetries : 1,
     };
-
     if (!TERMINAL_STATES.has(normalized.status)) {
       const recoveredAt = Date.now();
       normalized.status = 'FAILED';
@@ -222,11 +199,7 @@ class TaskRuntimeController {
       normalized.completedAt = recoveredAt;
       normalized.updatedAt = recoveredAt;
       const runningStep = normalized.steps.find((step) => step.status === 'RUNNING');
-      if (runningStep) {
-        runningStep.status = 'FAILED';
-        runningStep.error = 'Interrupted by runtime restart';
-        runningStep.completedAt = recoveredAt;
-      }
+      if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = 'Interrupted by runtime restart'; runningStep.completedAt = recoveredAt; }
     }
     return normalized;
   }
@@ -237,19 +210,13 @@ class TaskRuntimeController {
     const completed = task.steps.filter((step) => step.status === 'COMPLETED' || step.status === 'SKIPPED').length;
     task.progress = Math.round((completed / task.steps.length) * 100);
   }
-  private publishSnapshot(): void {
-    eventBus.emit<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', this.snapshot());
-    if (this.initialized) void this.flush();
-  }
+  private publishSnapshot(): void { eventBus.emit<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', this.snapshot()); if (this.initialized) void this.flush(); }
   private emitTaskEvent(taskId: string, type: TaskRuntimeEvent['type'], details?: string): void {
     const event: TaskRuntimeEvent = { taskId, type, timestamp: Date.now(), details };
     eventBus.emit<TaskRuntimeEvent>('TASK_RUNTIME_EVENT', event);
     eventBus.emit('ACTIVITY_LOG', { timestamp: event.timestamp, message: `Task ${taskId}: ${type}${details ? ` — ${details}` : ''}`, mode: 'PROJECT' });
   }
-  private deriveTitle(prompt: string, mode: string): string {
-    const normalized = prompt.trim().replace(/\s+/g, ' '); const compact = normalized.length > 64 ? `${normalized.slice(0, 61)}...` : normalized;
-    return compact || `${mode} task`;
-  }
+  private deriveTitle(prompt: string, mode: string): string { const normalized = prompt.trim().replace(/\s+/g, ' '); return normalized.length > 64 ? `${normalized.slice(0, 61)}...` : normalized || `${mode} task`; }
   private clone(task: RuntimeTask): RuntimeTask { return { ...task, dependencies: [...task.dependencies], steps: task.steps.map((step) => ({ ...step })) }; }
 }
 
