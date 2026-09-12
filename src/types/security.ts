@@ -6,6 +6,51 @@ export type PermissionLevel =
   | 'L4_EXECUTE'
   | 'L5_DESTRUCTIVE';
 
+export interface AuthorizationScope {
+  taskId: string;
+  projectId?: string;
+  action: string;
+  target: string;
+  toolId?: string;
+  networkOrigin?: string;
+  resourceId?: string;
+  path?: string;
+  networkAllowed?: boolean;
+}
+
+export interface AuthorizationGrant {
+  id: string;
+  level: PermissionLevel;
+  scope: AuthorizationScope;
+  grantedAt: number;
+  expiresAt: number;
+  revoked: boolean;
+  revokeReason?: string;
+  source: 'AUTO_POLICY' | 'USER_APPROVAL';
+  maxUses: number;
+  uses: number;
+  requiresDryRun: boolean;
+}
+
+export interface ScopedPermissionRequest {
+  action: string;
+  target: string;
+  level: PermissionLevel;
+  changes: string[];
+  risks: string[];
+  expectedResult: string;
+  taskId?: string;
+  projectId?: string;
+  toolId?: string;
+  networkAccess?: boolean;
+  networkOrigin?: string;
+  resourceId?: string;
+  path?: string;
+  ttlMs?: number;
+  maxUses?: number;
+  forceDryRun?: boolean;
+}
+
 export interface DryRunRequest {
   id: string;
   proposedAction: string;
@@ -14,6 +59,12 @@ export interface DryRunRequest {
   risks: string[];
   expectedResult: string;
   permissionLevel: PermissionLevel;
+  taskId?: string;
+  projectId?: string;
+  toolId?: string;
+  scopeSummary?: string[];
+  expiresInMs?: number;
+  maxUses?: number;
   onApprove: () => void;
   onReview: () => void;
   onCancel: () => void;

@@ -6,6 +6,7 @@ import { taskRuntime } from '../orchestrator/TaskRuntime';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { resourceGovernor } from '../security/ResourceGovernor';
 import { NetworkState } from '../types/core';
+import { AuthorizationGrant, AuthorizationScope } from '../types/security';
 import { ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig } from '../types/models';
 
 export class ModelRouter {
@@ -26,6 +27,7 @@ export class ModelRouter {
   public static async generate(request: ModelRequest, timeoutMs: number = 30000): Promise<ModelResponse> {
     const provider = this.createProvider();
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
+    const projectId = typeof request.metadata?.projectId === 'string' ? request.metadata.projectId : undefined;
     const mode = taskId ? taskRuntime.get(taskId)?.mode : undefined;
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
@@ -50,25 +52,62 @@ export class ModelRouter {
       if (!networkPreflight.allowed) throw new Error(networkPreflight.reason ?? 'Resource budget blocked remote model access');
     }
 
+    let remoteGrant: AuthorizationGrant | null = null;
+    let requiredScope: AuthorizationScope | undefined;
     if (remoteAccess) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       if (taskId) taskRuntime.waitForPermission(taskId);
-      const approved = await PermissionEngine.requestPermission({
+
+      const networkOrigin = this.resolveProviderOrigin(provider);
+      remoteGrant = await PermissionEngine.requestScopedPermission({
         action: `MODEL_PROVIDER:${provider.id}`,
         target: 'MIO AI Inference',
         level: 'L4_EXECUTE',
         changes: ['Send the current AI request to the configured remote model provider through the MIO secure proxy'],
         risks: ['Prompt content leaves the local browser and is processed by an external AI provider'],
         expectedResult: `Generate a response using ${provider.displayName}`,
+        taskId,
+        projectId,
+        resourceId: `model-provider:${provider.id}`,
+        networkAccess: true,
+        networkOrigin,
+        ttlMs: Math.max(15_000, Math.min(timeoutMs + 10_000, 120_000)),
+        maxUses: 1,
+        forceDryRun: true,
       });
-      if (!approved) throw new Error('Remote model execution permission denied');
+      if (!remoteGrant) throw new Error('Remote model execution permission denied');
+
+      requiredScope = {
+        taskId: remoteGrant.scope.taskId,
+        projectId,
+        action: `MODEL_PROVIDER:${provider.id}`,
+        target: 'MIO AI Inference',
+        resourceId: `model-provider:${provider.id}`,
+        networkOrigin,
+        networkAllowed: true,
+      };
+      if (!PermissionEngine.validateGrant(remoteGrant.id, requiredScope)) {
+        PermissionEngine.revokeGrant(remoteGrant.id, 'Remote model scope validation failed');
+        throw new Error('Remote model authorization scope mismatch');
+      }
       if (taskId && !taskRuntime.isCancelled(taskId)) taskRuntime.start(taskId);
     }
 
-    if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
+    if (taskId && taskRuntime.isCancelled(taskId)) {
+      if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Task cancelled before model execution');
+      throw new Error('Model request cancelled before execution');
+    }
+
     if (taskId) {
       const resourceDecision = resourceGovernor.consumeModelCall(taskId, remoteAccess, mode);
-      if (!resourceDecision.allowed) throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
+      if (!resourceDecision.allowed) {
+        if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Resource budget blocked model execution');
+        throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
+      }
+    }
+
+    if (remoteGrant && requiredScope && !PermissionEngine.consumeGrant(remoteGrant.id, requiredScope)) {
+      throw new Error('Remote model authorization expired, was revoked, or no longer matches provider scope');
     }
 
     try {
@@ -89,6 +128,14 @@ export class ModelRouter {
     }
   }
 
+  private static resolveProviderOrigin(provider: ModelProvider): string {
+    if (provider.id === 'ollama') {
+      try { return new URL(this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').origin; } catch { return 'http://127.0.0.1:11434'; }
+    }
+    try { return new URL(this.config.proxyEndpoint ?? '/api/ai/generate', typeof window !== 'undefined' ? window.location.origin : 'http://localhost').origin; }
+    catch { return 'same-origin-proxy'; }
+  }
+
   private static createProvider(): ModelProvider {
     const config = this.config;
     if (config.provider === 'local_heuristic') return new LocalHeuristicProvider();
@@ -99,9 +146,7 @@ export class ModelRouter {
   private static async executeProvider(provider: ModelProvider, request: ModelRequest, timeoutMs: number): Promise<ModelResponse> {
     const controller = new AbortController();
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
-    const unregisterCancellation = taskId
-      ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort())
-      : () => undefined;
+    const unregisterCancellation = taskId ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort()) : () => undefined;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
 

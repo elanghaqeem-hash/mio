@@ -66,27 +66,44 @@ export class ToolRouter {
       taskRuntime.waitForPermission(context.taskId);
     }
 
-    const approved = await PermissionEngine.requestPermission({
+    const target = context.projectId ?? 'Current Workspace';
+    const requiredScope = {
+      taskId: context.taskId,
+      projectId: context.projectId,
       action: `TOOL:${tool.id}`,
-      target: context.projectId ?? 'Current Workspace',
+      target,
+      toolId: tool.id,
+      networkAllowed: tool.networkAccess === true,
+    };
+    const grant = await PermissionEngine.requestScopedPermission({
+      action: requiredScope.action,
+      target,
       level: tool.permissionLevel,
       changes: [`Execute tool ${tool.id}`],
-      risks: [`Risk level: ${tool.riskLevel}`],
+      risks: [`Risk level: ${tool.riskLevel}`, ...(tool.networkAccess ? ['Tool may access network resources'] : [])],
       expectedResult: tool.description,
+      taskId: context.taskId,
+      projectId: context.projectId,
+      toolId: tool.id,
+      networkAccess: tool.networkAccess === true,
+      ttlMs: Math.max(15_000, Math.min(tool.timeoutMs + 10_000, 120_000)),
+      maxUses: 1,
     });
 
-    if (!approved) {
-      this.audit('warning', 'PERMISSION', tool.id, 'Tool execution rejected by permission gate', true);
+    if (!grant || !PermissionEngine.validateGrant(grant.id, requiredScope)) {
+      this.audit('warning', 'PERMISSION', tool.id, 'Tool execution rejected by scoped permission gate', true);
       eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
-      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Permission denied', validation: 'FAILED' };
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Permission denied or scope mismatch', validation: 'FAILED' };
     }
 
     if (taskRuntime.isCancelled(context.taskId)) {
+      PermissionEngine.revokeGrant(grant.id, 'Task cancelled before tool execution');
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
     const resourceDecision = resourceGovernor.consumeToolCall(context.taskId, tool.networkAccess === true, context.mode);
     if (!resourceDecision.allowed) {
+      PermissionEngine.revokeGrant(grant.id, 'Resource budget blocked tool execution');
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, resourceDecision.reason ?? 'Resource budget blocked tool execution', true);
       eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: resourceDecision.reason ?? 'Resource budget blocked tool execution', validation: 'FAILED' };
@@ -102,6 +119,8 @@ export class ToolRouter {
       const output = await Sandbox.executeGuarded(
         tool.id,
         async () => {
+          const consumed = PermissionEngine.consumeGrant(grant.id, requiredScope);
+          if (!consumed) throw new Error('Scoped authorization expired, was revoked, or no longer matches execution scope');
           if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
           const result = await tool.execute(input, executionContext) as T;
           if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
@@ -117,7 +136,7 @@ export class ToolRouter {
         return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool output validation failed', validation: 'FAILED' };
       }
 
-      this.audit('info', 'TOOL_EXECUTION', tool.id, `Tool executed successfully for task ${context.taskId}`, false);
+      this.audit('info', 'TOOL_EXECUTION', tool.id, `Tool executed successfully for task ${context.taskId} under bounded grant ${grant.id}`, false);
       return { success: true, toolId: tool.id, startedAt, completedAt: Date.now(), data: output, validation: tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED' };
     } catch (error) {
       const message = abortController.signal.aborted ? 'Tool execution cancelled' : error instanceof Error ? error.message : String(error);
