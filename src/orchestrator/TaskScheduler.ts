@@ -1,5 +1,6 @@
 import { eventBus } from '../core/EventBus';
 import { emergencyStop } from '../core/EmergencyStop';
+import { resourceGovernor } from '../security/ResourceGovernor';
 import { taskRuntime } from './TaskRuntime';
 import type { TaskRuntimeSnapshot } from '../types/tasks';
 
@@ -72,6 +73,7 @@ export class TaskScheduler {
     }
     const scheduled = taskRuntime.scheduleRetry(taskId);
     if (!scheduled || scheduled.status !== 'PENDING') return Promise.reject(new Error(`Retry unavailable for task '${taskId}'`));
+    resourceGovernor.resetTask(taskId);
     return this.enqueue(taskId, runner);
   }
 
@@ -129,6 +131,16 @@ export class TaskScheduler {
         index += 1;
         continue;
       }
+
+      const resourceDecision = resourceGovernor.authorize(entry.taskId, 'SCHEDULER_DISPATCH', runtimeTask.mode);
+      if (!resourceDecision.allowed) {
+        this.queue.splice(index, 1);
+        taskRuntime.fail(entry.taskId, resourceDecision.reason ?? 'Resource budget blocked scheduler dispatch');
+        entry.reject(new Error(resourceDecision.reason ?? 'Resource budget blocked scheduler dispatch'));
+        changed = true;
+        continue;
+      }
+
       this.queue.splice(index, 1);
       this.active.add(entry.taskId);
       taskRuntime.start(entry.taskId);
