@@ -8,6 +8,7 @@ import { eventBus } from '../../core/EventBus';
 import { KnowledgeGovernancePanel } from './KnowledgeGovernancePanel';
 import { KnowledgeCorroborationPanel } from './KnowledgeCorroborationPanel';
 import { KnowledgeLineagePanel } from './KnowledgeLineagePanel';
+import { KnowledgeReviewInboxPanel } from './KnowledgeReviewInboxPanel';
 
 export const ProjectOverviewView: React.FC = () => {
   const [project, setProject] = useState<MioProject>(ProjectManager.getProject());
@@ -53,6 +54,7 @@ export const ProjectOverviewView: React.FC = () => {
 
       {pipelineSteps.length > 0 && <div className="rounded-xl border border-cyan-500/30 bg-[#0d121d] p-4"><span className="mb-3 block text-[11px] font-bold text-cyan-400">MULTI-MODE CREATIVE ORCHESTRATION PIPELINE</span><div className="grid grid-cols-5 gap-2">{pipelineSteps.map((step, idx) => <div key={`${step.mode}-${idx}`} className={`rounded-lg border p-2.5 text-center ${step.status === 'completed' ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300' : step.status === 'in_progress' ? 'animate-pulse border-cyan-500/60 bg-cyan-950/40 text-cyan-300' : 'border-gray-800 bg-[#111726] text-gray-500'}`}><div className="mb-1 text-[10px] font-bold">{step.mode}</div><div className="truncate text-[9px]">{step.assetName}</div><div className="mt-1 text-[9px] font-bold uppercase">{step.status}</div></div>)}</div></div>}
 
+      <KnowledgeReviewInboxPanel project={project} />
       <KnowledgeGovernancePanel project={project} />
       <KnowledgeCorroborationPanel project={project} />
       <KnowledgeLineagePanel project={project} />
