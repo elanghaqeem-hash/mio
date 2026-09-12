@@ -76,6 +76,19 @@ export class CapabilityRegistry {
 export function createDefaultCapabilityRegistry(): CapabilityRegistry {
   const registry = new CapabilityRegistry();
   registry.register({
+    id: 'agent.orchestrator',
+    kind: 'AGENT',
+    description: 'Plan and coordinate MIO tasks within the active project while delegating privileged actions to bounded capabilities.',
+    ownerLayer: 'AGENT',
+    modes: ['CHAT', 'RESEARCH', 'FILES', 'MOTION', '3D', 'ANIMATION', 'GRAPHIC', 'SFX', 'MUSIC', 'PROJECT', 'TASKS', 'SETTINGS', 'SECURITY'],
+    riskLevel: 'MODERATE',
+    permissionLevel: 'L1_SUGGEST',
+    availability: 'AVAILABLE',
+    networkAccess: false,
+    scopeFields: ['TASK', 'PROJECT'],
+    timeoutMs: 120000,
+  });
+  registry.register({
     id: 'project.inspect',
     kind: 'TOOL',
     description: 'Read current project identity, active mode, and asset summary without modifying project state.',
