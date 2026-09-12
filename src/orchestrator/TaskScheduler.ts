@@ -52,7 +52,6 @@ export class TaskScheduler {
     if (emergencyStop.isEmergencyStopped()) return Promise.reject(new Error('STOP MIO is active'));
     if (!taskRuntime.get(taskId)) return Promise.reject(new Error(`Unknown runtime task '${taskId}'`));
     if (this.active.has(taskId) || this.queue.some((entry) => entry.taskId === taskId)) return Promise.reject(new Error(`Task '${taskId}' is already scheduled`));
-
     this.runnerRegistry.set(taskId, runner as QueueRunner<unknown>);
     return this.enqueue(taskId, runner);
   }
@@ -63,6 +62,28 @@ export class TaskScheduler {
     const scheduled = taskRuntime.scheduleRetry(taskId);
     if (!scheduled || scheduled.status !== 'PENDING') return Promise.reject(new Error(`Retry unavailable for task '${taskId}'`));
     return this.enqueue(taskId, runner);
+  }
+
+  public async waitUntilRunnable(taskId: string): Promise<void> {
+    const current = taskRuntime.get(taskId);
+    if (!current) throw new Error(`Unknown runtime task '${taskId}'`);
+    if (current.status === 'CANCELLED') throw new Error('Task cancelled');
+    if (current.status !== 'PAUSED') return;
+
+    await new Promise<void>((resolve, reject) => {
+      const unsubscribe = eventBus.on<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', (snapshot) => {
+        const task = snapshot.tasks.find((item) => item.id === taskId);
+        if (!task || task.status === 'CANCELLED' || task.status === 'FAILED') {
+          unsubscribe();
+          reject(new Error(task?.error ?? 'Task stopped while paused'));
+          return;
+        }
+        if (task.status !== 'PAUSED') {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
   }
 
   private enqueue<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
@@ -80,7 +101,6 @@ export class TaskScheduler {
     for (let index = 0; index < this.queue.length && this.active.size < this.concurrencyLimit;) {
       const entry = this.queue[index];
       const runtimeTask = taskRuntime.get(entry.taskId);
-
       if (!runtimeTask || runtimeTask.status === 'CANCELLED') {
         this.queue.splice(index, 1);
         entry.reject(new Error('Task is no longer executable'));
@@ -91,7 +111,6 @@ export class TaskScheduler {
         index += 1;
         continue;
       }
-
       this.queue.splice(index, 1);
       this.active.add(entry.taskId);
       taskRuntime.start(entry.taskId);
