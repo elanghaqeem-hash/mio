@@ -45,12 +45,21 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
   check(bcm.hits.length >= 1 && bcm.hits[0].assetId === 'asset_bcm_1', 'Lexical retrieval ranks the relevant project document for the query');
   check(bcm.contextText.includes('UNTRUSTED_PROJECT_CONTEXT') && bcm.contextText.includes('trust="QUARANTINED"'), 'Retrieved context is explicitly marked as untrusted data with trust metadata');
   check(bcm.contextText.includes('assetId="asset_bcm_1"') && bcm.contextText.includes('workspace://ws_test/docs/bcm.md'), 'Retrieved context carries asset and source URI attribution');
+  check(bcm.applicationContext?.kind === 'PROJECT_KNOWLEDGE' && bcm.applicationContext.policy === 'DATA_ONLY', 'Retrieval produces a typed DATA_ONLY application context envelope');
+  check(bcm.applicationContext?.sources[0].assetId === 'asset_bcm_1' && bcm.applicationContext.sources[0].trust === 'QUARANTINED', 'Typed context preserves source identity and trust state');
+
+  const excluded = ProjectKnowledgeIndex.retrieve(project, 'business continuity recovery time objective', { excludedAssetIds: ['asset_bcm_1'] });
+  check(excluded.hits.every((hit) => hit.assetId !== 'asset_bcm_1'), 'Explicit source exclusion removes an asset from future retrieval');
 
   const irrelevant = ProjectKnowledgeIndex.retrieve(project, 'quantum telescope galaxy nebula');
-  check(irrelevant.hits.length === 0 && irrelevant.contextText === '', 'Irrelevant queries do not inject unrelated project documents into model context');
+  check(irrelevant.hits.length === 0 && irrelevant.contextText === '' && irrelevant.applicationContext === undefined, 'Irrelevant queries do not inject unrelated project documents into model context');
 
   const bounded = ProjectKnowledgeIndex.retrieve(project, 'budget revenue operating expense', 1);
   check(bounded.hits.length === 1 && bounded.hits[0].assetId === 'asset_finance', 'Retrieval result count is bounded and respects relevance ranking');
+
+  const budgetBounded = ProjectKnowledgeIndex.retrieve(project, 'business continuity recovery time objective', { contextBudgetChars: 600 });
+  check((budgetBounded.applicationContext?.contextBudgetChars ?? 0) === 600, 'Retrieval records the active project context character budget');
+  check((budgetBounded.applicationContext?.sources.reduce((sum, source) => sum + source.text.length, 0) ?? 0) <= 1200, 'Context payload remains bounded even when the first relevant chunk exceeds the nominal minimum budget');
 
   return { passed, total };
 }
