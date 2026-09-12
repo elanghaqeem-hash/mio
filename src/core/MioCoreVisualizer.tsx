@@ -1,0 +1,251 @@
+import React, { useEffect, useRef } from 'react';
+import { MioCoreState } from '../types/core';
+
+interface MioCoreVisualizerProps {
+  state: MioCoreState;
+  size?: number; // pixel width/height
+  audioLevel?: number; // 0.0 to 1.0 for LISTENING / SFX / MUSIC reactivity
+  onClick?: () => void;
+  interactive?: boolean;
+}
+
+export const MioCoreVisualizer: React.FC<MioCoreVisualizerProps> = ({
+  state,
+  size = 180,
+  audioLevel = 0,
+  onClick,
+  interactive = true,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let t = 0;
+
+    // Particle system for PROCESSING / CREATIVE / ONLINE
+    const particles: { x: number; y: number; angle: number; dist: number; speed: number; size: number }[] = [];
+    for (let i = 0; i < 36; i++) {
+      particles.push({
+        x: 0,
+        y: 0,
+        angle: (i / 36) * Math.PI * 2,
+        dist: 30 + Math.random() * 40,
+        speed: 0.01 + Math.random() * 0.03,
+        size: 1.5 + Math.random() * 2,
+      });
+    }
+
+    const render = () => {
+      t += 0.025;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = size * 0.32;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Determine palette based on state
+      let mainColor = '#00f0ff'; // Electric cyan
+      let glowColor = 'rgba(0, 240, 255, 0.4)';
+      let pulseSpeed = 1.0;
+
+      if (state === 'WARNING') {
+        mainColor = '#f59e0b';
+        glowColor = 'rgba(245, 158, 11, 0.45)';
+      } else if (state === 'ERROR') {
+        mainColor = '#ef4444';
+        glowColor = 'rgba(239, 68, 68, 0.5)';
+        pulseSpeed = 2.5;
+      } else if (state === 'SUCCESS') {
+        mainColor = '#10b981';
+        glowColor = 'rgba(16, 185, 129, 0.5)';
+      } else if (state === 'SECURITY') {
+        mainColor = '#3b82f6';
+        glowColor = 'rgba(59, 130, 246, 0.5)';
+      } else if (state === 'EMOTIONAL SUPPORT') {
+        mainColor = '#38bdf8';
+        glowColor = 'rgba(56, 189, 248, 0.3)';
+        pulseSpeed = 0.5;
+      } else if (state === 'OFFLINE') {
+        mainColor = '#64748b';
+        glowColor = 'rgba(100, 116, 139, 0.2)';
+      } else if (state === '3D MODE') {
+        mainColor = '#06b6d4';
+        glowColor = 'rgba(6, 182, 212, 0.4)';
+      } else if (state === 'SFX MODE' || state === 'MUSIC MODE') {
+        mainColor = '#818cf8';
+        glowColor = 'rgba(129, 140, 248, 0.5)';
+      }
+
+      // Base breathing factor
+      const breath = Math.sin(t * pulseSpeed) * 4;
+      const audioPulse = audioLevel * 18;
+      const currentR = Math.max(10, r + breath + audioPulse);
+
+      // 1. Ambient Glow
+      const ambientGradient = ctx.createRadialGradient(cx, cy, currentR * 0.2, cx, cy, currentR * 1.6);
+      ambientGradient.addColorStop(0, glowColor);
+      ambientGradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ambientGradient;
+      ctx.beginPath();
+      ctx.arc(cx, cy, currentR * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Central Core Sphere
+      const coreGrad = ctx.createRadialGradient(cx - currentR * 0.2, cy - currentR * 0.2, currentR * 0.05, cx, cy, currentR);
+      coreGrad.addColorStop(0, '#ffffff');
+      coreGrad.addColorStop(0.3, mainColor);
+      coreGrad.addColorStop(0.85, 'rgba(10, 25, 45, 0.95)');
+      coreGrad.addColorStop(1, mainColor);
+
+      ctx.save();
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = mainColor;
+      ctx.fillStyle = coreGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, currentR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 3. State-Specific Overlays
+      if (state === 'THINKING' || state === 'PROCESSING') {
+        // Rotating concentric rings
+        for (let ring = 1; ring <= 3; ring++) {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(t * (ring % 2 === 0 ? 1 : -1) * 0.8 * ring);
+          ctx.strokeStyle = mainColor;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([12 * ring, 8 * ring]);
+          ctx.beginPath();
+          ctx.arc(0, 0, currentR + 10 * ring, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      } else if (state === 'LISTENING' || state === 'SFX MODE' || state === 'MUSIC MODE') {
+        // Sound reactive oscillating waves
+        const segments = 24;
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= segments; i++) {
+          const angle = (i / segments) * Math.PI * 2;
+          const wave = Math.sin(angle * 6 + t * 4) * (6 + audioPulse);
+          const dist = currentR + 14 + wave;
+          const px = cx + Math.cos(angle) * dist;
+          const py = cy + Math.sin(angle) * dist;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      } else if (state === '3D MODE') {
+        // Geometric wireframe cube projection inside core
+        ctx.save();
+        ctx.translate(cx, cy);
+        const s = currentR * 0.55;
+        const rotY = t * 1.2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+
+        // Draw 3D cube vertices projected
+        const vertices = [
+          [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+          [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
+        ];
+        const proj = vertices.map(([x, y, z]) => {
+          const cos = Math.cos(rotY);
+          const sin = Math.sin(rotY);
+          const nx = x * cos - z * sin;
+          const nz = x * sin + z * cos;
+          return [nx * s * 0.7, y * s * 0.7];
+        });
+
+        const edges = [
+          [0,1],[1,2],[2,3],[3,0],
+          [4,5],[5,6],[6,7],[7,4],
+          [0,4],[1,5],[2,6],[3,7]
+        ];
+
+        ctx.beginPath();
+        edges.forEach(([start, end]) => {
+          ctx.moveTo(proj[start][0], proj[start][1]);
+          ctx.lineTo(proj[end][0], proj[end][1]);
+        });
+        ctx.stroke();
+        ctx.restore();
+      } else if (state === 'SECURITY') {
+        // Security Lock / Shield Ring
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, currentR + 12, -Math.PI * 0.8, Math.PI * 0.8);
+        ctx.stroke();
+        // Inner key symbol
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(0, -6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-2, -6, 4, 14);
+        ctx.restore();
+      } else {
+        // Default Clean Outer Pulsing Tech Ring
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, currentR + 8 + Math.sin(t * 1.5) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([4, 16]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, currentR + 16, -t * 0.5, -t * 0.5 + Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // 4. Orbital Micro-Particles
+      particles.forEach((p) => {
+        p.angle += p.speed;
+        const px = cx + Math.cos(p.angle) * (currentR + p.dist);
+        const py = cy + Math.sin(p.angle) * (currentR + p.dist);
+        ctx.fillStyle = mainColor;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [state, size, audioLevel]);
+
+  return (
+    <div
+      onClick={onClick}
+      className={`relative flex items-center justify-center ${interactive ? 'cursor-pointer' : ''}`}
+      style={{ width: size, height: size }}
+      title={`Mio Core: ${state}`}
+    >
+      <canvas
+        ref={canvasRef}
+        width={size * 1.5}
+        height={size * 1.5}
+        style={{ width: size, height: size }}
+        className="transition-transform duration-300 hover:scale-105"
+      />
+    </div>
+  );
+};

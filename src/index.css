@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --mio-bg: #07090e;
+  --mio-surface: #0d121d;
+  --mio-surface-hover: #131b2a;
+  --mio-surface-glass: rgba(13, 18, 29, 0.75);
+  --mio-border: #1a2333;
+  --mio-border-glow: #00d2ff;
+  --mio-cyan: #00f0ff;
+  --mio-cyan-dim: #0088aa;
+  --mio-cyan-glow: rgba(0, 240, 255, 0.25);
+  --mio-amber: #f59e0b;
+  --mio-red: #ef4444;
+  --mio-green: #10b981;
+  --mio-purple: #a855f7;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--mio-bg);
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(13, 18, 29, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0088aa;
+}
+
+/* Futuristic Glow Effects */
+.cyan-glow {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.3), inset 0 0 10px rgba(0, 240, 255, 0.1);
+}
+
+.cyan-glow-text {
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+}
+
+.amber-glow {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.red-glow {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+/* Cyber Grid Background */
+.cyber-grid {
+  background-image: linear-gradient(to right, rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
