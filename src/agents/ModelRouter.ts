@@ -2,6 +2,7 @@ import { eventBus } from '../core/EventBus';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
+import { PermissionEngine } from '../security/PermissionEngine';
 import { NetworkState } from '../types/core';
 import { ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig } from '../types/models';
 
@@ -38,10 +39,21 @@ export class ModelRouter {
     const provider = this.createProvider();
 
     if (provider.requiresNetwork && this.networkState !== 'ONLINE') {
-      if (!this.config.allowOfflineFallback) {
-        throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
-      }
+      if (!this.config.allowOfflineFallback) throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
       return this.executeProvider(new LocalHeuristicProvider(), request, timeoutMs);
+    }
+
+    if (provider.requiresNetwork || provider.requiresProxy) {
+      eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+      const approved = await PermissionEngine.requestPermission({
+        action: `MODEL_PROVIDER:${provider.id}`,
+        target: 'MIO AI Inference',
+        level: 'L4_EXECUTE',
+        changes: ['Send the current AI request to the configured remote model provider through the MIO secure proxy'],
+        risks: ['Prompt content leaves the local browser and is processed by an external AI provider'],
+        expectedResult: `Generate a response using ${provider.displayName}`,
+      });
+      if (!approved) throw new Error('Remote model execution permission denied');
     }
 
     try {
