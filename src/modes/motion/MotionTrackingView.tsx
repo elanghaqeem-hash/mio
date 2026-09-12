@@ -12,7 +12,6 @@ interface PosePoint {
   visibility?: number;
 }
 
-const POSE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task';
 const BONES: Array<[number, number]> = [
   [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
   [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
@@ -89,12 +88,13 @@ export const MotionTrackingView: React.FC = () => {
     if (landmarkerRef.current) return landmarkerRef.current;
     setEngineState('LOADING');
     const wasmRoot = new URL('mediapipe/wasm/', document.baseURI).href;
+    const modelUrl = new URL('mediapipe/models/pose_landmarker_lite.task', document.baseURI).href;
     try {
       const vision = await FilesetResolver.forVisionTasks(wasmRoot);
       let landmarker: PoseLandmarker;
       try {
         landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: 'GPU' },
+          baseOptions: { modelAssetPath: modelUrl, delegate: 'GPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
           minPoseDetectionConfidence: 0.5,
@@ -103,7 +103,7 @@ export const MotionTrackingView: React.FC = () => {
         });
       } catch {
         landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: 'CPU' },
+          baseOptions: { modelAssetPath: modelUrl, delegate: 'CPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
           minPoseDetectionConfidence: 0.5,
@@ -113,7 +113,7 @@ export const MotionTrackingView: React.FC = () => {
       }
       landmarkerRef.current = landmarker;
       setEngineState('READY');
-      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: 'MediaPipe Pose Landmarker initialized locally', mode: 'MOTION' });
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: 'MediaPipe Pose Landmarker initialized from verified local MIO assets', mode: 'MOTION' });
       return landmarker;
     } catch (err) {
       setEngineState('ERROR');
@@ -135,7 +135,8 @@ export const MotionTrackingView: React.FC = () => {
     ctx.strokeStyle = '#00f0ff';
     ctx.lineWidth = Math.max(2, canvas.width / 480);
     for (const [a, b] of BONES) {
-      const p1 = points[a]; const p2 = points[b];
+      const p1 = points[a];
+      const p2 = points[b];
       if (!p1 || !p2 || (p1.visibility ?? 1) < 0.35 || (p2.visibility ?? 1) < 0.35) continue;
       ctx.beginPath();
       ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
@@ -191,9 +192,9 @@ export const MotionTrackingView: React.FC = () => {
       action: 'ACTIVATE_LOCAL_POSE_TRACKING',
       target: 'Local camera + MediaPipe Pose Landmarker',
       level: 'L4_EXECUTE',
-      changes: ['Request one local camera stream', 'Run 33-landmark pose inference locally on video frames'],
-      risks: ['Accesses the camera until deactivated or this workspace is closed', 'Downloads the pinned pose model from Google MediaPipe model storage on first use'],
-      expectedResult: 'Real local skeletal landmark extraction. Camera frames are not sent to the MIO Cloudflare API.',
+      changes: ['Request one local camera stream', 'Run 33-landmark pose inference locally on video frames using model/WASM packaged with MIO'],
+      risks: ['Accesses the camera until deactivated or this workspace is closed'],
+      expectedResult: 'Real local skeletal landmark extraction. Camera frames are not sent to MIO Cloudflare Functions or any AI provider.',
     });
     if (!approved) return;
 
@@ -227,7 +228,7 @@ export const MotionTrackingView: React.FC = () => {
     <div className="flex items-center justify-between mb-4 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
       <div className="flex items-center gap-2 text-cyan-300">
         <Activity size={16}/><span className="font-bold text-sm">MOTION // MEDIAPIPE LOCAL POSE LANDMARKER</span>
-        <span className="flex gap-1 text-emerald-400 text-[10px] ml-2"><ShieldCheck size={12}/>LOCAL INFERENCE // NO CAMERA UPLOAD</span>
+        <span className="flex gap-1 text-emerald-400 text-[10px] ml-2"><ShieldCheck size={12}/>LOCAL MODEL + WASM // NO CAMERA UPLOAD</span>
       </div>
       <button onClick={() => void toggleCamera()} className={`px-4 py-1.5 rounded-lg font-bold flex items-center gap-2 ${cameraActive?'bg-red-500 text-white':'bg-cyan-500 text-black'}`}>
         {engineState === 'LOADING' ? <Loader2 size={14} className="animate-spin"/> : cameraActive ? <CameraOff size={14}/> : <Camera size={14}/>} {engineState === 'LOADING' ? 'LOADING ENGINE' : cameraActive ? 'DEACTIVATE CAMERA' : 'REQUEST CAMERA'}
@@ -249,7 +250,7 @@ export const MotionTrackingView: React.FC = () => {
           <div className="bg-[#111726] p-3 rounded border border-gray-800"><span className="text-gray-500 text-[10px] block">CONFIDENCE</span><span className="text-cyan-300">{landmarks.length ? `${Math.round(confidence * 100)}%` : '—'}</span></div>
         </div>
         <div className="bg-[#111726] p-3 rounded border border-gray-800"><span className="text-gray-500 text-[10px] block">DERIVED GESTURE</span><span className="text-emerald-300 font-bold">{gesture}</span><p className="text-gray-500 mt-1 text-[9px]">Gesture label is a deterministic heuristic derived from measured landmarks; it is not a fabricated AI classification.</p></div>
-        <div className="bg-emerald-950/20 p-3 rounded border border-emerald-500/30"><span className="text-emerald-300 font-bold">MediaPipe Pose Landmarker</span><p className="text-emerald-200/70 mt-2 text-[10px]">WASM runtime is served from the MIO build. Pose model is fetched from the official Google MediaPipe model store. Frames stay in the local browser/Electron renderer.</p></div>
+        <div className="bg-emerald-950/20 p-3 rounded border border-emerald-500/30"><span className="text-emerald-300 font-bold">MediaPipe Pose Landmarker</span><p className="text-emerald-200/70 mt-2 text-[10px]">Tasks Vision, WASM runtime, and checksum-verified Pose Landmarker Lite model are served from the MIO origin. Camera frames remain local to the browser/Electron renderer.</p></div>
         <button disabled={landmarks.length !== 33} onClick={transferPose} className="w-full py-2 border border-cyan-500/40 bg-cyan-950/30 disabled:opacity-40 text-cyan-300 rounded font-bold flex items-center justify-center gap-2"><Send size={13}/>TRANSFER CURRENT POSE TO ANIMATION</button>
       </div>
     </div>
