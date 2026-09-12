@@ -5,8 +5,29 @@ export interface ModelMessage {
   content: string;
 }
 
+export type ApplicationContextTrust = 'VERIFIED' | 'QUARANTINED';
+
+export interface ApplicationContextSource {
+  id: string;
+  assetId: string;
+  label: string;
+  sourceUri: string;
+  trust: ApplicationContextTrust;
+  score: number;
+  text: string;
+}
+
+export interface ApplicationContextEnvelope {
+  kind: 'PROJECT_KNOWLEDGE';
+  policy: 'DATA_ONLY';
+  projectId: string;
+  contextBudgetChars: number;
+  sources: ApplicationContextSource[];
+}
+
 export interface ModelRequest {
   messages: ModelMessage[];
+  applicationContext?: ApplicationContextEnvelope;
   temperature?: number;
   maxOutputTokens?: number;
   metadata?: Record<string, string | number | boolean>;
