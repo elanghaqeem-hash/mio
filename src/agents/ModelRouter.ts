@@ -35,6 +35,7 @@ export class ModelRouter {
 
     if (provider.requiresNetwork || provider.requiresProxy) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
+      if (taskId) taskRuntime.waitForPermission(taskId);
       const approved = await PermissionEngine.requestPermission({
         action: `MODEL_PROVIDER:${provider.id}`,
         target: 'MIO AI Inference',
@@ -44,6 +45,7 @@ export class ModelRouter {
         expectedResult: `Generate a response using ${provider.displayName}`,
       });
       if (!approved) throw new Error('Remote model execution permission denied');
+      if (taskId && !taskRuntime.isCancelled(taskId)) taskRuntime.start(taskId);
     }
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
