@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BookOpenCheck, CheckCircle2, CircleOff, Clock3, History, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRightLeft, BookOpenCheck, CheckCircle2, CircleOff, Clock3, History, ListChecks, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { ProjectManager } from '../../project/ProjectManager';
 import type { MioProject } from '../../types/project';
 
@@ -12,12 +12,23 @@ function freshnessLabel(freshUntil?: number): 'CURRENT' | 'STALE' | 'UNKNOWN' {
 
 export const KnowledgeGovernancePanel: React.FC<Props> = ({ project }) => {
   const [reviewNote, setReviewNote] = useState('Reviewed in Knowledge Governance Center');
+  const [replacementByAsset, setReplacementByAsset] = useState<Record<string, string>>({});
   const documents = useMemo(() => project.assets.filter((asset) => asset.type === 'document'), [project.assets]);
   const history = project.knowledgeGovernance?.history ?? [];
+  const reviewQueue = useMemo(() => documents.filter((asset) => {
+    const record = project.knowledgeGovernance.sources[asset.id];
+    return !record?.supersededByAssetId && (record?.trust !== 'VERIFIED' || freshnessLabel(record?.freshUntil) !== 'CURRENT');
+  }), [documents, project.knowledgeGovernance.sources]);
 
   const review = (assetId: string, trust: 'VERIFIED' | 'QUARANTINED') => {
     const horizon = trust === 'VERIFIED' ? Date.now() + 30 * 24 * 60 * 60 * 1000 : undefined;
     ProjectManager.reviewKnowledgeSource(assetId, trust, reviewNote.trim() || undefined, horizon);
+  };
+
+  const supersede = (assetId: string) => {
+    const replacementId = replacementByAsset[assetId];
+    if (!replacementId) return;
+    if (ProjectManager.supersedeKnowledgeSource(assetId, replacementId)) setReplacementByAsset((current) => ({ ...current, [assetId]: '' }));
   };
 
   return (
@@ -25,14 +36,27 @@ export const KnowledgeGovernancePanel: React.FC<Props> = ({ project }) => {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 font-bold text-cyan-300"><BookOpenCheck size={16} /> KNOWLEDGE GOVERNANCE CENTER</div>
-          <div className="mt-1 text-[10px] text-gray-500">Project-scoped source policy, review state, freshness, supersession and provenance history.</div>
+          <div className="mt-1 text-[10px] text-gray-500">Project-scoped source policy, review queue, freshness, supersession and provenance history.</div>
         </div>
         <div className="flex gap-2 text-[9px]">
+          <span className="rounded border border-rose-500/30 bg-rose-950/20 px-2 py-1 text-rose-300">REVIEW QUEUE {reviewQueue.length}</span>
           <span className="rounded border border-emerald-500/30 bg-emerald-950/20 px-2 py-1 text-emerald-300">VERIFIED {documents.filter((asset) => project.knowledgeGovernance.sources[asset.id]?.trust === 'VERIFIED').length}</span>
-          <span className="rounded border border-amber-500/30 bg-amber-950/20 px-2 py-1 text-amber-300">QUARANTINED {documents.filter((asset) => (project.knowledgeGovernance.sources[asset.id]?.trust ?? 'QUARANTINED') === 'QUARANTINED').length}</span>
           <span className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-400">HISTORY {history.length}</span>
         </div>
       </div>
+
+      {reviewQueue.length > 0 && (
+        <div className="rounded-lg border border-rose-500/20 bg-rose-950/10 p-3">
+          <div className="mb-2 flex items-center gap-2 font-bold text-rose-300"><ListChecks size={13} /> SOURCE REVIEW QUEUE</div>
+          <div className="flex flex-wrap gap-2">
+            {reviewQueue.map((asset) => {
+              const record = project.knowledgeGovernance.sources[asset.id];
+              return <span key={`queue-${asset.id}`} className="rounded border border-gray-800 bg-[#111726] px-2 py-1 text-[9px] text-gray-300">{asset.name} · {record?.trust ?? 'QUARANTINED'} · {freshnessLabel(record?.freshUntil)}</span>;
+            })}
+          </div>
+          <div className="mt-2 text-[8px] text-gray-600">Queue is derived from project governance state: quarantined, stale, or never-freshness-reviewed active sources require attention.</div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-gray-800 bg-[#090e17] p-3">
         <label className="mb-1 block text-[9px] font-bold text-gray-500">REVIEW NOTE FOR NEXT TRUST DECISION</label>
@@ -48,6 +72,7 @@ export const KnowledgeGovernancePanel: React.FC<Props> = ({ project }) => {
             const trust = record?.trust ?? (asset.verified ? 'VERIFIED' : 'QUARANTINED');
             const included = record?.included !== false && !record?.supersededByAssetId;
             const freshness = freshnessLabel(record?.freshUntil);
+            const replacementOptions = documents.filter((candidate) => candidate.id !== asset.id && !project.knowledgeGovernance.sources[candidate.id]?.supersededByAssetId);
             return (
               <div key={asset.id} className="rounded-lg border border-gray-800 bg-[#111726] p-3">
                 <div className="flex items-start justify-between gap-4">
@@ -60,15 +85,27 @@ export const KnowledgeGovernancePanel: React.FC<Props> = ({ project }) => {
                     </div>
                     <div className="mt-1 truncate text-[9px] text-gray-500">{asset.filePath || `project-asset://${asset.id}`}</div>
                     {record?.reviewedAt && <div className="mt-1 text-[9px] text-gray-600">Reviewed {new Date(record.reviewedAt).toLocaleString()} {record.reviewNote ? `· ${record.reviewNote}` : ''}</div>}
-                    {record?.supersededByAssetId && <div className="mt-1 text-[9px] text-rose-300">Superseded by asset {record.supersededByAssetId}</div>}
+                    {record?.supersededByAssetId && <div className="mt-1 text-[9px] text-rose-300">Superseded by {documents.find((item) => item.id === record.supersededByAssetId)?.name ?? record.supersededByAssetId}</div>}
                   </div>
 
                   <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                    <button onClick={() => ProjectManager.setKnowledgeSourceIncluded(asset.id, !included)} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-[9px] text-gray-300 hover:border-cyan-500/40 hover:text-cyan-300">{included ? <CircleOff size={10} /> : <CheckCircle2 size={10} />} {included ? 'EXCLUDE' : 'INCLUDE'}</button>
-                    <button onClick={() => review(asset.id, 'VERIFIED')} className="flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-1 text-[9px] text-emerald-300 hover:bg-emerald-950/30"><ShieldCheck size={10} /> VERIFY 30D</button>
-                    <button onClick={() => review(asset.id, 'QUARANTINED')} className="flex items-center gap-1 rounded border border-amber-500/30 px-2 py-1 text-[9px] text-amber-300 hover:bg-amber-950/30"><ShieldAlert size={10} /> QUARANTINE</button>
+                    {!record?.supersededByAssetId && <button onClick={() => ProjectManager.setKnowledgeSourceIncluded(asset.id, !included)} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-[9px] text-gray-300 hover:border-cyan-500/40 hover:text-cyan-300">{included ? <CircleOff size={10} /> : <CheckCircle2 size={10} />} {included ? 'EXCLUDE' : 'INCLUDE'}</button>}
+                    {!record?.supersededByAssetId && <button onClick={() => review(asset.id, 'VERIFIED')} className="flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-1 text-[9px] text-emerald-300 hover:bg-emerald-950/30"><ShieldCheck size={10} /> VERIFY 30D</button>}
+                    {!record?.supersededByAssetId && <button onClick={() => review(asset.id, 'QUARANTINED')} className="flex items-center gap-1 rounded border border-amber-500/30 px-2 py-1 text-[9px] text-amber-300 hover:bg-amber-950/30"><ShieldAlert size={10} /> QUARANTINE</button>}
                   </div>
                 </div>
+
+                {!record?.supersededByAssetId && replacementOptions.length > 0 && (
+                  <div className="mt-3 flex items-center gap-2 border-t border-gray-800 pt-2">
+                    <ArrowRightLeft size={11} className="text-violet-300" />
+                    <span className="text-[9px] text-gray-500">SUPERSEDE WITH</span>
+                    <select value={replacementByAsset[asset.id] ?? ''} onChange={(event) => setReplacementByAsset((current) => ({ ...current, [asset.id]: event.target.value }))} className="min-w-48 rounded border border-gray-700 bg-[#090e17] px-2 py-1 text-[9px] text-gray-300 outline-none">
+                      <option value="">Select replacement source…</option>
+                      {replacementOptions.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                    </select>
+                    <button disabled={!replacementByAsset[asset.id]} onClick={() => supersede(asset.id)} className="rounded border border-violet-500/30 px-2 py-1 text-[9px] text-violet-300 hover:bg-violet-950/30 disabled:cursor-not-allowed disabled:opacity-40">CONFIRM SUPERSESSION</button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -81,7 +118,8 @@ export const KnowledgeGovernancePanel: React.FC<Props> = ({ project }) => {
           <div className="max-h-52 space-y-1.5 overflow-y-auto">
             {history.slice(0, 50).map((event) => {
               const asset = project.assets.find((item) => item.id === event.assetId);
-              return <div key={event.id} className="flex items-start justify-between rounded border border-gray-800 bg-[#111726] p-2 text-[9px]"><div><span className="font-bold text-cyan-300">{event.action}</span><span className="ml-2 text-gray-300">{asset?.name ?? event.assetId}</span><div className="mt-0.5 text-gray-600">{event.note || `${event.actor} governance action`}{event.replacementAssetId ? ` · replacement ${event.replacementAssetId}` : ''}</div></div><div className="flex shrink-0 items-center gap-1 text-gray-600"><Clock3 size={9} />{new Date(event.timestamp).toLocaleString()}</div></div>;
+              const replacement = event.replacementAssetId ? project.assets.find((item) => item.id === event.replacementAssetId) : undefined;
+              return <div key={event.id} className="flex items-start justify-between rounded border border-gray-800 bg-[#111726] p-2 text-[9px]"><div><span className="font-bold text-cyan-300">{event.action}</span><span className="ml-2 text-gray-300">{asset?.name ?? event.assetId}</span><div className="mt-0.5 text-gray-600">{event.note || `${event.actor} governance action`}{replacement ? ` · replacement ${replacement.name}` : event.replacementAssetId ? ` · replacement ${event.replacementAssetId}` : ''}</div></div><div className="flex shrink-0 items-center gap-1 text-gray-600"><Clock3 size={9} />{new Date(event.timestamp).toLocaleString()}</div></div>;
             })}
           </div>
         )}

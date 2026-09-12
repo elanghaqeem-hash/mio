@@ -77,6 +77,9 @@ export async function runProjectKnowledgeIndexTests(): Promise<SuiteResult> {
   check(audit.supported >= 1, 'Evidence audit marks claims with multiple source-term overlaps as SUPPORTED');
   check(audit.unsupported >= 1, 'Evidence audit surfaces response claims without source support as UNSUPPORTED');
   check(audit.claims.some((claim) => claim.evidence.some((item) => item.assetId === 'asset_bcm_1')), 'Evidence claims preserve source lineage back to governed project asset');
+  const evidenceRefs = audit.claims.flatMap((claim) => claim.evidence);
+  check(evidenceRefs.length > 0 && evidenceRefs.every((evidence) => evidence.excerpt.length <= 262), 'Evidence inspector excerpts remain bounded and do not expose full source payloads');
+  check(evidenceRefs.some((evidence) => evidence.sourceUri === 'workspace://ws_test/docs/bcm.md' && evidence.excerpt.includes('recovery time objective')), 'Evidence inspector preserves scoped source URI and a relevant bounded excerpt');
 
   return { passed, total };
 }

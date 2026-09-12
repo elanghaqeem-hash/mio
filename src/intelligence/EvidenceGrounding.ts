@@ -9,6 +9,7 @@ export interface EvidenceReference {
   trust: ApplicationContextSource['trust'];
   freshness: ApplicationContextSource['freshness'];
   overlapTerms: string[];
+  excerpt: string;
 }
 
 export interface EvidenceClaim {
@@ -26,6 +27,7 @@ export interface EvidenceAudit {
 }
 
 const STOP = new Set(['the', 'and', 'that', 'this', 'with', 'from', 'have', 'will', 'your', 'yang', 'dan', 'dari', 'untuk', 'dengan', 'pada', 'dalam', 'adalah', 'akan', 'atau']);
+const MAX_EVIDENCE_EXCERPT_CHARS = 260;
 
 function terms(text: string): string[] {
   return [...new Set(text.toLowerCase().match(/[a-z0-9_-]{4,}/g) ?? [])].filter((term) => !STOP.has(term));
@@ -39,6 +41,16 @@ function sentenceLike(text: string): string[] {
     .slice(0, 24);
 }
 
+function evidenceExcerpt(sourceText: string, overlapTerms: string[]): string {
+  const normalized = sourceText.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= MAX_EVIDENCE_EXCERPT_CHARS) return normalized;
+  const lower = normalized.toLowerCase();
+  const firstMatch = overlapTerms.map((term) => lower.indexOf(term)).filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? 0;
+  const start = Math.max(0, firstMatch - 80);
+  const end = Math.min(normalized.length, start + MAX_EVIDENCE_EXCERPT_CHARS);
+  return `${start > 0 ? '…' : ''}${normalized.slice(start, end)}${end < normalized.length ? '…' : ''}`;
+}
+
 function referenceFor(source: ApplicationContextSource, overlapTerms: string[]): EvidenceReference {
   return {
     assetId: source.assetId,
@@ -47,6 +59,7 @@ function referenceFor(source: ApplicationContextSource, overlapTerms: string[]):
     trust: source.trust,
     freshness: source.freshness,
     overlapTerms,
+    excerpt: evidenceExcerpt(source.text, overlapTerms),
   };
 }
 

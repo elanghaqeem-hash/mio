@@ -5,6 +5,7 @@ import { eventBus } from '../../core/EventBus';
 import { ProjectManager } from '../../project/ProjectManager';
 import { MioCoreState } from '../../types/core';
 import { ModelMessage } from '../../types/models';
+import { EvidenceInspector } from './EvidenceInspector';
 
 const INITIAL_MESSAGE_TIME = Date.now() - 60000;
 
@@ -103,16 +104,7 @@ export const ChatStudioView: React.FC = () => {
 
                   {msg.structured.projectContextEnabled !== undefined && <div className="flex flex-wrap items-center gap-2 text-[9px]"><span className={`rounded border px-2 py-0.5 ${msg.structured.projectContextEnabled ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`}>PROJECT CONTEXT: {msg.structured.projectContextEnabled ? 'ENABLED' : 'DISABLED'}</span><span className="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-400">SOURCES USED: {msg.structured.projectContextSources ?? 0}</span></div>}
 
-                  {msg.structured.evidenceAudit && (
-                    <div className="rounded border border-violet-500/25 bg-violet-950/10 p-2">
-                      <div className="mb-1 font-bold text-violet-300">EVIDENCE AUDIT · {msg.structured.evidenceAudit.method}</div>
-                      <div className="mb-2 flex gap-2 text-[9px]"><span className="text-emerald-300">SUPPORTED {msg.structured.evidenceAudit.supported}</span><span className="text-amber-300">INFERENCE {msg.structured.evidenceAudit.inference}</span><span className="text-rose-300">UNSUPPORTED {msg.structured.evidenceAudit.unsupported}</span></div>
-                      <div className="space-y-1">
-                        {msg.structured.evidenceAudit.claims.slice(0, 6).map((claim, index) => <div key={`${msg.id}-claim-${index}`} className="rounded bg-black/20 p-1.5 text-[9px]"><span className={claim.status === 'SUPPORTED' ? 'text-emerald-300' : claim.status === 'INFERENCE' ? 'text-amber-300' : 'text-rose-300'}>{claim.status}</span><span className="ml-2 text-gray-400">{claim.text}</span></div>)}
-                      </div>
-                      <div className="mt-2 text-[8px] text-gray-600">Lexical support metadata only; this is not a general truth guarantee.</div>
-                    </div>
-                  )}
+                  {msg.structured.evidenceAudit && <EvidenceInspector audit={msg.structured.evidenceAudit} messageId={msg.id} />}
 
                   {msg.structured.knowledgeSources && msg.structured.knowledgeSources.length > 0 && (
                     <div className="rounded border border-gray-800 bg-[#0a0f18] p-2">
