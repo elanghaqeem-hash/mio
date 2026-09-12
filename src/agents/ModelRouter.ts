@@ -2,6 +2,7 @@ import { eventBus } from '../core/EventBus';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
+import { resourceGovernor } from '../orchestrator/ResourceGovernor';
 import { taskRuntime } from '../orchestrator/TaskRuntime';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { NetworkState } from '../types/core';
@@ -27,9 +28,11 @@ export class ModelRouter {
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
+    if (taskId) resourceGovernor.assertCanDispatch(taskId);
 
     if (provider.requiresNetwork && this.networkState !== 'ONLINE') {
       if (!this.config.allowOfflineFallback) throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
+      if (taskId) resourceGovernor.consumeModelCall(taskId, false);
       return this.executeProvider(new LocalHeuristicProvider(), request, timeoutMs);
     }
 
@@ -49,6 +52,7 @@ export class ModelRouter {
     }
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
+    if (taskId) resourceGovernor.consumeModelCall(taskId, provider.requiresNetwork || provider.requiresProxy);
 
     try {
       return await this.executeProvider(provider, request, timeoutMs);
@@ -60,6 +64,7 @@ export class ModelRouter {
         message: `Model provider ${provider.id} unavailable; using explicit offline fallback`,
         mode: 'CHAT',
       });
+      if (taskId) resourceGovernor.consumeModelCall(taskId, false);
       return this.executeProvider(new LocalHeuristicProvider(), request, Math.min(timeoutMs, 5000));
     }
   }
