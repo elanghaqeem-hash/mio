@@ -3,7 +3,7 @@ import { emergencyStop } from '../core/EmergencyStop';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
 import type { TaskPlan } from './TaskPlanner';
-import type { RuntimeTask, RuntimeTaskStep, TaskRuntimeEvent, TaskRuntimeSnapshot, TaskRuntimeStatus } from '../types/tasks';
+import type { RuntimeTask, RuntimeTaskStep, TaskRuntimeEvent, TaskRuntimeSnapshot, TaskRuntimeStatus, TaskStepResultBinding } from '../types/tasks';
 
 const TERMINAL_STATES = new Set<TaskRuntimeStatus>(['COMPLETED', 'FAILED', 'CANCELLED']);
 const RUNTIME_STORAGE_KEY = 'task-runtime-v1';
@@ -71,14 +71,33 @@ class TaskRuntimeController {
 
   public startStep(taskId: string, stepId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status) || task.status === 'PAUSED') return task ? this.clone(task) : undefined;
-    const step = task.steps.find((item) => item.id === stepId); if (!step) return this.clone(task);
+    const stepIndex = task.steps.findIndex((item) => item.id === stepId);
+    if (stepIndex < 0) { this.emitTaskEvent(taskId, 'STEP_BLOCKED', `Unknown planned step ${stepId}`); return this.clone(task); }
+    const step = task.steps[stepIndex];
+    if (step.status !== 'PENDING') { this.emitTaskEvent(taskId, 'STEP_BLOCKED', `Step ${stepId} is ${step.status}, expected PENDING`); return this.clone(task); }
+    const priorIncomplete = task.steps.slice(0, stepIndex).find((item) => item.status !== 'COMPLETED' && item.status !== 'SKIPPED');
+    if (priorIncomplete) { this.emitTaskEvent(taskId, 'STEP_BLOCKED', `Step ${stepId} blocked by prior step ${priorIncomplete.id}:${priorIncomplete.status}`); return this.clone(task); }
+    const otherRunning = task.steps.find((item) => item.status === 'RUNNING');
+    if (otherRunning) { this.emitTaskEvent(taskId, 'STEP_BLOCKED', `Step ${stepId} blocked while ${otherRunning.id} is RUNNING`); return this.clone(task); }
     task.status = step.requiresPermission && task.status === 'WAITING_PERMISSION' ? 'WAITING_PERMISSION' : 'RUNNING';
-    step.status = 'RUNNING'; step.startedAt ??= Date.now(); task.updatedAt = Date.now(); this.recalculateProgress(task); this.emitTaskEvent(taskId, 'STEP_STARTED', step.label); this.publishSnapshot(); return this.clone(task);
+    step.status = 'RUNNING'; step.startedAt = Date.now(); task.updatedAt = Date.now(); this.recalculateProgress(task); this.emitTaskEvent(taskId, 'STEP_STARTED', step.label); this.publishSnapshot(); return this.clone(task);
+  }
+
+  public bindStepResult(taskId: string, stepId: string, binding: Omit<TaskStepResultBinding, 'recordedAt'> & { recordedAt?: number }): RuntimeTask | undefined {
+    const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
+    const step = task.steps.find((item) => item.id === stepId);
+    if (!step || step.status !== 'RUNNING') { this.emitTaskEvent(taskId, 'STEP_BLOCKED', `Result binding rejected for ${stepId}; step is not RUNNING`); return this.clone(task); }
+    step.resultBinding = { ...binding, recordedAt: binding.recordedAt ?? Date.now() };
+    task.updatedAt = Date.now(); this.emitTaskEvent(taskId, 'STEP_RESULT_BOUND', `${stepId} → ${step.resultBinding.kind}:${step.resultBinding.operationId}:${step.resultBinding.outcome}`); this.publishSnapshot(); return this.clone(task);
   }
 
   public completeStep(taskId: string, stepId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
     const step = task.steps.find((item) => item.id === stepId); if (!step || step.status !== 'RUNNING') return this.clone(task);
+    if (step.id === 'execute' && (!step.resultBinding || step.resultBinding.outcome !== 'SUCCESS')) {
+      this.emitTaskEvent(taskId, 'STEP_BLOCKED', 'Execute step cannot complete without a SUCCESS result binding');
+      return this.clone(task);
+    }
     const preservePause = task.status === 'PAUSED';
     step.status = 'COMPLETED'; step.completedAt = Date.now(); task.status = preservePause ? 'PAUSED' : 'RUNNING'; task.updatedAt = Date.now();
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'STEP_COMPLETED', step.label); this.publishSnapshot(); return this.clone(task);
@@ -86,14 +105,15 @@ class TaskRuntimeController {
 
   public complete(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status) || task.status === 'PAUSED') return task ? this.clone(task) : undefined;
-    task.steps.forEach((step) => { if (step.status === 'PENDING' || step.status === 'RUNNING') { step.status = 'COMPLETED'; step.completedAt = Date.now(); } });
+    const incomplete = task.steps.find((step) => step.status !== 'COMPLETED' && step.status !== 'SKIPPED');
+    if (incomplete) { this.emitTaskEvent(taskId, 'COMPLETION_BLOCKED', `Task completion blocked by ${incomplete.id}:${incomplete.status}`); this.publishSnapshot(); return this.clone(task); }
     task.status = 'COMPLETED'; task.progress = 100; task.completedAt = Date.now(); task.updatedAt = task.completedAt; this.cancellationHandlers.delete(taskId);
     this.emitTaskEvent(taskId, 'COMPLETED'); this.publishSnapshot(); return this.clone(task);
   }
 
   public fail(taskId: string, error: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
-    const runningStep = task.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = error; runningStep.completedAt = Date.now(); }
+    const runningStep = task.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = error; runningStep.completedAt = Date.now(); if (!runningStep.resultBinding) runningStep.resultBinding = { kind: runningStep.id === 'execute' ? 'CONTROL' : 'VALIDATION', operationId: `runtime:${runningStep.id}`, outcome: 'FAILED', validationStatus: 'FAILED', recordedAt: Date.now() }; }
     task.status = 'FAILED'; task.error = error; task.completedAt = Date.now(); task.updatedAt = task.completedAt; this.cancellationHandlers.delete(taskId);
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'FAILED', error); this.publishSnapshot(); return this.clone(task);
   }
@@ -101,7 +121,7 @@ class TaskRuntimeController {
   public scheduleRetry(taskId: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || task.status !== 'FAILED' || task.retryCount >= task.maxRetries || emergencyStop.isEmergencyStopped()) return task ? this.clone(task) : undefined;
     task.retryCount += 1; task.status = 'PENDING'; task.error = undefined; task.completedAt = undefined; task.updatedAt = Date.now();
-    task.steps.forEach((step) => { if (step.status === 'FAILED' || step.status === 'RUNNING' || step.status === 'CANCELLED') { step.status = 'PENDING'; step.error = undefined; step.startedAt = undefined; step.completedAt = undefined; } });
+    task.steps.forEach((step) => { step.status = 'PENDING'; step.error = undefined; step.startedAt = undefined; step.completedAt = undefined; step.resultBinding = undefined; });
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'RETRY_SCHEDULED', `Retry ${task.retryCount}/${task.maxRetries}`); this.publishSnapshot(); return this.clone(task);
   }
 
@@ -109,7 +129,7 @@ class TaskRuntimeController {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
     this.cancellationHandlers.get(taskId)?.forEach((handler) => { try { handler(); } catch (error) { console.error(`[TaskRuntime] cancellation handler failed for ${taskId}`, error); } });
     this.cancellationHandlers.delete(taskId); task.status = 'CANCELLED'; task.cancellationReason = reason; task.completedAt = Date.now(); task.updatedAt = task.completedAt;
-    task.steps.forEach((step) => { if (step.status === 'PENDING' || step.status === 'RUNNING') { step.status = 'CANCELLED'; step.completedAt = Date.now(); } });
+    task.steps.forEach((step) => { if (step.status === 'PENDING' || step.status === 'RUNNING') { step.status = 'CANCELLED'; step.completedAt = Date.now(); if (step.status === 'RUNNING' && !step.resultBinding) step.resultBinding = { kind: 'CONTROL', operationId: `runtime:${step.id}`, outcome: 'CANCELLED', recordedAt: Date.now() }; } });
     this.recalculateProgress(task); this.emitTaskEvent(taskId, 'CANCELLED', reason); this.publishSnapshot(); return this.clone(task);
   }
 
@@ -131,10 +151,10 @@ class TaskRuntimeController {
   }
 
   private normalizeRecoveredTask(task: RuntimeTask): RuntimeTask {
-    const normalized: RuntimeTask = { ...task, dependencies: Array.isArray(task.dependencies) ? [...task.dependencies] : [], steps: Array.isArray(task.steps) ? task.steps.map((step) => ({ ...step })) : [], retryCount: Number.isFinite(task.retryCount) ? task.retryCount : 0, maxRetries: Number.isFinite(task.maxRetries) ? task.maxRetries : 1 };
+    const normalized: RuntimeTask = { ...task, dependencies: Array.isArray(task.dependencies) ? [...task.dependencies] : [], steps: Array.isArray(task.steps) ? task.steps.map((step) => ({ ...step, resultBinding: step.resultBinding ? { ...step.resultBinding } : undefined })) : [], retryCount: Number.isFinite(task.retryCount) ? task.retryCount : 0, maxRetries: Number.isFinite(task.maxRetries) ? task.maxRetries : 1 };
     if (!TERMINAL_STATES.has(normalized.status)) {
       const recoveredAt = Date.now(); normalized.status = 'FAILED'; normalized.error = 'Execution interrupted by application/runtime restart. Explicit retry is required.'; normalized.completedAt = recoveredAt; normalized.updatedAt = recoveredAt;
-      const runningStep = normalized.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = 'Interrupted by runtime restart'; runningStep.completedAt = recoveredAt; }
+      const runningStep = normalized.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = 'Interrupted by runtime restart'; runningStep.completedAt = recoveredAt; if (!runningStep.resultBinding) runningStep.resultBinding = { kind: 'CONTROL', operationId: `runtime:${runningStep.id}`, outcome: 'FAILED', validationStatus: 'INTERRUPTED', recordedAt: recoveredAt }; }
     }
     return normalized;
   }
@@ -144,7 +164,7 @@ class TaskRuntimeController {
   private publishSnapshot(): void { eventBus.emit<TaskRuntimeSnapshot>('TASK_RUNTIME_SNAPSHOT', this.snapshot()); if (this.initialized) void this.flush(); }
   private emitTaskEvent(taskId: string, type: TaskRuntimeEvent['type'], details?: string): void { const event: TaskRuntimeEvent = { taskId, type, timestamp: Date.now(), details }; eventBus.emit<TaskRuntimeEvent>('TASK_RUNTIME_EVENT', event); eventBus.emit('ACTIVITY_LOG', { timestamp: event.timestamp, message: `Task ${taskId}: ${type}${details ? ` — ${details}` : ''}`, mode: 'PROJECT' }); }
   private deriveTitle(prompt: string, mode: string): string { const normalized = prompt.trim().replace(/\s+/g, ' '); return normalized.length > 64 ? `${normalized.slice(0, 61)}...` : normalized || `${mode} task`; }
-  private clone(task: RuntimeTask): RuntimeTask { return { ...task, dependencies: [...task.dependencies], steps: task.steps.map((step) => ({ ...step })) }; }
+  private clone(task: RuntimeTask): RuntimeTask { return { ...task, dependencies: [...task.dependencies], steps: task.steps.map((step) => ({ ...step, resultBinding: step.resultBinding ? { ...step.resultBinding } : undefined })) }; }
 }
 
 export const taskRuntime = new TaskRuntimeController();
