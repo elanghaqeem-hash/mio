@@ -151,6 +151,7 @@ function replacementAsset(source: ResearchSource, report: ResearchReport, compar
 
 export class ResearchRevalidation {
   public static queue(project: MioProject = ProjectManager.getProject()): RevalidationQueueItem[] {
+    const priorityOrder: Record<RevalidationQueuePriority, number> = { CRITICAL: 0, HIGH: 1, NORMAL: 2 };
     return activeResearchAssets(project)
       .map((asset) => {
         const sourceFreshness = freshness(project, asset.id);
@@ -171,7 +172,7 @@ export class ResearchRevalidation {
           reason,
         };
       })
-      .sort((a, b) => ({ CRITICAL: 0, HIGH: 1, NORMAL: 2 }[a.priority] - ({ CRITICAL: 0, HIGH: 1, NORMAL: 2 }[b.priority]));
+      .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
   }
 
   public static compare(assetId: string, report: ResearchReport, sourceId: string): RevalidationComparison | null {
