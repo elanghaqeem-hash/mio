@@ -31,6 +31,8 @@ export class ProjectManager {
     if (window.mioDesktop) await window.mioDesktop.saveProject(this.currentProject);
   }
 
+  public static async saveCurrent(): Promise<void> { await this.persist(); }
+
   private static changed(message?: string) {
     this.currentProject.lastModified = Date.now();
     if (message) this.currentProject.activityLog.unshift({ timestamp: Date.now(), message, mode: 'PROJECT' });
@@ -55,7 +57,6 @@ export class ProjectManager {
   }
 
   public static getAssetByType(type: AssetType): ProjectAsset | undefined { return this.currentProject.assets.find((a) => a.type === type); }
-
   public static updateMode(mode: any) { this.currentProject.activeMode = mode; this.changed(); }
 
   public static renameProject(name: string, description?: string) {
@@ -66,8 +67,8 @@ export class ProjectManager {
     this.changed('Updated project metadata');
   }
 
-  public static replaceProject(project: MioProject) {
+  public static replaceProject(project: MioProject, message = 'Project state restored from snapshot') {
     this.currentProject = project;
-    this.changed('Project state restored from snapshot');
+    this.changed(message);
   }
 }
