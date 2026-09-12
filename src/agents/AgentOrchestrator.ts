@@ -3,6 +3,7 @@ import { PermissionEngine } from '../security/PermissionEngine';
 import { eventBus } from '../core/EventBus';
 import { emergencyStop } from '../core/EmergencyStop';
 import { MioSystemMode } from '../types/core';
+import { ModelRouter } from './ModelRouter';
 
 export interface StructuredAgentResponse {
   understanding: string;
@@ -14,138 +15,57 @@ export interface StructuredAgentResponse {
   nextSteps: string[];
   suggestedMode?: MioSystemMode;
   emotionalContext?: string;
+  provider?: string;
 }
 
 export class AgentOrchestrator {
-  /**
-   * Evaluates user prompt and runs the agent operating loop:
-   * PERCEIVE -> UNDERSTAND -> ANALYZE -> PLAN -> ASSESS RISK -> CHECK PERMISSION -> EXECUTE -> VERIFY -> REPORT
-   */
   public static async processPrompt(prompt: string): Promise<StructuredAgentResponse> {
-    if (emergencyStop.isEmergencyStopped()) {
-      return {
-        understanding: 'System is currently under EMERGENCY STOP.',
-        plan: [],
-        permissionStatus: 'BLOCKED',
-        executionSummary: 'Execution aborted.',
-        validationStatus: 'FAILED',
-        resultText: 'All operations are suspended. Please reset Emergency Stop to proceed.',
-        nextSteps: ['Reset Emergency Stop via Top Bar button'],
-      };
-    }
-
+    if (emergencyStop.isEmergencyStopped()) return { understanding: 'System is under EMERGENCY STOP.', plan: [], permissionStatus: 'BLOCKED', executionSummary: 'Execution aborted.', validationStatus: 'FAILED', resultText: 'All operations are suspended until Emergency Stop is reset.', nextSteps: ['Reset Emergency Stop'] };
     eventBus.emit('CORE_STATE_CHANGE', 'THINKING');
 
-    // 1. Policy & Injection Check
     const policyCheck = PolicyEngine.validateInstruction(prompt);
     if (!policyCheck.allowed) {
       eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
-      return {
-        understanding: 'Instruction safety inspection failed.',
-        plan: ['Deny execution'],
-        permissionStatus: 'REJECTED_BY_POLICY',
-        executionSummary: 'Action blocked by Policy Engine.',
-        validationStatus: 'FAILED',
-        resultText: policyCheck.reason || 'Operation rejected by system safety policies.',
-        nextSteps: ['Modify request to comply with security guidelines'],
-      };
+      return { understanding: 'Instruction safety inspection failed.', plan: ['Deny execution'], permissionStatus: 'REJECTED_BY_POLICY', executionSummary: 'Blocked by Policy Engine.', validationStatus: 'FAILED', resultText: policyCheck.reason || 'Operation rejected.', nextSteps: ['Revise the request'] };
     }
 
-    // 2. Emotional Context Detection (Section 7)
-    let emotionalContext: string | undefined;
     const lower = prompt.toLowerCase();
-    if (/stressed|overwhelmed|worried|anxious|tired|frustrated/i.test(lower)) {
-      emotionalContext = 'Detected user stress/frustration. Responding with calm, structured clarity.';
-      eventBus.emit('CORE_STATE_CHANGE', 'EMOTIONAL SUPPORT');
-    }
-
-    // 3. Mode Router Intent Analysis (Section 54)
     let suggestedMode: MioSystemMode = 'CHAT';
-    if (lower.includes('search') || lower.includes('research') || lower.includes('find info') || lower.includes('documentation')) {
-      suggestedMode = 'RESEARCH';
-    } else if (lower.includes('file') || lower.includes('organize') || lower.includes('directory') || lower.includes('duplicate')) {
-      suggestedMode = 'FILES';
-    } else if (lower.includes('motion') || lower.includes('pose') || lower.includes('camera') || lower.includes('gesture')) {
-      suggestedMode = 'MOTION';
-    } else if (lower.includes('3d') || lower.includes('mesh') || lower.includes('model') || lower.includes('geometry')) {
-      suggestedMode = '3D';
-    } else if (lower.includes('animat') || lower.includes('keyframe') || lower.includes('motion path')) {
-      suggestedMode = 'ANIMATION';
-    } else if (lower.includes('poster') || lower.includes('graphic') || lower.includes('layer') || lower.includes('vector') || lower.includes('typography')) {
-      suggestedMode = 'GRAPHIC';
-    } else if (lower.includes('sfx') || lower.includes('sound effect') || lower.includes('synth sound') || lower.includes('laser sound')) {
-      suggestedMode = 'SFX';
-    } else if (lower.includes('music') || lower.includes('piano') || lower.includes('compose') || lower.includes('melody') || lower.includes('bpm')) {
-      suggestedMode = 'MUSIC';
-    } else if (lower.includes('security') || lower.includes('permission') || lower.includes('audit')) {
-      suggestedMode = 'SECURITY';
-    }
+    if (/search|research|find info|documentation/.test(lower)) suggestedMode = 'RESEARCH';
+    else if (/file|organize|directory|duplicate/.test(lower)) suggestedMode = 'FILES';
+    else if (/motion|pose|camera|gesture/.test(lower)) suggestedMode = 'MOTION';
+    else if (/3d|mesh|model|geometry/.test(lower)) suggestedMode = '3D';
+    else if (/animat|keyframe|motion path/.test(lower)) suggestedMode = 'ANIMATION';
+    else if (/poster|graphic|layer|vector|typography/.test(lower)) suggestedMode = 'GRAPHIC';
+    else if (/sfx|sound effect|synth sound|laser sound/.test(lower)) suggestedMode = 'SFX';
+    else if (/music|piano|compose|melody|bpm/.test(lower)) suggestedMode = 'MUSIC';
+    else if (/security|permission|audit/.test(lower)) suggestedMode = 'SECURITY';
 
-    // 4. Permission Check for Sensitive Operations
-    const isSensitive = /delete|overwrite|wipe|publish|upload|network|camera|microphone/i.test(lower);
+    const isSensitive = /delete|overwrite|wipe|publish|upload|network|camera|microphone/.test(lower);
     if (isSensitive) {
-      const approved = await PermissionEngine.requestPermission({
-        action: 'SENSITIVE_TASK_EXECUTION',
-        target: 'System / Workspace',
-        level: 'L5_DESTRUCTIVE',
-        changes: ['Execute requested operation with potential data modification'],
-        risks: ['May overwrite or affect existing files'],
-        expectedResult: 'Execute task under user authorization',
-      });
-
-      if (!approved) {
-        eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
-        return {
-          understanding: `Understood sensitive request: "${prompt}".`,
-          plan: ['Request user approval', 'Halt on user rejection'],
-          permissionStatus: 'REJECTED_BY_USER',
-          executionSummary: 'No changes were made to system or project files.',
-          validationStatus: 'ABORTED',
-          resultText: 'The requested action requires explicit authorization and was cancelled.',
-          nextSteps: ['Confirm permission if you wish to proceed'],
-        };
-      }
+      const approved = await PermissionEngine.requestPermission({ action: 'SENSITIVE_TASK_EXECUTION', target: 'System / Workspace', level: 'L5_DESTRUCTIVE', changes: ['Potential privileged operation'], risks: ['May affect files, network, or device permissions'], expectedResult: 'Proceed only after explicit authorization' });
+      if (!approved) return { understanding: `Sensitive request: "${prompt}"`, plan: ['Require explicit authorization'], permissionStatus: 'REJECTED_BY_USER', executionSummary: 'No privileged operation was executed.', validationStatus: 'ABORTED', resultText: 'The requested action was cancelled or timed out.', nextSteps: ['Approve only if you intend to proceed'], suggestedMode };
     }
 
-    // 5. Synthesis & Logical Reasoning Response
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
-    await new Promise((r) => setTimeout(r, 600));
-
-    let resultText = '';
-    const planSteps: string[] = [
-      'Deconstruct query into core logical propositions',
-      'Examine assumptions and boundary conditions',
-      `Route workflow to designated workspace [${suggestedMode}]`,
-    ];
-
-    if (suggestedMode === 'CHAT') {
-      resultText = `I have analyzed your inquiry with logical decomposition. As an AI system, I operate with transparent epistemics and zero simulated sentimentality. How would you like to structure this discussion or project further?`;
-    } else {
-      resultText = `Task identified for native studio mode [${suggestedMode}]. All project assets remain isolated in your project sandbox and verified against structural integrity requirements.`;
-      planSteps.push(`Configure studio parameters for ${suggestedMode}`);
-      planSteps.push('Validate output against security sandbox policies');
+    const routed = await ModelRouter.generate(prompt);
+    if (!routed.success) {
+      eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
+      return { understanding: `Analyzed directive: "${prompt}"`, plan: [`Route to ${suggestedMode}`, 'Invoke configured AI provider'], permissionStatus: 'AUTHORIZED', executionSummary: `Provider ${routed.provider} failed.`, validationStatus: 'FAILED', resultText: `AI provider error: ${routed.error || 'unknown error'}`, nextSteps: ['Open Settings and test the provider connection'], suggestedMode, provider: routed.provider };
     }
 
     eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
-    setTimeout(() => {
-      if (!emergencyStop.isEmergencyStopped()) {
-        eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
-      }
-    }, 1500);
-
+    setTimeout(() => { if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE'); }, 1200);
     return {
       understanding: `Analyzed directive: "${prompt}"`,
-      plan: planSteps,
+      plan: ['Validate instruction safety', `Route workflow to ${suggestedMode}`, `Use provider ${routed.provider}`],
       permissionStatus: 'AUTHORIZED',
-      executionSummary: `Executed analytical synthesis in ${suggestedMode} mode.`,
-      validationStatus: 'VERIFIED',
-      resultText,
-      nextSteps: [
-        `Navigate to ${suggestedMode} studio workspace to inspect assets`,
-        'Verify parameters or run automated multi-mode pipeline',
-      ],
+      executionSummary: routed.provider === 'local_heuristic' ? 'No external model was invoked.' : `Response generated by configured provider ${routed.provider}.`,
+      validationStatus: routed.provider === 'local_heuristic' ? 'LOCAL_ONLY' : 'PROVIDER_RESPONSE_RECEIVED',
+      resultText: routed.text,
+      nextSteps: suggestedMode === 'CHAT' ? [] : [`Open ${suggestedMode} workspace for native tooling`],
       suggestedMode,
-      emotionalContext,
+      provider: routed.provider,
     };
   }
 }
