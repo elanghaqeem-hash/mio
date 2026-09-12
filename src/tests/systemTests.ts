@@ -77,16 +77,18 @@ export async function runMioTestSuite() {
   const persistedMemory = await testStorage.get<{ enabled: boolean; memories: MemoryItem[] }>('memory', 'long-term-memory');
   assert(persistedMemory?.memories.length === 1 && persistedMemory.memories[0].content.includes('cyan palette'), 'Authorized long-term memory survives storage persistence round-trip');
 
-  const persistenceProject = ProjectManager.createProject('TP 0.16 Persistence Test', 'Storage abstraction validation');
+  const persistenceProject = ProjectManager.createProject('TP 0.17 Persistence Test', 'Storage abstraction validation');
   ProjectManager.addAsset({ name: 'persistence-test.mioart', type: 'graphic', origin: 'GENERATED', filePath: 'GENERATED/GRAPHIC/persistence-test.mioart', data: { width: 100, height: 100, layers: [] }, verified: true });
   const governedDocument = ProjectManager.addAsset({ name: 'governed-source.md', type: 'document', origin: 'IMPORTED', filePath: 'workspace://ws_test/docs/governed-source.md', data: { content: 'Governed project source content.', quarantine: true }, verified: false });
-  ProjectManager.reviewKnowledgeSource(governedDocument.id, 'VERIFIED', 'Reviewed during TP 0.16 test', Date.now() + 86_400_000);
+  ProjectManager.reviewKnowledgeSource(governedDocument.id, 'VERIFIED', 'Reviewed during TP 0.17 test', Date.now() + 86_400_000);
   ProjectManager.setKnowledgeSourceIncluded(governedDocument.id, false);
   await ProjectManager.flush();
   const persistedProject = await testStorage.get<MioProject>('projects', 'current-project');
   assert(persistedProject?.id === persistenceProject.id && persistedProject.assets.length === 2, 'Project workspace and assets persist through StorageProvider');
   const persistedGovernance = persistedProject?.knowledgeGovernance.sources[governedDocument.id];
   assert(Boolean(persistedGovernance) && persistedGovernance?.included === false && persistedGovernance?.trust === 'VERIFIED' && Boolean(persistedGovernance?.reviewedAt), 'Knowledge governance policy survives project storage persistence round-trip');
+  const provenanceActions = persistedProject?.knowledgeGovernance.history.filter((event) => event.assetId === governedDocument.id).map((event) => event.action) ?? [];
+  assert(provenanceActions.includes('REGISTERED') && provenanceActions.includes('REVIEWED') && provenanceActions.includes('EXCLUDED'), 'Knowledge governance provenance history persists registration, review, and exclusion events');
 
   const researchEngine = new ResearchEngine([new MockResearchProvider(), new FailingResearchProvider()]);
   const researchReport = await researchEngine.research('research architecture documentation');
