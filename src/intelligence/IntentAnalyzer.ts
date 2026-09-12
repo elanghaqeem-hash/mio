@@ -11,6 +11,7 @@ export interface IntentAnalysis {
 
 const modeRules: Array<{ mode: MioSystemMode; patterns: RegExp[] }> = [
   { mode: 'RESEARCH', patterns: [/\bsearch\b/i, /\bresearch\b/i, /find info/i, /documentation/i] },
+  { mode: 'PROJECT', patterns: [/project status/i, /project overview/i, /current project/i, /workspace status/i] },
   { mode: 'FILES', patterns: [/\bfile\b/i, /organize/i, /directory/i, /duplicate/i] },
   { mode: 'MOTION', patterns: [/motion/i, /pose/i, /camera/i, /gesture/i] },
   { mode: '3D', patterns: [/\b3d\b/i, /mesh/i, /\bmodel\b/i, /geometry/i] },

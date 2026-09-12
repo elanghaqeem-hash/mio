@@ -5,6 +5,10 @@ import { emergencyStop } from '../core/EmergencyStop';
 import { MioSystemMode } from '../types/core';
 import { IntentAnalyzer } from '../intelligence/IntentAnalyzer';
 import { TaskPlanner } from '../orchestrator/TaskPlanner';
+import { createDefaultToolRegistry } from '../orchestrator/tools/createDefaultToolRegistry';
+import { ToolRouter } from '../orchestrator/tools/ToolRouter';
+import { ProjectManager } from '../project/ProjectManager';
+import { ResearchReport } from '../types/research';
 
 export interface StructuredAgentResponse {
   understanding: string;
@@ -16,17 +20,15 @@ export interface StructuredAgentResponse {
   nextSteps: string[];
   suggestedMode?: MioSystemMode;
   emotionalContext?: string;
+  toolId?: string;
 }
+
+const defaultToolRouter = new ToolRouter(createDefaultToolRegistry());
 
 export class AgentOrchestrator {
   /**
-   * Web Lab TP 0.1 operating loop.
-   *
    * PERCEIVE -> UNDERSTAND -> PLAN -> ASSESS RISK -> CHECK PERMISSION
-   * -> EXECUTE -> VERIFY -> REPORT
-   *
-   * Intent analysis and task planning are deliberately extracted so the same
-   * modules can later be reused by the Electron desktop runtime.
+   * -> SELECT TOOL -> EXECUTE IN SANDBOX -> VERIFY -> REPORT
    */
   public static async processPrompt(prompt: string): Promise<StructuredAgentResponse> {
     if (emergencyStop.isEmergencyStopped()) {
@@ -42,8 +44,6 @@ export class AgentOrchestrator {
     }
 
     eventBus.emit('CORE_STATE_CHANGE', 'THINKING');
-
-    // 1. Central policy / prompt-injection check.
     const policyCheck = PolicyEngine.validateInstruction(prompt);
     if (!policyCheck.allowed) {
       eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
@@ -58,7 +58,6 @@ export class AgentOrchestrator {
       };
     }
 
-    // 2. Lightweight emotional-context signal retained from the existing prototype.
     let emotionalContext: string | undefined;
     const lower = prompt.toLowerCase();
     if (/stressed|overwhelmed|worried|anxious|tired|frustrated/i.test(lower)) {
@@ -66,10 +65,7 @@ export class AgentOrchestrator {
       eventBus.emit('CORE_STATE_CHANGE', 'EMOTIONAL SUPPORT');
     }
 
-    // 3. Intelligence layer: platform-independent intent analysis.
     const intent = IntentAnalyzer.analyze(prompt);
-
-    // 4. Orchestration layer: create an inspectable task plan.
     const taskPlan = TaskPlanner.create(intent);
     const suggestedMode = taskPlan.primaryMode;
 
@@ -79,7 +75,7 @@ export class AgentOrchestrator {
       mode: suggestedMode,
     });
 
-    // 5. Security gate for sensitive operations.
+    // Global high-impact gate remains above individual tool permissions.
     if (intent.sensitive) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       const approved = await PermissionEngine.requestPermission({
@@ -107,37 +103,95 @@ export class AgentOrchestrator {
       }
     }
 
-    // 6. TP 0.1 synthesis. Real provider execution is introduced behind ModelRouter later.
-    eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    const context = {
+      taskId: taskPlan.id,
+      mode: suggestedMode,
+      projectId: ProjectManager.getProject().id,
+      requestedBy: 'AGENT' as const,
+    };
 
-    let resultText: string;
-    if (suggestedMode === 'CHAT') {
-      resultText = 'I have analyzed the request and prepared a structured response path. MIO Web Lab is currently validating the reusable intelligence and orchestration pipeline before deeper provider integration.';
-    } else {
-      resultText = `Task routed to [${suggestedMode}] through the reusable MIO intelligence and orchestration layers. Execution remains constrained by project, permission, and validation boundaries.`;
+    if (suggestedMode === 'RESEARCH') {
+      const toolResult = await defaultToolRouter.execute<ResearchReport>('research.search', { query: intent.normalizedInput }, context);
+      if (!toolResult.success || !toolResult.data) {
+        return this.toolFailureResponse(prompt, taskPlan.steps.map((step) => step.label), suggestedMode, emotionalContext, 'research.search', toolResult.error);
+      }
+
+      eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
+      return {
+        understanding: `Research directive analyzed: "${intent.normalizedInput}"`,
+        plan: taskPlan.steps.map((step) => step.label),
+        permissionStatus: 'AUTHORIZED_BY_TOOL_GATE',
+        executionSummary: `research.search executed through ToolRouter with ${toolResult.data.sources.length} source(s).`,
+        validationStatus: toolResult.validation,
+        resultText: `Research completed with ${toolResult.data.sources.length} source(s), ${toolResult.data.conflicts.length} detected conflict(s), and ${toolResult.data.providerErrors.length} provider error(s). Open the Research workspace to inspect source-level evidence and citations.`,
+        nextSteps: ['Review citations and source reliability in Research workspace', 'Promote any memory candidate only through MemoryPolicy review'],
+        suggestedMode,
+        emotionalContext,
+        toolId: 'research.search',
+      };
     }
 
-    eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
-    setTimeout(() => {
-      if (!emergencyStop.isEmergencyStopped()) {
-        eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
+    if (suggestedMode === 'PROJECT') {
+      const toolResult = await defaultToolRouter.execute<{ id: string; name: string; activeMode: MioSystemMode; assetCount: number; lastModified: number }>('project.inspect', {}, context);
+      if (!toolResult.success || !toolResult.data) {
+        return this.toolFailureResponse(prompt, taskPlan.steps.map((step) => step.label), suggestedMode, emotionalContext, 'project.inspect', toolResult.error);
       }
-    }, 1200);
 
+      eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
+      return {
+        understanding: `Project inspection requested: "${intent.normalizedInput}"`,
+        plan: taskPlan.steps.map((step) => step.label),
+        permissionStatus: 'AUTHORIZED_BY_TOOL_GATE',
+        executionSummary: 'project.inspect executed through ToolRouter.',
+        validationStatus: toolResult.validation,
+        resultText: `Current project: ${toolResult.data.name}. Active mode: ${toolResult.data.activeMode}. Assets: ${toolResult.data.assetCount}.`,
+        nextSteps: ['Open Project workspace for versions, assets, and activity history'],
+        suggestedMode,
+        emotionalContext,
+        toolId: 'project.inspect',
+      };
+    }
+
+    // Capabilities without registered tools remain analysis-only; MIO never fabricates execution.
+    eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
+    const resultText = suggestedMode === 'CHAT'
+      ? 'I have analyzed the request and prepared a structured response path. No external or privileged tool was required.'
+      : `Task mapped to [${suggestedMode}], but no executable tool is registered for this capability in TP 0.4. No system action was performed.`;
+
+    eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
     return {
       understanding: `Analyzed directive: "${intent.normalizedInput}"`,
       plan: taskPlan.steps.map((step) => step.label),
       permissionStatus: intent.sensitive ? 'AUTHORIZED_BY_USER' : 'AUTHORIZED',
-      executionSummary: `Processed TP 0.1 workflow in ${suggestedMode} mode.`,
-      validationStatus: 'VALIDATED_FOR_TECH_PREVIEW',
+      executionSummary: suggestedMode === 'CHAT' ? 'Analysis completed without tool execution.' : 'No registered executable tool; action intentionally not simulated.',
+      validationStatus: 'NO_TOOL_EXECUTED',
       resultText,
-      nextSteps: [
-        `Continue in ${suggestedMode} workspace`,
-        'Persist project context once the Web Lab storage adapter is enabled',
-      ],
+      nextSteps: [`Continue in ${suggestedMode} workspace`],
       suggestedMode,
       emotionalContext,
+    };
+  }
+
+  private static toolFailureResponse(
+    prompt: string,
+    plan: string[],
+    mode: MioSystemMode,
+    emotionalContext: string | undefined,
+    toolId: string,
+    error?: string
+  ): StructuredAgentResponse {
+    eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
+    return {
+      understanding: `Understood directive: "${prompt}"`,
+      plan,
+      permissionStatus: error === 'Permission denied' ? 'REJECTED_BY_USER' : 'TOOL_BLOCKED',
+      executionSummary: `${toolId} did not complete. No result was fabricated.`,
+      validationStatus: 'FAILED',
+      resultText: error ?? `Tool ${toolId} failed safely.`,
+      nextSteps: ['Review permission, tool scope, provider availability, or validation logs'],
+      suggestedMode: mode,
+      emotionalContext,
+      toolId,
     };
   }
 }
