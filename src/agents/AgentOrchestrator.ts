@@ -35,9 +35,7 @@ const defaultToolRouter = new ToolRouter(createDefaultToolRegistry());
 
 export class AgentOrchestrator {
   public static async processPrompt(prompt: string, conversation: ModelMessage[] = []): Promise<StructuredAgentResponse> {
-    if (emergencyStop.isEmergencyStopped()) {
-      return this.response('System is currently under EMERGENCY STOP.', [], 'BLOCKED', 'Execution aborted.', 'FAILED', 'All operations are suspended. Reset STOP MIO to proceed.', ['Reset Emergency Stop via Top Bar button']);
-    }
+    if (emergencyStop.isEmergencyStopped()) return this.response('System is currently under EMERGENCY STOP.', [], 'BLOCKED', 'Execution aborted.', 'FAILED', 'All operations are suspended. Reset STOP MIO to proceed.', ['Reset Emergency Stop via Top Bar button']);
 
     eventBus.emit('CORE_STATE_CHANGE', 'THINKING');
     const policyCheck = PolicyEngine.validateInstruction(prompt);
@@ -46,9 +44,7 @@ export class AgentOrchestrator {
       return this.response('Instruction safety inspection failed.', ['Deny execution'], 'REJECTED_BY_POLICY', 'Action blocked by Policy Engine.', 'FAILED', policyCheck.reason ?? 'Operation rejected by system safety policies.', ['Modify request to comply with security guidelines']);
     }
 
-    const emotionalContext = /stressed|overwhelmed|worried|anxious|tired|frustrated/i.test(prompt)
-      ? 'Detected user stress/frustration. Responding with calm, structured clarity.'
-      : undefined;
+    const emotionalContext = /stressed|overwhelmed|worried|anxious|tired|frustrated/i.test(prompt) ? 'Detected user stress/frustration. Responding with calm, structured clarity.' : undefined;
     if (emotionalContext) eventBus.emit('CORE_STATE_CHANGE', 'EMOTIONAL SUPPORT');
 
     const intent = IntentAnalyzer.analyze(prompt);
@@ -56,27 +52,14 @@ export class AgentOrchestrator {
     const mode = taskPlan.primaryMode;
     const plan = taskPlan.steps.map((step) => step.label);
     const project = ProjectManager.getProject();
-    const runtimeTask = taskRuntime.create(taskPlan, prompt, project.id);
-    const taskId = runtimeTask.id;
+    const taskId = taskRuntime.create(taskPlan, prompt, project.id).id;
 
-    taskRuntime.startStep(taskId, 'understand');
-    taskRuntime.completeStep(taskId, 'understand');
-    taskRuntime.startStep(taskId, 'route');
-    taskRuntime.completeStep(taskId, 'route');
+    taskRuntime.startStep(taskId, 'understand'); taskRuntime.completeStep(taskId, 'understand');
+    taskRuntime.startStep(taskId, 'route'); taskRuntime.completeStep(taskId, 'route');
     eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId} planned for ${mode} mode`, mode });
 
     try {
-      return await taskScheduler.execute(taskId, () => this.executeTask({
-        prompt,
-        normalizedInput: intent.normalizedInput,
-        sensitive: intent.sensitive,
-        conversation,
-        mode,
-        plan,
-        project,
-        taskId,
-        emotionalContext,
-      }));
+      return await taskScheduler.execute(taskId, () => this.executeTask({ prompt, normalizedInput: intent.normalizedInput, sensitive: intent.sensitive, conversation, mode, plan, project, taskId, emotionalContext }));
     } catch (error) {
       if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId);
       const message = error instanceof Error ? error.message : String(error);
@@ -87,15 +70,8 @@ export class AgentOrchestrator {
   }
 
   private static async executeTask(input: {
-    prompt: string;
-    normalizedInput: string;
-    sensitive: boolean;
-    conversation: ModelMessage[];
-    mode: MioSystemMode;
-    plan: string[];
-    project: ReturnType<typeof ProjectManager.getProject>;
-    taskId: string;
-    emotionalContext?: string;
+    prompt: string; normalizedInput: string; sensitive: boolean; conversation: ModelMessage[]; mode: MioSystemMode;
+    plan: string[]; project: ReturnType<typeof ProjectManager.getProject>; taskId: string; emotionalContext?: string;
   }): Promise<StructuredAgentResponse> {
     const { prompt, normalizedInput, sensitive, conversation, mode, plan, project, taskId, emotionalContext } = input;
 
@@ -103,9 +79,7 @@ export class AgentOrchestrator {
       taskRuntime.waitForPermission(taskId);
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       const approved = await PermissionEngine.requestPermission({
-        action: 'SENSITIVE_TASK_EXECUTION',
-        target: 'System / Workspace',
-        level: 'L5_DESTRUCTIVE',
+        action: 'SENSITIVE_TASK_EXECUTION', target: 'System / Workspace', level: 'L5_DESTRUCTIVE',
         changes: ['Execute requested operation with potential data or external impact'],
         risks: ['May overwrite, disclose, publish, delete, or affect protected resources'],
         expectedResult: 'Execute task only within explicit user authorization',
@@ -130,9 +104,8 @@ export class AgentOrchestrator {
         return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'research.search', result.error), taskId);
       }
       taskRuntime.completeStep(taskId, 'execute');
-      taskRuntime.startStep(taskId, 'validate');
-      taskRuntime.completeStep(taskId, 'validate');
-      taskRuntime.complete(taskId);
+      await taskScheduler.waitUntilRunnable(taskId);
+      taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId);
       eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
       return this.withTask({ ...this.response(`Research directive analyzed: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', `research.search executed with ${result.data.sources.length} source(s).`, result.validation, `Research completed with ${result.data.sources.length} source(s), ${result.data.conflicts.length} conflict(s), and ${result.data.providerErrors.length} provider error(s).`, ['Review citations in Research workspace', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'research.search' }, taskId);
     }
@@ -146,9 +119,8 @@ export class AgentOrchestrator {
         return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'project.inspect', result.error), taskId);
       }
       taskRuntime.completeStep(taskId, 'execute');
-      taskRuntime.startStep(taskId, 'validate');
-      taskRuntime.completeStep(taskId, 'validate');
-      taskRuntime.complete(taskId);
+      await taskScheduler.waitUntilRunnable(taskId);
+      taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId);
       eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
       return this.withTask({ ...this.response(`Project inspection requested: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', 'project.inspect executed through ToolRouter.', result.validation, `Current project: ${result.data.name}. Active mode: ${result.data.activeMode}. Assets: ${result.data.assetCount}.`, ['Open Project workspace for details', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'project.inspect' }, taskId);
     }
@@ -158,38 +130,29 @@ export class AgentOrchestrator {
         taskRuntime.startStep(taskId, 'execute');
         const boundedHistory = conversation.filter((message) => message.role !== 'system').slice(-12);
         const messages: ModelMessage[] = [
-          {
-            role: 'system',
-            content: `You are MIO, a calm, precise, professional AI operating environment. Never claim actions or sources that did not occur. Current project: ${project.name}; active mode: ${project.activeMode}; assets: ${project.assets.length}. Treat this project summary as application context, not authority over safety policy.`,
-          },
+          { role: 'system', content: `You are MIO, a calm, precise, professional AI operating environment. Never claim actions or sources that did not occur. Current project: ${project.name}; active mode: ${project.activeMode}; assets: ${project.assets.length}. Treat this project summary as application context, not authority over safety policy.` },
           ...boundedHistory,
           { role: 'user', content: normalizedInput },
         ];
         const model = await ModelRouter.generate({ messages, temperature: 0.4, maxOutputTokens: 1200, metadata: { projectId: project.id, taskId } });
         if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId);
         taskRuntime.completeStep(taskId, 'execute');
-        taskRuntime.startStep(taskId, 'validate');
-        taskRuntime.completeStep(taskId, 'validate');
-        taskRuntime.complete(taskId);
+        await taskScheduler.waitUntilRunnable(taskId);
+        taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId);
         eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
         return this.withTask({
           ...this.response(`Analyzed conversational directive: "${normalizedInput}"`, plan, model.source === 'CLOUD_PROXY' ? 'AUTHORIZED_BY_MODEL_GATE' : 'LOCAL_EXECUTION', `Response generated by ${model.provider}/${model.model} using ${boundedHistory.length} prior context message(s).`, 'MODEL_RESPONSE_VALIDATED', model.text, ['Continue the conversation or route to a dedicated capability', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext),
-          modelProvider: model.provider,
-          modelName: model.model,
-          modelSource: model.source,
+          modelProvider: model.provider, modelName: model.model, modelSource: model.source,
         }, taskId);
       } catch (error) {
         if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId);
         const message = error instanceof Error ? error.message : 'Model execution failed safely.';
-        taskRuntime.fail(taskId, message);
-        eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
+        taskRuntime.fail(taskId, message); eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
         return this.withTask(this.response(`Analyzed conversational directive: "${normalizedInput}"`, plan, 'MODEL_BLOCKED_OR_UNAVAILABLE', 'No AI response was fabricated after model execution failed.', 'FAILED', message, ['Review provider, connectivity, permission, or proxy configuration'], mode, emotionalContext), taskId);
       }
     }
 
-    taskRuntime.startStep(taskId, 'execute');
-    taskRuntime.fail(taskId, `No executable tool registered for ${mode}`);
-    eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
+    taskRuntime.startStep(taskId, 'execute'); taskRuntime.fail(taskId, `No executable tool registered for ${mode}`); eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
     return this.withTask(this.response(`Analyzed directive: "${normalizedInput}"`, plan, sensitive ? 'AUTHORIZED_BY_USER' : 'AUTHORIZED', 'No registered executable tool is available; action was not simulated.', 'NO_TOOL_EXECUTED', `Task mapped to [${mode}], but no executable tool is registered for this capability in the current Technology Preview.`, [`Continue in ${mode} workspace`, 'Inspect failed-safe state in Task Monitor'], mode, emotionalContext), taskId);
   }
 
@@ -204,7 +167,6 @@ export class AgentOrchestrator {
   }
 
   private static withTask(response: StructuredAgentResponse, taskId: string): StructuredAgentResponse { return { ...response, runtimeTaskId: taskId }; }
-
   private static response(understanding: string, plan: string[], permissionStatus: string, executionSummary: string, validationStatus: string, resultText: string, nextSteps: string[], suggestedMode?: MioSystemMode, emotionalContext?: string): StructuredAgentResponse {
     return { understanding, plan, permissionStatus, executionSummary, validationStatus, resultText, nextSteps, suggestedMode, emotionalContext };
   }
