@@ -3,6 +3,8 @@ import { PermissionEngine } from '../security/PermissionEngine';
 import { eventBus } from '../core/EventBus';
 import { emergencyStop } from '../core/EmergencyStop';
 import { MioSystemMode } from '../types/core';
+import { IntentAnalyzer } from '../intelligence/IntentAnalyzer';
+import { TaskPlanner } from '../orchestrator/TaskPlanner';
 
 export interface StructuredAgentResponse {
   understanding: string;
@@ -18,8 +20,13 @@ export interface StructuredAgentResponse {
 
 export class AgentOrchestrator {
   /**
-   * Evaluates user prompt and runs the agent operating loop:
-   * PERCEIVE -> UNDERSTAND -> ANALYZE -> PLAN -> ASSESS RISK -> CHECK PERMISSION -> EXECUTE -> VERIFY -> REPORT
+   * Web Lab TP 0.1 operating loop.
+   *
+   * PERCEIVE -> UNDERSTAND -> PLAN -> ASSESS RISK -> CHECK PERMISSION
+   * -> EXECUTE -> VERIFY -> REPORT
+   *
+   * Intent analysis and task planning are deliberately extracted so the same
+   * modules can later be reused by the Electron desktop runtime.
    */
   public static async processPrompt(prompt: string): Promise<StructuredAgentResponse> {
     if (emergencyStop.isEmergencyStopped()) {
@@ -36,7 +43,7 @@ export class AgentOrchestrator {
 
     eventBus.emit('CORE_STATE_CHANGE', 'THINKING');
 
-    // 1. Policy & Injection Check
+    // 1. Central policy / prompt-injection check.
     const policyCheck = PolicyEngine.validateInstruction(prompt);
     if (!policyCheck.allowed) {
       eventBus.emit('CORE_STATE_CHANGE', 'ERROR');
@@ -51,7 +58,7 @@ export class AgentOrchestrator {
       };
     }
 
-    // 2. Emotional Context Detection (Section 7)
+    // 2. Lightweight emotional-context signal retained from the existing prototype.
     let emotionalContext: string | undefined;
     const lower = prompt.toLowerCase();
     if (/stressed|overwhelmed|worried|anxious|tired|frustrated/i.test(lower)) {
@@ -59,71 +66,56 @@ export class AgentOrchestrator {
       eventBus.emit('CORE_STATE_CHANGE', 'EMOTIONAL SUPPORT');
     }
 
-    // 3. Mode Router Intent Analysis (Section 54)
-    let suggestedMode: MioSystemMode = 'CHAT';
-    if (lower.includes('search') || lower.includes('research') || lower.includes('find info') || lower.includes('documentation')) {
-      suggestedMode = 'RESEARCH';
-    } else if (lower.includes('file') || lower.includes('organize') || lower.includes('directory') || lower.includes('duplicate')) {
-      suggestedMode = 'FILES';
-    } else if (lower.includes('motion') || lower.includes('pose') || lower.includes('camera') || lower.includes('gesture')) {
-      suggestedMode = 'MOTION';
-    } else if (lower.includes('3d') || lower.includes('mesh') || lower.includes('model') || lower.includes('geometry')) {
-      suggestedMode = '3D';
-    } else if (lower.includes('animat') || lower.includes('keyframe') || lower.includes('motion path')) {
-      suggestedMode = 'ANIMATION';
-    } else if (lower.includes('poster') || lower.includes('graphic') || lower.includes('layer') || lower.includes('vector') || lower.includes('typography')) {
-      suggestedMode = 'GRAPHIC';
-    } else if (lower.includes('sfx') || lower.includes('sound effect') || lower.includes('synth sound') || lower.includes('laser sound')) {
-      suggestedMode = 'SFX';
-    } else if (lower.includes('music') || lower.includes('piano') || lower.includes('compose') || lower.includes('melody') || lower.includes('bpm')) {
-      suggestedMode = 'MUSIC';
-    } else if (lower.includes('security') || lower.includes('permission') || lower.includes('audit')) {
-      suggestedMode = 'SECURITY';
-    }
+    // 3. Intelligence layer: platform-independent intent analysis.
+    const intent = IntentAnalyzer.analyze(prompt);
 
-    // 4. Permission Check for Sensitive Operations
-    const isSensitive = /delete|overwrite|wipe|publish|upload|network|camera|microphone/i.test(lower);
-    if (isSensitive) {
+    // 4. Orchestration layer: create an inspectable task plan.
+    const taskPlan = TaskPlanner.create(intent);
+    const suggestedMode = taskPlan.primaryMode;
+
+    eventBus.emit('ACTIVITY_LOG', {
+      timestamp: Date.now(),
+      message: `Task ${taskPlan.id} planned for ${suggestedMode} mode`,
+      mode: suggestedMode,
+    });
+
+    // 5. Security gate for sensitive operations.
+    if (intent.sensitive) {
+      eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       const approved = await PermissionEngine.requestPermission({
         action: 'SENSITIVE_TASK_EXECUTION',
         target: 'System / Workspace',
         level: 'L5_DESTRUCTIVE',
-        changes: ['Execute requested operation with potential data modification'],
-        risks: ['May overwrite or affect existing files'],
-        expectedResult: 'Execute task under user authorization',
+        changes: ['Execute requested operation with potential data or external impact'],
+        risks: ['May overwrite, disclose, publish, delete, or affect protected resources'],
+        expectedResult: 'Execute task only within explicit user authorization',
       });
 
       if (!approved) {
         eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
         return {
           understanding: `Understood sensitive request: "${prompt}".`,
-          plan: ['Request user approval', 'Halt on user rejection'],
+          plan: taskPlan.steps.map((step) => step.label),
           permissionStatus: 'REJECTED_BY_USER',
-          executionSummary: 'No changes were made to system or project files.',
+          executionSummary: 'No changes were made to system or project resources.',
           validationStatus: 'ABORTED',
           resultText: 'The requested action requires explicit authorization and was cancelled.',
-          nextSteps: ['Confirm permission if you wish to proceed'],
+          nextSteps: ['Review the proposed operation and approve only if the scope is correct'],
+          suggestedMode,
+          emotionalContext,
         };
       }
     }
 
-    // 5. Synthesis & Logical Reasoning Response
+    // 6. TP 0.1 synthesis. Real provider execution is introduced behind ModelRouter later.
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((resolve) => setTimeout(resolve, 350));
 
-    let resultText = '';
-    const planSteps: string[] = [
-      'Deconstruct query into core logical propositions',
-      'Examine assumptions and boundary conditions',
-      `Route workflow to designated workspace [${suggestedMode}]`,
-    ];
-
+    let resultText: string;
     if (suggestedMode === 'CHAT') {
-      resultText = `I have analyzed your inquiry with logical decomposition. As an AI system, I operate with transparent epistemics and zero simulated sentimentality. How would you like to structure this discussion or project further?`;
+      resultText = 'I have analyzed the request and prepared a structured response path. MIO Web Lab is currently validating the reusable intelligence and orchestration pipeline before deeper provider integration.';
     } else {
-      resultText = `Task identified for native studio mode [${suggestedMode}]. All project assets remain isolated in your project sandbox and verified against structural integrity requirements.`;
-      planSteps.push(`Configure studio parameters for ${suggestedMode}`);
-      planSteps.push('Validate output against security sandbox policies');
+      resultText = `Task routed to [${suggestedMode}] through the reusable MIO intelligence and orchestration layers. Execution remains constrained by project, permission, and validation boundaries.`;
     }
 
     eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
@@ -131,18 +123,18 @@ export class AgentOrchestrator {
       if (!emergencyStop.isEmergencyStopped()) {
         eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
       }
-    }, 1500);
+    }, 1200);
 
     return {
-      understanding: `Analyzed directive: "${prompt}"`,
-      plan: planSteps,
-      permissionStatus: 'AUTHORIZED',
-      executionSummary: `Executed analytical synthesis in ${suggestedMode} mode.`,
-      validationStatus: 'VERIFIED',
+      understanding: `Analyzed directive: "${intent.normalizedInput}"`,
+      plan: taskPlan.steps.map((step) => step.label),
+      permissionStatus: intent.sensitive ? 'AUTHORIZED_BY_USER' : 'AUTHORIZED',
+      executionSummary: `Processed TP 0.1 workflow in ${suggestedMode} mode.`,
+      validationStatus: 'VALIDATED_FOR_TECH_PREVIEW',
       resultText,
       nextSteps: [
-        `Navigate to ${suggestedMode} studio workspace to inspect assets`,
-        'Verify parameters or run automated multi-mode pipeline',
+        `Continue in ${suggestedMode} workspace`,
+        'Persist project context once the Web Lab storage adapter is enabled',
       ],
       suggestedMode,
       emotionalContext,
