@@ -16,17 +16,18 @@ export class ResearchEngine {
     this.providers = providers;
   }
 
-  public async research(query: string): Promise<ResearchReport> {
+  public async research(query: string, signal?: AbortSignal): Promise<ResearchReport> {
     const plan = QueryPlanner.plan(query);
-    if (!plan.normalizedQuery) {
-      throw new Error('Research query cannot be empty');
-    }
+    if (!plan.normalizedQuery) throw new Error('Research query cannot be empty');
+    if (signal?.aborted) throw new Error('Research cancelled');
 
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
 
     const settled = await Promise.allSettled(
-      this.providers.map(async (provider) => ({ provider, results: await provider.search(plan) }))
+      this.providers.map(async (provider) => ({ provider, results: await provider.search(plan, signal) }))
     );
+
+    if (signal?.aborted) throw new Error('Research cancelled');
 
     const rawResults = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value.results : []));
     const providerErrors = settled.flatMap((item, index) => {
@@ -66,6 +67,7 @@ export class ResearchEngine {
       providerErrors,
     };
 
+    if (signal?.aborted) throw new Error('Research cancelled');
     eventBus.emit('RESEARCH_COMPLETED', report);
     eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
     return report;
