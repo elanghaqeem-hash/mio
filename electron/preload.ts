@@ -21,15 +21,15 @@ export interface MioDesktopAPI {
   onEmergencyStopTriggered(callback: (reason: string) => void): () => void; onNavigate(callback: (mode: string) => void): () => void;
 }
 
-const api: MioDesktopAPI = Object.freeze({
+const api: MioDesktopAPI = {
   minimizeWindow: () => ipcRenderer.invoke(C.WINDOW_MINIMIZE), maximizeWindow: () => ipcRenderer.invoke(C.WINDOW_MAXIMIZE), closeWindow: () => ipcRenderer.invoke(C.WINDOW_CLOSE), isMaximized: () => ipcRenderer.invoke(C.WINDOW_IS_MAXIMIZED),
   getSystemInfo: () => ipcRenderer.invoke(C.GET_SYSTEM_INFO), getAppVersion: () => ipcRenderer.invoke(C.GET_APP_VERSION), getSecurityStatus: () => ipcRenderer.invoke(C.GET_SECURITY_STATUS),
-  showNotification: (o) => ipcRenderer.invoke(C.SHOW_NOTIFICATION, o), triggerEmergencyStop: (r) => ipcRenderer.invoke(C.EMERGENCY_STOP, r), quitApp: () => ipcRenderer.invoke(C.QUIT_APP),
-  selectDirectory: () => ipcRenderer.invoke(C.FS_SELECT_DIRECTORY), getWorkspace: () => ipcRenderer.invoke(C.FS_GET_WORKSPACE), readFile: (p) => ipcRenderer.invoke(C.FS_READ_FILE, p), writeFile: (p, x) => ipcRenderer.invoke(C.FS_WRITE_FILE, p, x), listDirectory: (p) => ipcRenderer.invoke(C.FS_LIST_DIRECTORY, p), moveFile: (a, b) => ipcRenderer.invoke(C.FS_MOVE_FILE, a, b),
-  getDatabaseStatus: () => ipcRenderer.invoke(C.DB_STATUS), getSetting: (k, f) => ipcRenderer.invoke(C.SETTINGS_GET, k, f), setSetting: (k, v) => ipcRenderer.invoke(C.SETTINGS_SET, k, v), loadProject: (id) => ipcRenderer.invoke(C.PROJECT_LOAD, id), saveProject: (p) => ipcRenderer.invoke(C.PROJECT_SAVE, p), listAudit: (l) => ipcRenderer.invoke(C.AUDIT_LIST, l),
-  listProviders: () => ipcRenderer.invoke(C.PROVIDER_LIST), saveProvider: (x) => ipcRenderer.invoke(C.PROVIDER_SAVE, x), removeProvider: (p) => ipcRenderer.invoke(C.PROVIDER_REMOVE, p), testProvider: (p) => ipcRenderer.invoke(C.PROVIDER_TEST, p), generateWithProvider: (p, q) => ipcRenderer.invoke(C.PROVIDER_GENERATE, p, q),
-  onEmergencyStopTriggered: (cb) => { const h = (_e: unknown, r: string) => cb(r); ipcRenderer.on('mio:event:emergencyStop', h); return () => ipcRenderer.removeListener('mio:event:emergencyStop', h); },
-  onNavigate: (cb) => { const h = (_e: unknown, m: string) => cb(m); ipcRenderer.on('mio:navigate', h); return () => ipcRenderer.removeListener('mio:navigate', h); },
-});
+  showNotification: (o: { title: string; body: string; silent?: boolean }) => ipcRenderer.invoke(C.SHOW_NOTIFICATION, o), triggerEmergencyStop: (r: string) => ipcRenderer.invoke(C.EMERGENCY_STOP, r), quitApp: () => ipcRenderer.invoke(C.QUIT_APP),
+  selectDirectory: () => ipcRenderer.invoke(C.FS_SELECT_DIRECTORY), getWorkspace: () => ipcRenderer.invoke(C.FS_GET_WORKSPACE), readFile: (p: string) => ipcRenderer.invoke(C.FS_READ_FILE, p), writeFile: (p: string, x: string) => ipcRenderer.invoke(C.FS_WRITE_FILE, p, x), listDirectory: (p: string) => ipcRenderer.invoke(C.FS_LIST_DIRECTORY, p), moveFile: (a: string, b: string) => ipcRenderer.invoke(C.FS_MOVE_FILE, a, b),
+  getDatabaseStatus: () => ipcRenderer.invoke(C.DB_STATUS), getSetting: (k: string, f?: unknown) => ipcRenderer.invoke(C.SETTINGS_GET, k, f), setSetting: (k: string, v: unknown) => ipcRenderer.invoke(C.SETTINGS_SET, k, v), loadProject: (id: string) => ipcRenderer.invoke(C.PROJECT_LOAD, id), saveProject: (p: unknown) => ipcRenderer.invoke(C.PROJECT_SAVE, p), listAudit: (l?: number) => ipcRenderer.invoke(C.AUDIT_LIST, l),
+  listProviders: () => ipcRenderer.invoke(C.PROVIDER_LIST), saveProvider: (x: unknown) => ipcRenderer.invoke(C.PROVIDER_SAVE, x), removeProvider: (p: string) => ipcRenderer.invoke(C.PROVIDER_REMOVE, p), testProvider: (p: string) => ipcRenderer.invoke(C.PROVIDER_TEST, p), generateWithProvider: (p: string, q: string) => ipcRenderer.invoke(C.PROVIDER_GENERATE, p, q),
+  onEmergencyStopTriggered: (cb: (reason: string) => void) => { const h = (_e: unknown, r: string) => cb(r); ipcRenderer.on('mio:event:emergencyStop', h); return () => ipcRenderer.removeListener('mio:event:emergencyStop', h); },
+  onNavigate: (cb: (mode: string) => void) => { const h = (_e: unknown, m: string) => cb(m); ipcRenderer.on('mio:navigate', h); return () => ipcRenderer.removeListener('mio:navigate', h); },
+};
 
-contextBridge.exposeInMainWorld('mioDesktop', api);
+contextBridge.exposeInMainWorld('mioDesktop', Object.freeze(api));
