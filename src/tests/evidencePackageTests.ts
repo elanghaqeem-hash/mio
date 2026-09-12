@@ -10,22 +10,31 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<TestR
 function projectFixture(): MioProject {
   const now = Date.now();
   return {
-    id: 'evidence_project', name: 'Evidence Project', description: 'Evidence package fixture', activeMode: 'CHAT', createdAt: now, updatedAt: now,
+    id: 'evidence_project',
+    name: 'Evidence Project',
+    description: 'Evidence package fixture',
+    activeMode: 'CHAT',
+    createdAt: now,
+    lastModified: now,
     assets: [
-      { id: 'source_a', name: 'BCM Policy', type: 'document', origin: 'user', version: 1, verified: true, createdAt: now, updatedAt: now, filePath: 'workspace://evidence/bcm-policy.md', data: { content: 'Business continuity recovery target is four hours for critical payment processing. Recovery exercises are performed every quarter.' } },
-      { id: 'source_b', name: 'BCM Review', type: 'document', origin: 'research', version: 1, verified: false, createdAt: now, updatedAt: now, filePath: 'research://example/bcm-review', data: { content: 'Critical payment processing recovery target is six hours according to the external review.', security: { suspicious: false, detectedThreats: [] } } },
+      { id: 'source_a', name: 'BCM Policy', type: 'document', origin: 'IMPORTED', version: 1, verified: true, createdAt: now, updatedAt: now, filePath: 'workspace://evidence/bcm-policy.md', data: { content: 'Business continuity recovery target is four hours for critical payment processing. Recovery exercises are performed every quarter.' } },
+      { id: 'source_b', name: 'BCM Review', type: 'document', origin: 'IMPORTED', version: 1, verified: false, createdAt: now, updatedAt: now, filePath: 'research://example/bcm-review', data: { content: 'Critical payment processing recovery target is six hours according to the external review.', security: { suspicious: false, detectedThreats: [] } } },
     ],
+    references: [],
     versions: [],
+    activityLog: [],
+    securityLog: [],
     knowledgeGovernance: {
       sources: {
-        source_a: { assetId: 'source_a', included: true, trust: 'VERIFIED', freshUntil: now + 86_400_000, priority: 'PRIMARY', upstreamSourceKey: 'policy-master' },
-        source_b: { assetId: 'source_b', included: true, trust: 'QUARANTINED', priority: 'STANDARD', upstreamSourceKey: 'external-review' },
+        source_a: { assetId: 'source_a', included: true, trust: 'VERIFIED', freshUntil: now + 86_400_000, priority: 'PRIMARY', lineage: { upstreamSourceKey: 'policy-master', derivedFromAssetIds: [], reviewedAt: now }, updatedAt: now },
+        source_b: { assetId: 'source_b', included: true, trust: 'QUARANTINED', priority: 'STANDARD', lineage: { upstreamSourceKey: 'external-review', derivedFromAssetIds: [], reviewedAt: now }, updatedAt: now },
       },
       history: [
         { id: 'gov_1', assetId: 'source_a', action: 'REVIEWED', timestamp: now - 1000, actor: 'USER', trust: 'VERIFIED', note: 'Approved for project use' },
       ],
       corroborationGroups: [],
-      conflictResolutions: [],
+      conflictResolutions: {},
+      updatedAt: now,
     },
   };
 }
