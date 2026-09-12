@@ -13,6 +13,13 @@ interface QueueEntry<T = unknown> {
   enqueuedAt: number;
 }
 
+export interface TaskSchedulerSnapshot {
+  queuedTaskIds: string[];
+  activeTaskIds: string[];
+  concurrencyLimit: number;
+  updatedAt: number;
+}
+
 export class TaskScheduler {
   private readonly queue: QueueEntry[] = [];
   private readonly active = new Set<string>();
@@ -31,6 +38,7 @@ export class TaskScheduler {
 
   public setConcurrencyLimit(limit: number): void {
     this.concurrencyLimit = Math.max(1, Math.floor(limit));
+    this.publish();
     this.pump();
   }
 
@@ -38,6 +46,7 @@ export class TaskScheduler {
   public getActiveTaskIds(): string[] { return Array.from(this.active); }
   public getQueuedTaskIds(): string[] { return this.queue.map((entry) => entry.taskId); }
   public canRetry(taskId: string): boolean { return this.runnerRegistry.has(taskId) && taskRuntime.get(taskId)?.status === 'FAILED'; }
+  public snapshot(): TaskSchedulerSnapshot { return { queuedTaskIds: this.getQueuedTaskIds(), activeTaskIds: this.getActiveTaskIds(), concurrencyLimit: this.concurrencyLimit, updatedAt: Date.now() }; }
 
   public execute<T>(taskId: string, runner: QueueRunner<T>): Promise<T> {
     if (emergencyStop.isEmergencyStopped()) return Promise.reject(new Error('STOP MIO is active'));
@@ -60,12 +69,14 @@ export class TaskScheduler {
     return new Promise<T>((resolve, reject) => {
       this.queue.push({ taskId, runner, resolve, reject, enqueuedAt: Date.now() });
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId}: QUEUED`, mode: 'PROJECT' });
+      this.publish();
       this.pump();
     });
   }
 
   private pump(): void {
     if (emergencyStop.isEmergencyStopped()) return;
+    let changed = false;
     for (let index = 0; index < this.queue.length && this.active.size < this.concurrencyLimit;) {
       const entry = this.queue[index];
       const runtimeTask = taskRuntime.get(entry.taskId);
@@ -73,6 +84,7 @@ export class TaskScheduler {
       if (!runtimeTask || runtimeTask.status === 'CANCELLED') {
         this.queue.splice(index, 1);
         entry.reject(new Error('Task is no longer executable'));
+        changed = true;
         continue;
       }
       if (runtimeTask.status === 'PAUSED' || !taskRuntime.dependenciesSatisfied(entry.taskId)) {
@@ -84,8 +96,10 @@ export class TaskScheduler {
       this.active.add(entry.taskId);
       taskRuntime.start(entry.taskId);
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${entry.taskId}: DISPATCHED`, mode: 'PROJECT' });
+      changed = true;
       void this.runEntry(entry);
     }
+    if (changed) this.publish();
   }
 
   private async runEntry<T>(entry: QueueEntry<T>): Promise<void> {
@@ -97,6 +111,7 @@ export class TaskScheduler {
       entry.reject(error);
     } finally {
       this.active.delete(entry.taskId);
+      this.publish();
       this.pump();
     }
   }
@@ -106,12 +121,16 @@ export class TaskScheduler {
     if (index < 0) return;
     const [entry] = this.queue.splice(index, 1);
     entry.reject(error);
+    this.publish();
   }
 
   private rejectAllQueued(error: Error): void {
     const pending = this.queue.splice(0, this.queue.length);
     pending.forEach((entry) => entry.reject(error));
+    this.publish();
   }
+
+  private publish(): void { eventBus.emit<TaskSchedulerSnapshot>('TASK_SCHEDULER_UPDATED', this.snapshot()); }
 }
 
 export const taskScheduler = new TaskScheduler(2);
