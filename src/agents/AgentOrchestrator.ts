@@ -78,16 +78,37 @@ export class AgentOrchestrator {
     if (sensitive) {
       taskRuntime.waitForPermission(taskId);
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
-      const approved = await PermissionEngine.requestPermission({
-        action: 'SENSITIVE_TASK_EXECUTION', target: 'System / Workspace', level: 'L5_DESTRUCTIVE',
+      const grant = await PermissionEngine.requestScopedPermission({
+        action: 'SENSITIVE_TASK_EXECUTION',
+        target: `Project ${project.id}`,
+        level: 'L5_DESTRUCTIVE',
         changes: ['Execute requested operation with potential data or external impact'],
         risks: ['May overwrite, disclose, publish, delete, or affect protected resources'],
         expectedResult: 'Execute task only within explicit user authorization',
+        taskId,
+        projectId: project.id,
+        resourceId: `project:${project.id}`,
+        ttlMs: 30_000,
+        maxUses: 1,
+        forceDryRun: true,
       });
-      if (!approved) {
+      if (!grant) {
         taskRuntime.cancel(taskId, 'User denied sensitive-operation permission');
         eventBus.emit('CORE_STATE_CHANGE', 'WARNING');
         return this.withTask(this.response(`Understood sensitive request: "${prompt}".`, plan, 'REJECTED_BY_USER', 'No changes were made.', 'ABORTED', 'The requested action requires explicit authorization and was cancelled.', ['Review and approve only if scope is correct'], mode, emotionalContext), taskId);
+      }
+      const validSensitiveScope = PermissionEngine.validateGrant(grant.id, {
+        taskId,
+        projectId: project.id,
+        action: 'SENSITIVE_TASK_EXECUTION',
+        target: `Project ${project.id}`,
+        resourceId: `project:${project.id}`,
+        networkAllowed: false,
+      });
+      if (!validSensitiveScope) {
+        PermissionEngine.revokeGrant(grant.id, 'Sensitive task scope validation failed');
+        taskRuntime.cancel(taskId, 'Scoped authorization mismatch');
+        return this.withTask(this.response(`Sensitive directive blocked: "${prompt}".`, plan, 'SCOPE_MISMATCH', 'No changes were made.', 'BLOCKED', 'Authorization grant did not match the task/project scope.', ['Review the dry-run scope before approving again'], mode, emotionalContext), taskId);
       }
       if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId);
       taskRuntime.start(taskId);
