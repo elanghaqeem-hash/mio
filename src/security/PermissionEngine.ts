@@ -21,17 +21,14 @@ export class PermissionEngine {
 
     const reusable = this.findReusableGrant(request.level, scope);
     if (reusable) {
-      const consumed = this.consumeGrant(reusable.id, scope);
-      if (consumed) {
-        this.emitPermissionEvent(request, scope, false, `Reused bounded grant ${consumed.id}; use=${consumed.uses}/${consumed.maxUses}`);
-        return consumed;
-      }
+      this.emitPermissionEvent(request, scope, false, `Reusing bounded grant ${reusable.id}; remaining=${reusable.maxUses - reusable.uses}`);
+      return this.cloneGrant(reusable);
     }
 
     const forceDryRun = request.forceDryRun === true || request.level === 'L4_EXECUTE' || request.level === 'L5_DESTRUCTIVE';
     if (!forceDryRun) {
       const grant = this.issueGrant(request, scope, 'AUTO_POLICY');
-      this.emitPermissionEvent(request, scope, false, `System policy issued scoped grant ${grant.id}; use=${grant.uses}/${grant.maxUses}`);
+      this.emitPermissionEvent(request, scope, false, `System policy issued scoped grant ${grant.id}; remaining=${grant.maxUses - grant.uses}`);
       return grant;
     }
 
@@ -54,7 +51,7 @@ export class PermissionEngine {
         maxUses,
         onApprove: () => {
           const grant = this.issueGrant({ ...request, ttlMs, maxUses }, scope, 'USER_APPROVAL');
-          this.emitPermissionEvent(request, scope, false, `User approved bounded grant ${grant.id}; expires=${new Date(grant.expiresAt).toISOString()}; use=${grant.uses}/${grant.maxUses}`);
+          this.emitPermissionEvent(request, scope, false, `User approved bounded grant ${grant.id}; expires=${new Date(grant.expiresAt).toISOString()}; maxUses=${grant.maxUses}`);
           resolve(grant);
         },
         onReview: () => {
@@ -80,11 +77,13 @@ export class PermissionEngine {
     this.pruneExpired();
     const grant = this.grants.get(grantId);
     if (!grant || !this.grantCanAuthorize(grant, required)) return null;
+
     grant.uses += 1;
     if (grant.uses >= grant.maxUses) {
       grant.revoked = true;
       grant.revokeReason = 'Grant use limit exhausted';
     }
+    eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
     return this.cloneGrant(grant);
   }
 
@@ -97,7 +96,7 @@ export class PermissionEngine {
   public static getActiveGrants(taskId?: string): AuthorizationGrant[] {
     this.pruneExpired();
     return [...this.grants.values()]
-      .filter((grant) => !grant.revoked && (!taskId || grant.scope.taskId === taskId))
+      .filter((grant) => !grant.revoked && grant.uses < grant.maxUses && (!taskId || grant.scope.taskId === taskId))
       .map((grant) => this.cloneGrant(grant));
   }
 
@@ -114,7 +113,7 @@ export class PermissionEngine {
   public static revokeTaskGrants(taskId: string, reason: string = 'Task authorization revoked'): number {
     let revoked = 0;
     for (const grant of this.grants.values()) {
-      if (grant.scope.taskId === taskId && !grant.revoked) {
+      if (grant.scope.taskId === taskId && !grant.revoked && grant.uses < grant.maxUses) {
         grant.revoked = true;
         grant.revokeReason = reason;
         revoked += 1;
@@ -130,7 +129,7 @@ export class PermissionEngine {
   public static revokeAll(reason: string = 'All authorization grants revoked'): number {
     let revoked = 0;
     for (const grant of this.grants.values()) {
-      if (!grant.revoked) {
+      if (!grant.revoked && grant.uses < grant.maxUses) {
         grant.revoked = true;
         grant.revokeReason = reason;
         revoked += 1;
@@ -175,13 +174,9 @@ export class PermissionEngine {
       revoked: false,
       source,
       maxUses,
-      uses: 1,
+      uses: 0,
       requiresDryRun: source === 'USER_APPROVAL',
     };
-    if (grant.uses >= grant.maxUses) {
-      grant.revoked = true;
-      grant.revokeReason = 'Grant use limit exhausted by approved action';
-    }
     this.grants.set(grant.id, grant);
     eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
     return this.cloneGrant(grant);
