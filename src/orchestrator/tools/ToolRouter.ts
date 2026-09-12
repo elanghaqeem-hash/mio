@@ -1,4 +1,5 @@
 import { eventBus } from '../../core/EventBus';
+import { defaultCapabilityRegistry, CapabilityRegistry } from '../../security/CapabilityRegistry';
 import { taskRuntime } from '../TaskRuntime';
 import { resourceGovernor } from '../../security/ResourceGovernor';
 import { PermissionEngine } from '../../security/PermissionEngine';
@@ -10,7 +11,10 @@ import { ToolExecutionContext, ToolResult } from '../../types/tools';
 import { ToolRegistry } from './ToolRegistry';
 
 export class ToolRouter {
-  constructor(private readonly registry: ToolRegistry) {}
+  constructor(
+    private readonly registry: ToolRegistry,
+    private readonly capabilities: CapabilityRegistry = defaultCapabilityRegistry,
+  ) {}
 
   public async execute<T = unknown>(toolId: string, input: unknown, context: ToolExecutionContext): Promise<ToolResult<T>> {
     const startedAt = Date.now();
@@ -21,15 +25,27 @@ export class ToolRouter {
       return { success: false, toolId, startedAt, completedAt: Date.now(), error: `Tool '${toolId}' is not registered`, validation: 'FAILED' };
     }
 
+    const capability = this.capabilities.authorize(tool.id, {
+      taskId: context.taskId,
+      mode: context.mode,
+      projectId: context.projectId,
+      requestedBy: context.requestedBy,
+      toolId: tool.id,
+      resourceId: context.resourceId ?? `tool:${tool.id}`,
+      path: context.path,
+      networkOrigin: context.networkOrigin,
+    });
+    if (!capability.allowed || !capability.descriptor) {
+      const reason = capability.reason ?? 'Capability manifest rejected tool execution';
+      this.audit('blocked', 'TOOL_EXECUTION', tool.id, reason, true);
+      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: reason, validation: 'FAILED' };
+    }
+    const manifest = capability.descriptor;
+
     const policyCheck = PolicyEngine.validateInstruction(`${tool.id} ${JSON.stringify(input)}`);
     if (!policyCheck.allowed) {
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, policyCheck.reason ?? 'Tool request rejected by policy', true);
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: policyCheck.reason ?? 'Policy rejected tool request', validation: 'FAILED' };
-    }
-
-    if (!tool.modes.includes(context.mode)) {
-      this.audit('blocked', 'TOOL_EXECUTION', tool.id, `Tool not authorized for mode ${context.mode}`, true);
-      return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: `Tool '${tool.id}' is not available in ${context.mode} mode`, validation: 'FAILED' };
     }
 
     if (!tool.validateInput(input)) {
@@ -52,7 +68,7 @@ export class ToolRouter {
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, preflight.reason ?? 'Resource budget blocked tool execution', true);
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: preflight.reason ?? 'Resource budget blocked tool execution', validation: 'FAILED' };
     }
-    if (tool.networkAccess) {
+    if (manifest.networkAccess) {
       const networkPreflight = resourceGovernor.authorize(context.taskId, 'NETWORK_CALL', context.mode);
       if (!networkPreflight.allowed) {
         this.audit('blocked', 'TOOL_EXECUTION', tool.id, networkPreflight.reason ?? 'Resource budget blocked network access', true);
@@ -60,7 +76,7 @@ export class ToolRouter {
       }
     }
 
-    const permissionGated = tool.permissionLevel === 'L4_EXECUTE' || tool.permissionLevel === 'L5_DESTRUCTIVE';
+    const permissionGated = manifest.permissionLevel === 'L4_EXECUTE' || manifest.permissionLevel === 'L5_DESTRUCTIVE';
     if (permissionGated) {
       eventBus.emit('CORE_STATE_CHANGE', 'WAITING_PERMISSION');
       taskRuntime.waitForPermission(context.taskId);
@@ -73,20 +89,26 @@ export class ToolRouter {
       action: `TOOL:${tool.id}`,
       target,
       toolId: tool.id,
-      networkAllowed: tool.networkAccess === true,
+      resourceId: context.resourceId,
+      path: context.path,
+      networkOrigin: context.networkOrigin,
+      networkAllowed: manifest.networkAccess,
     };
     const grant = await PermissionEngine.requestScopedPermission({
       action: requiredScope.action,
       target,
-      level: tool.permissionLevel,
-      changes: [`Execute tool ${tool.id}`],
-      risks: [`Risk level: ${tool.riskLevel}`, ...(tool.networkAccess ? ['Tool may access network resources'] : [])],
-      expectedResult: tool.description,
+      level: manifest.permissionLevel,
+      changes: [`Execute capability ${tool.id}`],
+      risks: [`Manifest risk level: ${manifest.riskLevel}`, ...(manifest.networkAccess ? ['Capability may access network resources'] : [])],
+      expectedResult: manifest.description,
       taskId: context.taskId,
       projectId: context.projectId,
       toolId: tool.id,
-      networkAccess: tool.networkAccess === true,
-      ttlMs: Math.max(15_000, Math.min(tool.timeoutMs + 10_000, 120_000)),
+      resourceId: context.resourceId,
+      path: context.path,
+      networkAccess: manifest.networkAccess,
+      networkOrigin: context.networkOrigin,
+      ttlMs: Math.max(15_000, Math.min(manifest.timeoutMs + 10_000, 120_000)),
       maxUses: 1,
     });
 
@@ -101,7 +123,7 @@ export class ToolRouter {
       return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Task cancelled before tool execution', validation: 'FAILED' };
     }
 
-    const resourceDecision = resourceGovernor.consumeToolCall(context.taskId, tool.networkAccess === true, context.mode);
+    const resourceDecision = resourceGovernor.consumeToolCall(context.taskId, manifest.networkAccess, context.mode);
     if (!resourceDecision.allowed) {
       PermissionEngine.revokeGrant(grant.id, 'Resource budget blocked tool execution');
       this.audit('blocked', 'TOOL_EXECUTION', tool.id, resourceDecision.reason ?? 'Resource budget blocked tool execution', true);
@@ -121,12 +143,23 @@ export class ToolRouter {
         async () => {
           const consumed = PermissionEngine.consumeGrant(grant.id, requiredScope);
           if (!consumed) throw new Error('Scoped authorization expired, was revoked, or no longer matches execution scope');
+          const runtimeCapability = this.capabilities.authorize(tool.id, {
+            taskId: context.taskId,
+            mode: context.mode,
+            projectId: context.projectId,
+            requestedBy: context.requestedBy,
+            toolId: tool.id,
+            resourceId: context.resourceId ?? `tool:${tool.id}`,
+            path: context.path,
+            networkOrigin: context.networkOrigin,
+          });
+          if (!runtimeCapability.allowed) throw new Error(runtimeCapability.reason ?? 'Capability became unavailable before execution');
           if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
           const result = await tool.execute(input, executionContext) as T;
           if (abortController.signal.aborted) throw new Error('Tool execution cancelled');
           return result;
         },
-        tool.timeoutMs
+        manifest.timeoutMs
       );
 
       const outputValid = tool.validateOutput ? tool.validateOutput(output) : true;
@@ -136,7 +169,7 @@ export class ToolRouter {
         return { success: false, toolId: tool.id, startedAt, completedAt: Date.now(), error: 'Tool output validation failed', validation: 'FAILED' };
       }
 
-      this.audit('info', 'TOOL_EXECUTION', tool.id, `Tool executed successfully for task ${context.taskId} under bounded grant ${grant.id}`, false);
+      this.audit('info', 'TOOL_EXECUTION', tool.id, `Capability executed successfully for task ${context.taskId} under bounded grant ${grant.id}`, false);
       return { success: true, toolId: tool.id, startedAt, completedAt: Date.now(), data: output, validation: tool.validateOutput ? 'PASSED' : 'NOT_REQUIRED' };
     } catch (error) {
       const message = abortController.signal.aborted ? 'Tool execution cancelled' : error instanceof Error ? error.message : String(error);
