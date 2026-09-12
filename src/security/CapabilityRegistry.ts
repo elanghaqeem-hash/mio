@@ -29,14 +29,15 @@ export class CapabilityRegistry {
 
   public authorize(capabilityId: string, context: CapabilityExecutionContext): CapabilityDecision {
     const descriptor = this.capabilities.get(capabilityId);
-    if (!descriptor) return this.deny(capabilityId, 'Capability is not registered in the MIO manifest');
-    if (descriptor.availability !== 'AVAILABLE') return this.deny(capabilityId, 'Capability is declared unavailable in this runtime', descriptor);
-    if (!descriptor.modes.includes(context.mode)) return this.deny(capabilityId, `Capability is not authorized in ${context.mode} mode`, descriptor);
-    if (descriptor.scopeFields.includes('TASK') && !context.taskId) return this.deny(capabilityId, 'Task scope is required', descriptor);
-    if (descriptor.scopeFields.includes('PROJECT') && !context.projectId) return this.deny(capabilityId, 'Project scope is required', descriptor);
-    if (descriptor.scopeFields.includes('RESOURCE') && !context.resourceId) return this.deny(capabilityId, 'Resource scope is required', descriptor);
-    if (descriptor.scopeFields.includes('PATH') && !context.path) return this.deny(capabilityId, 'Path scope is required', descriptor);
-    if (descriptor.scopeFields.includes('NETWORK_ORIGIN') && !context.networkOrigin) return this.deny(capabilityId, 'Network-origin scope is required', descriptor);
+    if (!descriptor) return this.deny(capabilityId, 'Capability is not registered in the MIO manifest', context);
+    if (descriptor.availability !== 'AVAILABLE') return this.deny(capabilityId, 'Capability is declared unavailable in this runtime', context, descriptor);
+    if (!descriptor.modes.includes(context.mode)) return this.deny(capabilityId, `Capability is not authorized in ${context.mode} mode`, context, descriptor);
+    if (descriptor.scopeFields.includes('TASK') && !context.taskId) return this.deny(capabilityId, 'Task scope is required', context, descriptor);
+    if (descriptor.scopeFields.includes('PROJECT') && !context.projectId) return this.deny(capabilityId, 'Project scope is required', context, descriptor);
+    if (descriptor.scopeFields.includes('TOOL') && context.toolId !== capabilityId) return this.deny(capabilityId, 'Tool identity does not match the capability manifest', context, descriptor);
+    if (descriptor.scopeFields.includes('RESOURCE') && !context.resourceId) return this.deny(capabilityId, 'Resource scope is required', context, descriptor);
+    if (descriptor.scopeFields.includes('PATH') && !context.path) return this.deny(capabilityId, 'Path scope is required', context, descriptor);
+    if (descriptor.scopeFields.includes('NETWORK_ORIGIN') && !context.networkOrigin) return this.deny(capabilityId, 'Network-origin scope is required', context, descriptor);
 
     const decision: CapabilityDecision = { allowed: true, capabilityId, descriptor: this.clone(descriptor) };
     eventBus.emit('CAPABILITY_DECISION', { ...decision, taskId: context.taskId, mode: context.mode, timestamp: Date.now() });
@@ -57,9 +58,9 @@ export class CapabilityRegistry {
     if (toolModes !== manifestModes) throw new Error(`Tool '${tool.id}' mode metadata differs from capability manifest`);
   }
 
-  private deny(capabilityId: string, reason: string, descriptor?: CapabilityDescriptor): CapabilityDecision {
+  private deny(capabilityId: string, reason: string, context?: CapabilityExecutionContext, descriptor?: CapabilityDescriptor): CapabilityDecision {
     const decision: CapabilityDecision = { allowed: false, capabilityId, reason, descriptor: descriptor ? this.clone(descriptor) : undefined };
-    eventBus.emit('CAPABILITY_DECISION', { ...decision, timestamp: Date.now() });
+    eventBus.emit('CAPABILITY_DECISION', { ...decision, taskId: context?.taskId, mode: context?.mode, timestamp: Date.now() });
     return decision;
   }
 
