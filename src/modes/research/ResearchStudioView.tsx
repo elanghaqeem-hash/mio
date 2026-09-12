@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Database, ExternalLink, FileText, Globe2, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Database, ExternalLink, FileText, Globe2, RefreshCw, Search, ShieldAlert } from 'lucide-react';
 import { ResearchEngine } from '../../research/ResearchEngine';
 import { ResearchKnowledgePromotion } from '../../research/ResearchKnowledgePromotion';
+import { ResearchRevalidation, type RevalidationQueueItem } from '../../research/ResearchRevalidation';
 import { ResearchReport } from '../../types/research';
 
 export const ResearchStudioView: React.FC = () => {
@@ -11,6 +12,7 @@ export const ResearchStudioView: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promotionState, setPromotionState] = useState<Record<string, string>>({});
+  const [revalidationQueue, setRevalidationQueue] = useState<RevalidationQueueItem[]>(() => ResearchRevalidation.queue());
 
   const handleSearch = async () => {
     if (!query.trim() || isSearching) return;
@@ -29,9 +31,16 @@ export const ResearchStudioView: React.FC = () => {
   const promote = (sourceId: string) => {
     if (!report) return;
     const result = ResearchKnowledgePromotion.promote(report, sourceId);
-    if (result.status === 'PROMOTED') setPromotionState((current) => ({ ...current, [sourceId]: 'PROMOTED · PROJECT TRUST = QUARANTINED' }));
-    else if (result.status === 'ALREADY_PROMOTED') setPromotionState((current) => ({ ...current, [sourceId]: 'ALREADY PROMOTED · GOVERNED IN PROJECT' }));
+    if (result.status === 'PROMOTED') {
+      setPromotionState((current) => ({ ...current, [sourceId]: 'PROMOTED · PROJECT TRUST = QUARANTINED' }));
+      setRevalidationQueue(ResearchRevalidation.queue());
+    } else if (result.status === 'ALREADY_PROMOTED') setPromotionState((current) => ({ ...current, [sourceId]: 'ALREADY PROMOTED · GOVERNED IN PROJECT' }));
     else setPromotionState((current) => ({ ...current, [sourceId]: 'PROMOTION FAILED · SOURCE NOT FOUND' }));
+  };
+
+  const startRevalidation = (sourceUrl: string) => {
+    setQuery(sourceUrl || 'latest source update');
+    setError('REVALIDATION READY · Run RESEARCH explicitly, compare the refreshed result, then choose a governed decision. No background refresh has been performed.');
   };
 
   return (
@@ -43,6 +52,31 @@ export const ResearchStudioView: React.FC = () => {
         </div>
         <span className="text-gray-500 text-[10px]">EXTERNAL CONTENT = UNTRUSTED DATA</span>
       </div>
+
+      {revalidationQueue.length > 0 && (
+        <div className="mb-4 rounded-xl border border-violet-500/30 bg-violet-950/10 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-violet-300"><RefreshCw size={13} /> SOURCE REVALIDATION QUEUE ({revalidationQueue.length})</div>
+            <span className="text-[9px] text-gray-500">ADVISORY ONLY · USER-INITIATED REFRESH REQUIRED</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {revalidationQueue.slice(0, 6).map((item) => (
+              <div key={item.assetId} className="rounded border border-gray-800 bg-[#111726] p-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-bold text-gray-200">{item.assetName}</div>
+                    <div className="mt-1 truncate text-[9px] text-gray-500">{item.sourceUrl}</div>
+                  </div>
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${item.priority === 'CRITICAL' ? 'border-rose-500/30 text-rose-300' : item.priority === 'HIGH' ? 'border-amber-500/30 text-amber-300' : 'border-gray-700 text-gray-400'}`}>{item.priority}</span>
+                </div>
+                <div className="mt-2 text-[9px] text-gray-400">Freshness {item.freshness} · {item.advisory}</div>
+                <div className="mt-1 text-[9px] text-gray-600">{item.reason}</div>
+                <button onClick={() => startRevalidation(item.sourceUrl)} className="mt-2 flex items-center gap-1 rounded border border-violet-500/30 px-2 py-1 text-[9px] font-bold text-violet-300 hover:bg-violet-950/30"><RefreshCw size={10} /> PREPARE CONTROLLED REFRESH</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4">
         <div className="flex-1 flex items-center gap-2 bg-[#0d121d] border border-gray-700 focus-within:border-cyan-400 rounded-lg px-3 py-2">
@@ -74,7 +108,7 @@ export const ResearchStudioView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg border border-red-500/30 bg-red-950/20 text-red-300">{error}</div>
+        <div className={`mb-4 p-3 rounded-lg border ${error.startsWith('REVALIDATION READY') ? 'border-violet-500/30 bg-violet-950/20 text-violet-300' : 'border-red-500/30 bg-red-950/20 text-red-300'}`}>{error}</div>
       )}
 
       {report && (
@@ -138,7 +172,7 @@ export const ResearchStudioView: React.FC = () => {
 
         {!report && !isSearching && (
           <div className="h-full flex items-center justify-center text-gray-600 text-center">
-            Research results will appear here with source reliability, epistemic status, conflicts, citations, and governed project-promotion controls.
+            Research results will appear here with source reliability, epistemic status, conflicts, citations, governed promotion, and explicit revalidation controls.
           </div>
         )}
       </div>
