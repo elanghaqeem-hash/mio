@@ -1,18 +1,9 @@
 import { PermissionLevel, DryRunRequest, SecurityEvent } from '../types/security';
 import { eventBus } from '../core/EventBus';
 
-export class PermissionEngine {
-  private static userGrants: Map<string, boolean> = new Map();
+const PERMISSION_DECISION_TIMEOUT_MS = 120000;
 
-  /**
-   * Request permission for an operation based on hierarchy L0 to L5.
-   * L0 (Observe): Auto-allowed
-   * L1 (Suggest): Auto-allowed
-   * L2 (Create): Allowed in sandbox
-   * L3 (Modify): Allowed with project context
-   * L4 (Execute): Verified tool execution
-   * L5 (Destructive): Explicit Human-In-The-Loop confirmation required
-   */
+export class PermissionEngine {
   public static async requestPermission(request: {
     action: string;
     target: string;
@@ -21,12 +12,8 @@ export class PermissionEngine {
     risks: string[];
     expectedResult: string;
   }): Promise<boolean> {
-    // L0, L1: Always allowed
-    if (request.level === 'L0_OBSERVE' || request.level === 'L1_SUGGEST') {
-      return true;
-    }
+    if (request.level === 'L0_OBSERVE' || request.level === 'L1_SUGGEST') return true;
 
-    // L2, L3, L4: Allowed if within sandbox, but logged
     if (request.level === 'L2_CREATE' || request.level === 'L3_MODIFY') {
       eventBus.emit('ACTIVITY_LOG', {
         timestamp: Date.now(),
@@ -36,19 +23,26 @@ export class PermissionEngine {
       return true;
     }
 
-    // For L4/L5, trigger Dry-Run / Preview dialog
     return new Promise((resolve) => {
+      let settled = false;
+      const settle = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+
       const dryRun: DryRunRequest = {
-        id: `perm_${Date.now()}`,
-        proposedAction: request.action,
-        target: request.target,
-        changes: request.changes,
-        risks: request.risks,
-        expectedResult: request.expectedResult,
+        id: `perm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        proposedAction: request.action.slice(0, 240),
+        target: request.target.slice(0, 500),
+        changes: request.changes.slice(0, 50).map((item) => String(item).slice(0, 1000)),
+        risks: request.risks.slice(0, 50).map((item) => String(item).slice(0, 1000)),
+        expectedResult: request.expectedResult.slice(0, 1000),
         permissionLevel: request.level,
         onApprove: () => {
           const secEvent: SecurityEvent = {
-            id: `sec_${Date.now()}`,
+            id: `sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             timestamp: Date.now(),
             level: 'info',
             category: 'PERMISSION',
@@ -57,26 +51,35 @@ export class PermissionEngine {
             blocked: false,
           };
           eventBus.emit('SECURITY_EVENT', secEvent);
-          resolve(true);
+          settle(true);
         },
-        onReview: () => {
-          // Open in review mode
-          resolve(false);
-        },
+        onReview: () => settle(false),
         onCancel: () => {
-          const secEvent: SecurityEvent = {
-            id: `sec_${Date.now()}`,
+          eventBus.emit('SECURITY_EVENT', {
+            id: `sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             timestamp: Date.now(),
             level: 'warning',
             category: 'PERMISSION',
             action: request.action,
             details: `User rejected ${request.level} action on ${request.target}`,
             blocked: true,
-          };
-          eventBus.emit('SECURITY_EVENT', secEvent);
-          resolve(false);
+          } satisfies SecurityEvent);
+          settle(false);
         },
       };
+
+      const timer = setTimeout(() => {
+        eventBus.emit('SECURITY_EVENT', {
+          id: `sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          level: 'warning',
+          category: 'PERMISSION',
+          action: request.action,
+          details: `Permission request timed out after ${PERMISSION_DECISION_TIMEOUT_MS / 1000}s and was denied by default`,
+          blocked: true,
+        } satisfies SecurityEvent);
+        settle(false);
+      }, PERMISSION_DECISION_TIMEOUT_MS);
 
       eventBus.emit('REQUEST_DRY_RUN_PERMISSION', dryRun);
     });
