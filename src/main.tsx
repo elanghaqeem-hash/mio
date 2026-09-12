@@ -4,7 +4,7 @@ import './index.css';
 import App from './App.tsx';
 import { ProjectManager } from './project/ProjectManager';
 import { MioMemoryManager } from './security/MemoryManager';
-import { executionHistory } from './orchestrator/ExecutionHistory';
+import { executionLedger } from './security/ExecutionLedger';
 import { taskRuntime } from './orchestrator/TaskRuntime';
 
 interface ErrorBoundaryProps { children: ReactNode; }
@@ -47,8 +47,8 @@ async function bootstrapMio(): Promise<void> {
   await Promise.all([
     ProjectManager.initialize(),
     MioMemoryManager.initialize(),
+    executionLedger.initialize(),
     taskRuntime.initialize(),
-    executionHistory.initialize(),
   ]);
 
   createRoot(document.getElementById('root')!).render(
