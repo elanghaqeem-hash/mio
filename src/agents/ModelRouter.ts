@@ -30,10 +30,31 @@ export class ModelRouter {
   public static async selectDefaultProvider(): Promise<string> {
     if (this.networkState === 'OFFLINE' || !window.mioDesktop) return 'local_heuristic';
     const preferred = await window.mioDesktop.getSetting('ai.defaultProvider', '');
-    const providers = await this.getAvailableProviders();
-    const connected = providers.filter((p: any) => p.enabled && p.lastStatus === 'connected');
-    const chosen = connected.find((p: any) => p.provider === preferred) || connected[0];
-    return chosen?.provider || 'local_heuristic';
+    let providers = await this.getAvailableProviders();
+    let connected = providers.filter((p: any) => p.enabled && p.lastStatus === 'connected');
+    let chosen = connected.find((p: any) => p.provider === preferred) || connected[0];
+    if (chosen) return chosen.provider;
+
+    const runtime = await window.mioDesktop.getSecurityStatus();
+    if (runtime?.runtime === 'web') {
+      const candidates = providers
+        .filter((p: any) => p.enabled && p.hasSecret)
+        .sort((a: any, b: any) => Number(b.provider === preferred) - Number(a.provider === preferred));
+      for (const candidate of candidates) {
+        const result = await window.mioDesktop.testProvider(candidate.provider);
+        if (result?.success) {
+          this.markProviderVerified(candidate.provider);
+          await window.mioDesktop.setSetting('ai.defaultProvider', candidate.provider);
+          return candidate.provider;
+        }
+        this.markProviderFailed(candidate.provider);
+      }
+      providers = await this.getAvailableProviders();
+      connected = providers.filter((p: any) => p.enabled && p.lastStatus === 'connected');
+      chosen = connected[0];
+      if (chosen) return chosen.provider;
+    }
+    return 'local_heuristic';
   }
 
   public static async generate(prompt: string): Promise<{ success: boolean; text: string; provider: string; error?: string }> {
