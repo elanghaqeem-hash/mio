@@ -5,7 +5,10 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
+    "prepare:mediapipe": "node scripts/prepare-mediapipe.mjs",
+    "predev": "npm run prepare:mediapipe",
     "dev": "vite",
+    "prebuild": "npm run prepare:mediapipe",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "npx tsx -e \"import { runMioTestSuite } from './src/tests/systemTests.ts'; runMioTestSuite();\"",
@@ -40,22 +43,10 @@
   "build": {
     "appId": "com.mio.v2.desktop",
     "productName": "Mio V2",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "package.json"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
   }
 }
