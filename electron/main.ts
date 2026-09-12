@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { IPC_CHANNELS } from './ipc/channels';
 import { setupIpcHandlers } from './ipc/handlers';
 
@@ -30,15 +31,26 @@ function createWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 700,
     backgroundColor: '#07090e',
-    frame: false, // Custom futuristic titlebar with window controls
-    titleBarStyle: 'hidden',
+    frame: false, // Custom titlebar rendered in React TopBar
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // Required for custom preload with node path mapping
-      webSecurity: true,
+      sandbox: false,
+      webSecurity: false, // Allows local file:// ES module execution
     },
+  });
+
+  mainWindow.show();
+  mainWindow.focus();
+
+  // Log renderer console messages to userData/renderer.log for debugging
+  mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
+    const logMsg = `[Renderer Console] [Level ${level}]: ${message} (${sourceId}:${line})\n`;
+    try {
+      fs.appendFileSync(path.join(app.getPath('userData'), 'renderer.log'), logMsg);
+    } catch (e) {}
   });
 
   const handlers = setupIpcHandlers(mainWindow);
@@ -64,12 +76,36 @@ function createWindow(): BrowserWindow {
   ipcMain.handle(IPC_CHANNELS.FS_WRITE_FILE, handlers.handleWriteFile);
   ipcMain.handle(IPC_CHANNELS.FS_LIST_DIRECTORY, handlers.handleListDirectory);
 
-  // Load URL or dist file
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+  // Robust Page Loading: Prefer dev server only if explicit VITE_DEV_SERVER_URL or accessible, otherwise load dist/index.html
+  const distHtmlPath = path.join(__dirname, '../dist/index.html');
+  const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(devUrl).catch(() => {
+      mainWindow?.loadFile(distHtmlPath);
+    });
+  } else if (fs.existsSync(distHtmlPath)) {
+    mainWindow.loadFile(distHtmlPath);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadURL(devUrl).catch(() => {
+      mainWindow?.loadFile(distHtmlPath);
+    });
   }
+
+  // Keyboard shortcut F12 to toggle DevTools
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      mainWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+    console.error(`[Mio Window] Failed to load: ${errorCode} (${errorDescription})`);
+    if (fs.existsSync(distHtmlPath)) {
+      mainWindow?.loadFile(distHtmlPath);
+    }
+  });
 
   // Hide instead of close if user configures background execution
   mainWindow.on('close', (e) => {
