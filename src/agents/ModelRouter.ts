@@ -100,6 +100,19 @@ export class ModelRouter {
       if (!modelPreflight.allowed) throw new Error(modelPreflight.reason ?? 'Resource budget blocked model execution');
     }
 
+    if (provider.requiresProxy && this.networkState === 'ONLINE') {
+      const readiness = await this.checkProviderReadiness(Math.min(timeoutMs, 8000));
+      if (!readiness.ready) {
+        if (!this.config.allowOfflineFallback) throw new Error(`${provider.displayName} is not ready: ${readiness.detail}`);
+        if (taskId) {
+          const localDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
+          if (!localDecision.allowed) throw new Error(localDecision.reason ?? 'Resource budget blocked local model fallback');
+        }
+        eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `${provider.displayName} is not ready; using explicit offline fallback`, mode: 'CHAT' });
+        return this.executeProvider(new LocalHeuristicProvider(), preparedRequest, Math.min(timeoutMs, 5000));
+      }
+    }
+
     if (provider.requiresNetwork && this.networkState !== 'ONLINE') {
       if (!this.config.allowOfflineFallback) throw new Error(`Model provider '${provider.id}' requires ONLINE mode`);
       if (taskId) {

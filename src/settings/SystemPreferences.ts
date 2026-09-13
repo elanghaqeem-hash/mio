@@ -13,7 +13,7 @@ export interface MioSystemPreferences {
 const STORAGE_KEY = 'system-preferences-v1';
 const AUTONOMY_LEVELS: AutonomyLevel[] = ['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'];
 const NETWORK_STATES: NetworkState[] = ['ONLINE', 'OFFLINE'];
-const PROVIDERS: ModelProviderId[] = ['local_heuristic', 'openai', 'gemini', 'claude', 'ollama'];
+const PROVIDERS: ModelProviderId[] = ['local_heuristic', 'openrouter', 'openai', 'gemini', 'claude', 'ollama'];
 
 const defaults = (): MioSystemPreferences => ({
   autonomyLevel: 'ASSISTIVE',

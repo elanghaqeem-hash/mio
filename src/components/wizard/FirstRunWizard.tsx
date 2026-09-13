@@ -27,12 +27,12 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
 
     await systemPreferences.update({
       autonomyLevel: autonomy as 'PASSIVE' | 'ASSISTIVE' | 'PROACTIVE' | 'AUTONOMOUS',
-      networkState: provider === 'openai' || provider === 'gemini' || provider === 'claude' ? 'ONLINE' : 'OFFLINE',
+      networkState: provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude' ? 'ONLINE' : 'OFFLINE',
       modelRouter: {
         ...ModelRouter.getConfig(),
         provider,
         allowOfflineFallback: false,
-        enableWebSearch: provider === 'openai' || provider === 'gemini' || provider === 'claude',
+        enableWebSearch: provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude',
         proxyEndpoint: '/api/ai/generate',
       },
     });
@@ -87,6 +87,7 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
               <div className="space-y-2">
                 {[
                   ['local_heuristic', 'MIO Local Heuristic', 'Offline orchestration, classification and transparent fallback.'],
+                  ['openrouter', 'OpenRouter Multi-provider Gateway', 'One server-side gateway for routed AI models and optional web grounding.'],
                   ['openai', 'OpenAI via MIO Secure Proxy', 'Real cloud inference; secret remains server-side and each remote use is permission-gated.'],
                   ['gemini', 'Google Gemini via MIO Secure Proxy', 'Gemini inference and optional Google Search grounding through server-side credentials.'],
                   ['claude', 'Anthropic Claude via MIO Secure Proxy', 'Claude inference and optional web search through server-side credentials.'],

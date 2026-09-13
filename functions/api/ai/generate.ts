@@ -1,6 +1,8 @@
-type CloudProviderId = 'openai' | 'gemini' | 'claude';
+type CloudProviderId = 'openrouter' | 'openai' | 'gemini' | 'claude';
 
 interface Env {
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   GEMINI_API_KEY?: string;
@@ -58,8 +60,9 @@ interface NormalizedProviderResponse {
   citations?: Array<{ url: string; title?: string }>;
 }
 
-const CLOUD_PROVIDERS: CloudProviderId[] = ['openai', 'gemini', 'claude'];
+const CLOUD_PROVIDERS: CloudProviderId[] = ['openrouter', 'openai', 'gemini', 'claude'];
 const PROVIDER_CONFIG: Record<CloudProviderId, { key: keyof Env; model: keyof Env; label: string }> = {
+  openrouter: { key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', label: 'OpenRouter' },
   openai: { key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', label: 'OpenAI' },
   gemini: { key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', label: 'Gemini' },
   claude: { key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', label: 'Claude' },
@@ -79,7 +82,7 @@ const isCloudProvider = (value: unknown): value is CloudProviderId =>
   typeof value === 'string' && CLOUD_PROVIDERS.includes(value as CloudProviderId);
 
 const selectedModel = (provider: CloudProviderId, requested: string | undefined, env: Env): string | undefined =>
-  requested?.trim() || env[PROVIDER_CONFIG[provider].model]?.trim();
+  requested?.trim() || env[PROVIDER_CONFIG[provider].model]?.trim() || (provider === 'openrouter' ? 'openrouter/auto' : undefined);
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
@@ -176,6 +179,41 @@ async function upstreamError(provider: CloudProviderId, response: Response): Pro
 }
 
 const normalized = (payload: NormalizedProviderResponse): Response => json(payload);
+
+async function callOpenRouter(env: Env, model: string, prepared: { instructions: string; conversation: ProxyMessage[] }, body: ProxyRequest): Promise<Response> {
+  const messages: ProxyMessage[] = [
+    ...(prepared.instructions ? [{ role: 'system' as const, content: prepared.instructions }] : []),
+    ...prepared.conversation,
+  ];
+  const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://mio-dny.pages.dev',
+      'X-OpenRouter-Title': 'MIO Web Lab',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(body.temperature, 2)) } : {}),
+      ...(typeof body.maxOutputTokens === 'number' ? { max_tokens: Math.max(16, Math.min(Math.round(body.maxOutputTokens), 8192)) } : {}),
+      ...(body.enableWebSearch === true ? { plugins: [{ id: 'web', max_results: 5 }] } : {}),
+    }),
+  });
+  if (!upstream.ok) return upstreamError('openrouter', upstream);
+  const payload = (await upstream.json()) as {
+    model?: string;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string | null; annotations?: Array<{ type?: string; url_citation?: { url?: string; title?: string } }> } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; server_tool_use?: { web_search_requests?: number } };
+  };
+  const choice = payload.choices?.[0];
+  const text = choice?.message?.content?.trim();
+  if (!text) return json({ error: 'OpenRouter returned no text output', provider: 'openrouter' }, 502);
+  const citations = uniqueCitations(choice?.message?.annotations?.map((item) => ({ url: item.url_citation?.url ?? '', title: item.url_citation?.title })) ?? []);
+  const searched = (payload.usage?.server_tool_use?.web_search_requests ?? 0) > 0 || citations.length > 0;
+  return normalized({ provider: 'openrouter', model: payload.model ?? model, text, usage: { inputTokens: payload.usage?.prompt_tokens, outputTokens: payload.usage?.completion_tokens }, finishReason: choice?.finish_reason ?? 'stop', source: 'CLOUD_PROXY', webSearchUsed: searched, citations });
+}
 
 async function callOpenAI(env: Env, model: string, prepared: { instructions: string; conversation: ProxyMessage[] }, body: ProxyRequest): Promise<Response> {
   const upstream = await fetch('https://api.openai.com/v1/responses', {
@@ -295,6 +333,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   if (prepared instanceof Response) return prepared;
 
   try {
+    if (provider === 'openrouter') return await callOpenRouter(context.env, model, prepared, body);
     if (provider === 'openai') return await callOpenAI(context.env, model, prepared, body);
     if (provider === 'gemini') return await callGemini(context.env, model, prepared, body);
     return await callClaude(context.env, model, prepared, body);

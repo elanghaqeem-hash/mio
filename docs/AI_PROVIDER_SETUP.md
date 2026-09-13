@@ -15,6 +15,7 @@ Configure provider variables in the Cloudflare Pages environment, never in sourc
 
 | Provider | Required secret | Optional server model | Native internet tool |
 | --- | --- | --- | --- |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (defaults to `openrouter/auto`) | Model-agnostic `web` plugin |
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` | Responses API `web_search` |
 | Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Google Search grounding |
 | Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | Claude server-side web search |
@@ -28,7 +29,7 @@ A server model variable is optional only when a valid model identifier is entere
 3. Add its model variable, or plan to enter a model in MIO Settings.
 4. Redeploy after changing environment variables.
 5. Open MIO Settings and select `ONLINE MODE`.
-6. Select OpenAI, Gemini, or Claude and enter a model when no server default exists.
+6. Select OpenRouter, OpenAI, Gemini, or Claude and enter a model when no server default exists. OpenRouter can use `openrouter/auto` when its model is left empty.
 7. Select `CHECK CONNECTION`. Continue only when the selected provider reports `READY`.
 8. Optionally enable live web search/grounding.
 9. Send a Chat request and approve the MIO L4 request.
@@ -50,3 +51,7 @@ Select `Ollama — local endpoint`, provide the endpoint and an installed model 
 - Provider citation metadata is normalized and rendered as clickable `WEB SOURCES` below the response.
 
 The local heuristic is orchestration intelligence, not a cloud language model. It remains clearly labelled whenever explicitly selected or used as fallback.
+
+## Preview versus production
+
+Cloudflare Pages keeps Preview and Production environment variables separately. A pull-request URL such as `*.pages.dev` uses Preview variables, so configure the selected provider secret for Preview before testing a PR deployment. A secret configured only for Production will still produce `NOT_CONFIGURED` on a PR preview.

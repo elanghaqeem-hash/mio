@@ -6,6 +6,7 @@ import { ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 
 const CLOUD_PROVIDER_CONFIG = {
+  openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/auto or provider/model' },
   openai: { label: 'OpenAI', key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', placeholder: 'e.g. gpt-4.1-mini' },
   gemini: { label: 'Google Gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', placeholder: 'e.g. gemini-2.5-flash' },
   claude: { label: 'Anthropic Claude', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', placeholder: 'e.g. claude-sonnet-4-20250514' },
@@ -17,7 +18,7 @@ export const SettingsView: React.FC = () => {
   const [checkingProvider, setCheckingProvider] = useState(false);
   const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
   const { provider, model = '', ollamaEndpoint = 'http://127.0.0.1:11434', allowOfflineFallback, enableWebSearch } = modelRouter;
-  const cloudConfig = provider === 'openai' || provider === 'gemini' || provider === 'claude' ? CLOUD_PROVIDER_CONFIG[provider] : null;
+  const cloudConfig = provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude' ? CLOUD_PROVIDER_CONFIG[provider] : null;
 
   useEffect(() => {
     return systemPreferences.subscribe(setPreferences);
@@ -90,6 +91,7 @@ export const SettingsView: React.FC = () => {
           <span className="text-gray-400 text-[10px] block">AI INFERENCE PROVIDER</span>
           <select value={provider} onChange={(e) => updateRouter({ provider: e.target.value as ModelProviderId, model: undefined })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
             <option value="local_heuristic">MIO Local Heuristic — offline fallback / orchestration intelligence</option>
+            <option value="openrouter">OpenRouter — multi-provider AI gateway</option>
             <option value="openai">OpenAI — server-side MIO Secure Proxy</option>
             <option value="gemini">Google Gemini — server-side MIO Secure Proxy</option>
             <option value="claude">Anthropic Claude — server-side MIO Secure Proxy</option>

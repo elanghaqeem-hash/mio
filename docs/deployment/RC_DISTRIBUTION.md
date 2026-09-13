@@ -13,7 +13,7 @@ This document defines how the validated integration build may be distributed for
 - Pages Functions: repository `functions/` directory, including `/api/health` and the bounded AI proxy.
 - Public build metadata must be supplied only through `VITE_MIO_*` variables.
 - Server-side release metadata uses `MIO_*` variables.
-- Provider credentials such as `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY` must remain deployment-platform secrets and must never use the `VITE_` prefix.
+- Provider credentials such as `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY` must remain deployment-platform secrets and must never use the `VITE_` prefix.
 
 ## Required public metadata
 

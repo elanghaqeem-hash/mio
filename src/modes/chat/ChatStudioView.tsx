@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BookOpen, CircleOff, Download, Mic, MicOff, Send, ShieldCheck, Volume2, X } from 'lucide-react';
+import { BookOpen, CircleOff, Download, Mic, MicOff, RefreshCw, Send, ShieldCheck, Volume2, WifiOff, X } from 'lucide-react';
 import { AgentOrchestrator, StructuredAgentResponse } from '../../agents/AgentOrchestrator';
+import { ModelRouter } from '../../agents/ModelRouter';
 import { eventBus } from '../../core/EventBus';
 import { EvidencePackageBuilder, type MioEvidencePackage } from '../../project/EvidencePackage';
 import { ProjectKnowledgeIndex } from '../../project/ProjectKnowledgeIndex';
 import { ProjectManager } from '../../project/ProjectManager';
+import { systemPreferences } from '../../settings/SystemPreferences';
 import { MioCoreState } from '../../types/core';
-import { ModelMessage } from '../../types/models';
+import { ModelMessage, ProviderReadiness } from '../../types/models';
 import { EvidenceInspector } from './EvidenceInspector';
 
 const INITIAL_MESSAGE_TIME = Date.now() - 60000;
@@ -43,11 +45,31 @@ export const ChatStudioView: React.FC = () => {
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [projectKnowledgeEnabled, setProjectKnowledgeEnabled] = useState(true);
   const [excludedAssetIds, setExcludedAssetIds] = useState<string[]>(persistentExclusions);
+  const [providerReadiness, setProviderReadiness] = useState<ProviderReadiness | null>(null);
+  const [checkingProvider, setCheckingProvider] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
   useEffect(() => eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state)), []);
   useEffect(() => eventBus.on('PROJECT_UPDATED', () => setExcludedAssetIds(persistentExclusions())), []);
+  useEffect(() => {
+    let active = true;
+    let checkSequence = 0;
+    const checkProvider = async () => {
+      const sequence = ++checkSequence;
+      setCheckingProvider(true);
+      const result = await ModelRouter.checkProviderReadiness();
+      if (active && sequence === checkSequence) {
+        setProviderReadiness(result);
+        setCheckingProvider(false);
+      }
+    };
+    void checkProvider();
+    const unsubscribe = systemPreferences.subscribe(() => void checkProvider());
+    return () => { active = false; unsubscribe(); };
+  }, []);
+
+  const providerReady = providerReadiness?.ready === true && !checkingProvider;
 
   const buildConversationContext = (): ModelMessage[] => messages.filter((message) => message.id !== 'msg_init').slice(-12).map((message) => ({ role: message.sender === 'user' ? 'user' as const : 'assistant' as const, content: message.text }));
 
@@ -62,7 +84,7 @@ export const ChatStudioView: React.FC = () => {
 
   const handleSend = async () => {
     const userText = input.trim();
-    if (!userText) return;
+    if (!userText || !providerReady) return;
     const conversation = buildConversationContext();
     const exclusionsAtRequest = [...excludedAssetIds];
     const projectKnowledgeAtRequest = projectKnowledgeEnabled;
@@ -166,12 +188,19 @@ export const ChatStudioView: React.FC = () => {
       </div>
 
       <div className="border-t border-gray-800 bg-[#0d121d] p-4">
+        {!providerReady && (
+          <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-[10px] text-amber-200">
+            <div className="flex min-w-0 items-start gap-2"><WifiOff size={14} className="mt-0.5 shrink-0" /><div><div className="font-bold">AI PROVIDER NOT READY — CHAT SEND DISABLED</div><div className="mt-1 break-words text-amber-300/80">{checkingProvider ? 'Checking the selected provider without sending chat content…' : providerReadiness?.detail ?? 'Provider readiness has not been verified.'}</div></div></div>
+            <button onClick={() => eventBus.emit('SWITCH_MODE', 'SETTINGS')} className="shrink-0 rounded border border-amber-500/40 px-2 py-1 font-bold hover:bg-amber-950/40">OPEN SETTINGS</button>
+          </div>
+        )}
+        {providerReady && providerReadiness && <div className="mb-2 flex items-center gap-1.5 text-[9px] text-emerald-400"><RefreshCw size={10} /> PROVIDER READY: {providerReadiness.provider.toUpperCase()}</div>}
         <div className="mb-2 flex items-center justify-between text-[9px] text-gray-600"><span>Project sources are governed, relevance-selected, and data-only. Quarantined/stale sources retain lower confidence.</span><span>{excludedAssetIds.length ? `${excludedAssetIds.length} project source asset(s) excluded` : 'No source exclusions'}</span></div>
         <div className="flex items-center gap-2 rounded-xl border border-gray-700 bg-[#07090e] p-2 transition focus-within:border-cyan-400">
           <button onClick={toggleSpeechRecognition} className={`cursor-pointer rounded-lg p-2 ${isListening ? 'animate-pulse bg-red-500 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-cyan-300'}`}>{isListening ? <Mic size={18} /> : <MicOff size={18} />}</button>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void handleSend()} placeholder="Ask MIO, research, inspect a project, or route a creative task..." className="flex-1 bg-transparent px-2 font-mono text-xs text-white outline-none placeholder:text-gray-600" />
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && providerReady && void handleSend()} placeholder={providerReady ? 'Ask MIO, research, inspect a project, or route a creative task...' : 'Configure and verify an AI provider in System Settings first'} className="flex-1 bg-transparent px-2 font-mono text-xs text-white outline-none placeholder:text-gray-600" />
           <button onClick={() => setIsSpeaking(!isSpeaking)} className={`cursor-pointer rounded-lg p-2 ${isSpeaking ? 'border border-cyan-500/40 bg-cyan-950 text-cyan-300' : 'text-gray-500 hover:bg-gray-800'}`}><Volume2 size={18} /></button>
-          <button onClick={() => void handleSend()} className="cursor-pointer rounded-lg bg-cyan-500 p-2 font-bold text-black shadow-md shadow-cyan-500/20 hover:bg-cyan-400"><Send size={18} /></button>
+          <button onClick={() => void handleSend()} disabled={!providerReady} className="cursor-pointer rounded-lg bg-cyan-500 p-2 font-bold text-black shadow-md shadow-cyan-500/20 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500 disabled:shadow-none"><Send size={18} /></button>
         </div>
       </div>
     </div>

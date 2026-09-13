@@ -1,6 +1,6 @@
 import { onRequestGet, onRequestPost } from '../../functions/api/ai/generate';
 
-type TestProvider = 'openai' | 'gemini' | 'claude';
+type TestProvider = 'openrouter' | 'openai' | 'gemini' | 'claude';
 
 export async function runAiProxyTests(): Promise<{ passed: number; total: number }> {
   let passed = 0;
@@ -65,10 +65,19 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
   const captured = new Map<TestProvider, { headers: Headers; body: string }>();
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    const provider: TestProvider = url.includes('openai.com') ? 'openai' : url.includes('googleapis.com') ? 'gemini' : 'claude';
+    const provider: TestProvider = url.includes('openrouter.ai') ? 'openrouter' : url.includes('openai.com') ? 'openai' : url.includes('googleapis.com') ? 'gemini' : 'claude';
     const body = String(init?.body ?? '');
     captured.set(provider, { headers: new Headers(init?.headers), body });
     const parsed = JSON.parse(body) as Record<string, unknown>;
+
+    if (provider === 'openrouter') {
+      const plugins = parsed.plugins as Array<{ id?: string }> | undefined;
+      return new Response(JSON.stringify({
+        model: 'routed-test-model',
+        choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'openrouter answer', annotations: plugins ? [{ type: 'url_citation', url_citation: { url: 'https://openrouter.example/source', title: 'OpenRouter source' } }] : [] } }],
+        usage: { prompt_tokens: 9, completion_tokens: 3, ...(plugins ? { server_tool_use: { web_search_requests: 1 } } : {}) },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
 
     if (provider === 'openai') {
       const tools = parsed.tools as Array<{ type?: string }> | undefined;
@@ -110,18 +119,20 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
 
   try {
     const environments = {
+      openrouter: { OPENROUTER_API_KEY: 'openrouter-secret' },
       openai: { OPENAI_API_KEY: 'openai-secret' },
       gemini: { GEMINI_API_KEY: 'gemini-secret' },
       claude: { ANTHROPIC_API_KEY: 'claude-secret' },
     };
-    const expectedText = { openai: 'openai answer', gemini: 'gemini answer', claude: 'claude answer' };
+    const expectedText = { openrouter: 'openrouter answer', openai: 'openai answer', gemini: 'gemini answer', claude: 'claude answer' };
 
-    for (const provider of ['openai', 'gemini', 'claude'] as TestProvider[]) {
+    for (const provider of ['openrouter', 'openai', 'gemini', 'claude'] as TestProvider[]) {
       const success = await onRequestPost({ request: request(provider), env: environments[provider] });
       const body = await success.json() as { provider?: string; text?: string; source?: string };
       assert(success.status === 200 && body.provider === provider && body.text === expectedText[provider] && body.source === 'CLOUD_PROXY', `${provider} output is normalized into the common browser response contract`);
     }
 
+    assert(captured.get('openrouter')?.headers.get('Authorization') === 'Bearer openrouter-secret', 'OpenRouter secret is applied only to the server-side Authorization header');
     assert(captured.get('openai')?.headers.get('Authorization') === 'Bearer openai-secret', 'OpenAI secret is applied only to the server-side Authorization header');
     assert(captured.get('gemini')?.headers.get('x-goog-api-key') === 'gemini-secret', 'Gemini secret is applied only to the server-side Google API header');
     assert(captured.get('claude')?.headers.get('x-api-key') === 'claude-secret', 'Claude secret is applied only to the server-side Anthropic API header');
@@ -134,15 +145,17 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     assert(!openAiPayload.instructions?.includes('MIO_APPLICATION_CONTEXT'), 'Project data is never merged into trusted provider instructions');
     assert(contextInput?.content?.includes('policy=DATA_ONLY') === true && contextInput.content.includes('trust="QUARANTINED"'), 'Provider-boundary context preserves policy and trust metadata');
 
-    for (const provider of ['openai', 'gemini', 'claude'] as TestProvider[]) {
+    for (const provider of ['openrouter', 'openai', 'gemini', 'claude'] as TestProvider[]) {
       const response = await onRequestPost({ request: request(provider, false, true), env: environments[provider] });
       const body = await response.json() as { webSearchUsed?: boolean; citations?: Array<{ url?: string }> };
       assert(body.webSearchUsed === true, `${provider} reports actual provider-side web search execution`);
       assert(body.citations?.length === 1 && body.citations[0].url?.startsWith('https://') === true, `${provider} returns a normalized web citation for display`);
     }
+    const openRouterPlugins = JSON.parse(captured.get('openrouter')?.body ?? '{}') as { plugins?: Array<{ id?: string }> };
     const openAiTools = JSON.parse(captured.get('openai')?.body ?? '{}') as { tools?: Array<{ type?: string }> };
     const geminiTools = JSON.parse(captured.get('gemini')?.body ?? '{}') as { tools?: Array<{ googleSearch?: object }> };
     const claudeTools = JSON.parse(captured.get('claude')?.body ?? '{}') as { tools?: Array<{ type?: string; name?: string }> };
+    assert(openRouterPlugins.plugins?.some((plugin) => plugin.id === 'web') === true, 'OpenRouter web search uses its model-agnostic web plugin contract');
     assert(openAiTools.tools?.some((tool) => tool.type === 'web_search') === true, 'OpenAI web search uses the Responses API tool contract');
     assert(geminiTools.tools?.some((tool) => Boolean(tool.googleSearch)) === true, 'Gemini web search uses Google Search grounding');
     assert(claudeTools.tools?.some((tool) => tool.type === 'web_search_20250305' && tool.name === 'web_search') === true, 'Claude web search uses the Anthropic server tool contract');

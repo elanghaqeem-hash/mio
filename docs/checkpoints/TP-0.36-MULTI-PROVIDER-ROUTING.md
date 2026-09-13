@@ -2,7 +2,7 @@
 
 ## Outcome
 
-MIO Web Lab routes OpenAI, Google Gemini, and Anthropic Claude through the same server-side secure proxy contract. Local Ollama and the explicitly labelled MIO heuristic remain local execution paths.
+MIO Web Lab routes OpenRouter, OpenAI, Google Gemini, and Anthropic Claude through the same server-side secure proxy contract. Local Ollama and the explicitly labelled MIO heuristic remain local execution paths.
 
 ## Provider parity
 
@@ -19,6 +19,7 @@ MIO Web Lab routes OpenAI, Google Gemini, and Anthropic Claude through the same 
 
 Configure at least one complete provider pair:
 
+- `OPENROUTER_API_KEY`; `OPENROUTER_MODEL` is optional and defaults to `openrouter/auto`.
 - `OPENAI_API_KEY` and either `OPENAI_MODEL` or a model selected in Settings.
 - `GEMINI_API_KEY` and either `GEMINI_MODEL` or a model selected in Settings.
 - `ANTHROPIC_API_KEY` and either `ANTHROPIC_MODEL` or a model selected in Settings.

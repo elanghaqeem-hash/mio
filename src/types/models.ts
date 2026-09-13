@@ -1,4 +1,4 @@
-export type ModelProviderId = 'local_heuristic' | 'openai' | 'gemini' | 'claude' | 'ollama';
+export type ModelProviderId = 'local_heuristic' | 'openrouter' | 'openai' | 'gemini' | 'claude' | 'ollama';
 
 export interface ModelMessage {
   role: 'system' | 'user' | 'assistant';
