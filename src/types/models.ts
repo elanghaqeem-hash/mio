@@ -45,6 +45,11 @@ export interface ModelUsage {
   outputTokens?: number;
 }
 
+export interface ModelCitation {
+  url: string;
+  title?: string;
+}
+
 export interface ModelResponse {
   provider: ModelProviderId;
   model: string;
@@ -54,6 +59,7 @@ export interface ModelResponse {
   generatedAt: number;
   source: 'LOCAL' | 'CLOUD_PROXY' | 'LOCAL_ENDPOINT';
   webSearchUsed?: boolean;
+  citations?: ModelCitation[];
 }
 
 export interface ModelProvider {

@@ -5,12 +5,19 @@ import { ModelRouter } from '../../agents/ModelRouter';
 import { ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 
+const CLOUD_PROVIDER_CONFIG = {
+  openai: { label: 'OpenAI', key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', placeholder: 'e.g. gpt-4.1-mini' },
+  gemini: { label: 'Google Gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', placeholder: 'e.g. gemini-2.5-flash' },
+  claude: { label: 'Anthropic Claude', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', placeholder: 'e.g. claude-sonnet-4-20250514' },
+} as const;
+
 export const SettingsView: React.FC = () => {
   const [preferences, setPreferences] = useState<MioSystemPreferences>(() => systemPreferences.getSnapshot());
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [checkingProvider, setCheckingProvider] = useState(false);
   const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
   const { provider, model = '', ollamaEndpoint = 'http://127.0.0.1:11434', allowOfflineFallback, enableWebSearch } = modelRouter;
+  const cloudConfig = provider === 'openai' || provider === 'gemini' || provider === 'claude' ? CLOUD_PROVIDER_CONFIG[provider] : null;
 
   useEffect(() => {
     return systemPreferences.subscribe(setPreferences);
@@ -81,24 +88,26 @@ export const SettingsView: React.FC = () => {
 
         <div className="space-y-2 pt-2 border-t border-gray-800">
           <span className="text-gray-400 text-[10px] block">AI INFERENCE PROVIDER</span>
-          <select value={provider} onChange={(e) => updateRouter({ provider: e.target.value as ModelProviderId })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
+          <select value={provider} onChange={(e) => updateRouter({ provider: e.target.value as ModelProviderId, model: undefined })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
             <option value="local_heuristic">MIO Local Heuristic — offline fallback / orchestration intelligence</option>
             <option value="openai">OpenAI — server-side MIO Secure Proxy</option>
+            <option value="gemini">Google Gemini — server-side MIO Secure Proxy</option>
+            <option value="claude">Anthropic Claude — server-side MIO Secure Proxy</option>
             <option value="ollama">Ollama — local endpoint</option>
           </select>
         </div>
 
-        {provider === 'openai' && (
+        {cloudConfig && (
           <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 space-y-2">
             <div className="flex items-center gap-2 text-emerald-300 font-bold"><ShieldCheck size={14} /> SERVER-SIDE SECRET BOUNDARY</div>
-            <p className="text-gray-400 text-[10px] leading-relaxed">No API key is accepted or stored by this browser. Configure <code className="text-cyan-300">OPENAI_API_KEY</code> and optionally <code className="text-cyan-300">OPENAI_MODEL</code> in the Web Lab server / Cloudflare environment. Remote inference still requires the MIO L4 permission gate.</p>
+            <p className="text-gray-400 text-[10px] leading-relaxed">No API key is accepted or stored by this browser. Configure <code className="text-cyan-300">{cloudConfig.key}</code> and optionally <code className="text-cyan-300">{cloudConfig.model}</code> in the Web Lab server / Cloudflare environment. Remote inference still requires the MIO L4 permission gate.</p>
           </div>
         )}
 
-        {(provider === 'openai' || provider === 'ollama') && (
+        {(cloudConfig || provider === 'ollama') && (
           <div className="space-y-1">
-            <span className="text-gray-400 text-[10px] block">MODEL {provider === 'openai' ? '(optional when configured server-side)' : ''}</span>
-            <input type="text" value={model} onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })} placeholder={provider === 'openai' ? 'Server default when empty' : 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            <span className="text-gray-400 text-[10px] block">MODEL {cloudConfig ? `(optional when ${cloudConfig.model} is configured server-side)` : ''}</span>
+            <input type="text" value={model} onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })} placeholder={cloudConfig?.placeholder ?? 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
           </div>
         )}
 
@@ -109,10 +118,10 @@ export const SettingsView: React.FC = () => {
           </div>
         )}
 
-        {provider === 'openai' && (
+        {cloudConfig && (
           <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
             <input type="checkbox" checked={enableWebSearch} onChange={(e) => updateRouter({ enableWebSearch: e.target.checked })} className="accent-cyan-400" />
-            <span className="text-gray-300">Enable live web search for OpenAI responses (internet access remains L4 permission-gated)</span>
+            <span className="text-gray-300">Enable {cloudConfig.label} live web search / grounding (internet access remains L4 permission-gated)</span>
           </label>
         )}
 

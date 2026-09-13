@@ -51,12 +51,28 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
 
   const originalFetch = globalThis.fetch;
   let capturedBody = '';
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  let capturedUrl = '';
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input);
+    if (!init?.method || init.method === 'GET') {
+      if (capturedUrl.includes('/api/tags')) return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ provider: 'gemini', ready: true, detail: 'Gemini ready.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     capturedBody = String(init?.body ?? '');
     return new Response(JSON.stringify({ provider: 'openai', model: 'test-model', text: 'secure response', source: 'CLOUD_PROXY' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
 
   try {
+    ModelRouter.setNetworkState('ONLINE');
+    ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate' });
+    const cloudReadiness = await ModelRouter.checkProviderReadiness();
+    assert(cloudReadiness.ready === true && capturedUrl.includes('provider=gemini') && capturedUrl.includes('model=gemini-test'), 'Cloud readiness targets the currently selected provider and model');
+
+    ModelRouter.setNetworkState('OFFLINE');
+    ModelRouter.configure({ provider: 'ollama', model: 'llama3.2', ollamaEndpoint: 'http://127.0.0.1:11434' });
+    const ollamaReadiness = await ModelRouter.checkProviderReadiness();
+    assert(ollamaReadiness.ready === true && ollamaReadiness.status === 'READY', 'Local Ollama readiness works in OFFLINE mode and validates the installed model');
+
     const proxyProvider = new SecureProxyModelProvider({ provider: 'openai', endpoint: '/api/ai/generate', model: 'test-model' });
     const proxyResult = await proxyProvider.generate({ messages: [{ role: 'user', content: 'test prompt' }] });
     assert(proxyResult.source === 'CLOUD_PROXY' && proxyResult.text === 'secure response', 'SecureProxyModelProvider accepts normalized same-origin proxy responses');

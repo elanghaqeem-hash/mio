@@ -42,13 +42,23 @@ export class SecureProxyModelProvider implements ModelProvider {
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`MIO AI proxy returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+      const raw = await response.text().catch(() => '');
+      let detail = raw.slice(0, 300);
+      try {
+        const payload = JSON.parse(raw) as { error?: string; detail?: string };
+        detail = [payload.error, payload.detail].filter(Boolean).join(' — ') || detail;
+      } catch {
+        // Preserve the bounded plain-text response when the proxy did not return JSON.
+      }
+      throw new Error(`${this.displayName} unavailable (HTTP ${response.status})${detail ? `: ${detail}` : ''}`);
     }
 
     const payload = (await response.json()) as Partial<ModelResponse>;
     if (!payload.text || typeof payload.text !== 'string') {
       throw new Error('MIO AI proxy returned an invalid response payload');
+    }
+    if (payload.provider && payload.provider !== this.id) {
+      throw new Error(`MIO AI proxy returned provider '${payload.provider}' while '${this.id}' was requested`);
     }
 
     return {
@@ -60,6 +70,7 @@ export class SecureProxyModelProvider implements ModelProvider {
       generatedAt: Date.now(),
       source: 'CLOUD_PROXY',
       webSearchUsed: payload.webSearchUsed === true,
+      citations: payload.citations,
     };
   }
 }

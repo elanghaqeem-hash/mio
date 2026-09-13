@@ -27,12 +27,12 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
 
     await systemPreferences.update({
       autonomyLevel: autonomy as 'PASSIVE' | 'ASSISTIVE' | 'PROACTIVE' | 'AUTONOMOUS',
-      networkState: provider === 'openai' ? 'ONLINE' : 'OFFLINE',
+      networkState: provider === 'openai' || provider === 'gemini' || provider === 'claude' ? 'ONLINE' : 'OFFLINE',
       modelRouter: {
         ...ModelRouter.getConfig(),
         provider,
         allowOfflineFallback: false,
-        enableWebSearch: provider === 'openai',
+        enableWebSearch: provider === 'openai' || provider === 'gemini' || provider === 'claude',
         proxyEndpoint: '/api/ai/generate',
       },
     });
@@ -88,6 +88,8 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
                 {[
                   ['local_heuristic', 'MIO Local Heuristic', 'Offline orchestration, classification and transparent fallback.'],
                   ['openai', 'OpenAI via MIO Secure Proxy', 'Real cloud inference; secret remains server-side and each remote use is permission-gated.'],
+                  ['gemini', 'Google Gemini via MIO Secure Proxy', 'Gemini inference and optional Google Search grounding through server-side credentials.'],
+                  ['claude', 'Anthropic Claude via MIO Secure Proxy', 'Claude inference and optional web search through server-side credentials.'],
                   ['ollama', 'Local Ollama', 'Local model endpoint for environments where Ollama is available.'],
                 ].map(([id, label, description]) => (
                   <button key={id} onClick={() => setProvider(id as ModelProviderId)} className={`w-full text-left p-3 rounded-lg border cursor-pointer ${provider === id ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300' : 'bg-[#111726] border-gray-800 text-gray-400'}`}>

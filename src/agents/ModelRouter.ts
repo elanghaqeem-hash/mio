@@ -30,9 +30,6 @@ export class ModelRouter {
     if (provider === 'local_heuristic') {
       return { provider, ready: true, status: 'LOCAL_ONLY', detail: 'Local heuristic is available, but it is not an online AI provider.' };
     }
-    if (this.networkState !== 'ONLINE') {
-      return { provider, ready: false, status: 'UNREACHABLE', detail: 'Network mode is OFFLINE.' };
-    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -41,12 +38,23 @@ export class ModelRouter {
         const endpoint = (this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
         const response = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
         if (!response.ok) throw new Error(`Ollama readiness returned HTTP ${response.status}`);
-        return { provider, ready: true, status: 'READY', detail: 'Ollama endpoint is reachable.' };
+        const payload = await response.json().catch(() => ({})) as { models?: Array<{ name?: string }> };
+        const model = this.config.model ?? 'llama3.2';
+        const installed = payload.models?.some((item) => item.name === model || item.name?.startsWith(`${model}:`)) === true;
+        return installed
+          ? { provider, ready: true, status: 'READY', detail: `Ollama endpoint is reachable and model '${model}' is installed.` }
+          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `Ollama is reachable, but model '${model}' is not installed. Pull it in Ollama or select an installed model.` };
       }
 
-      const endpoint = this.config.proxyEndpoint ?? '/api/ai/generate';
-      const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', signal: controller.signal });
-      const payload = await response.json().catch(() => ({})) as { ready?: boolean; detail?: string };
+      if (this.networkState !== 'ONLINE') {
+        return { provider, ready: false, status: 'UNREACHABLE', detail: 'Network mode is OFFLINE. Select ONLINE MODE before using a cloud provider.' };
+      }
+
+      const endpoint = new URL(this.config.proxyEndpoint ?? '/api/ai/generate', typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      endpoint.searchParams.set('provider', provider);
+      if (this.config.model) endpoint.searchParams.set('model', this.config.model);
+      const response = await fetch(endpoint.toString(), { method: 'GET', credentials: 'same-origin', signal: controller.signal });
+      const payload = await response.json().catch(() => ({})) as { provider?: string; ready?: boolean; detail?: string };
       if (response.ok && payload.ready === true) {
         return { provider, ready: true, status: 'READY', detail: payload.detail ?? `${provider} secure proxy is configured.` };
       }

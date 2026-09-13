@@ -1,52 +1,52 @@
 # MIO Web Lab — Secure AI Provider Setup
 
-## Security Rule
-MIO Web Lab does **not** accept or persist cloud API keys in browser state, localStorage, IndexedDB, or the client bundle.
+## Security boundary
 
-Cloud path:
+MIO Web Lab never accepts or persists cloud API keys in browser state, localStorage, IndexedDB, or the client bundle. Cloud inference follows this path:
 
 ```text
-MIO Browser
-  -> ModelRouter
-  -> L4 Permission Gate
-  -> same-origin /api/ai/generate
-  -> server environment secret
-  -> OpenAI Responses API
-  -> normalized ModelResponse
-  -> MIO Chat
+MIO Browser -> ModelRouter -> L4 Permission Gate -> same-origin /api/ai/generate
+            -> server environment secret -> selected provider -> normalized ModelResponse
 ```
 
-## OpenAI on Cloudflare Pages
-Configure these variables in the Cloudflare project environment rather than in source code:
+## Supported providers
 
-- `OPENAI_API_KEY` — required secret.
-- `OPENAI_MODEL` — optional server default model. If omitted, choose a model in MIO Settings.
+Configure provider variables in the Cloudflare Pages environment, never in source code and never with a `VITE_` prefix.
 
-Never place the API key in a `VITE_*` variable because Vite-exposed variables can be included in the browser bundle.
+| Provider | Required secret | Optional server model | Native internet tool |
+| --- | --- | --- | --- |
+| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` | Responses API `web_search` |
+| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Google Search grounding |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | Claude server-side web search |
 
-After server configuration:
+A server model variable is optional only when a valid model identifier is entered in MIO Settings. Secrets are never returned by the readiness endpoint.
 
-1. Open MIO Settings.
-2. Select `ONLINE MODE`.
-3. Select `OpenAI — server-side MIO Secure Proxy`.
-4. Optionally enter a model identifier, or leave it blank to use `OPENAI_MODEL` from the server environment.
-5. Select `CHECK CONNECTION`; continue only when the provider reports `READY`.
-6. Enable live web search when current internet information is required.
-7. Send a Chat request.
-8. MIO will display an L4 permission request before sending prompt content to the external provider or invoking web search.
+## Cloudflare Pages setup
 
-The browser persists autonomy, network, provider, model, fallback, and web-search preferences in the controlled `settings` storage namespace. Provider secrets remain server-side and are never persisted with these preferences.
+1. Open the MIO Pages project in Cloudflare.
+2. Add the chosen API key as an encrypted secret for both Preview and Production where needed.
+3. Add its model variable, or plan to enter a model in MIO Settings.
+4. Redeploy after changing environment variables.
+5. Open MIO Settings and select `ONLINE MODE`.
+6. Select OpenAI, Gemini, or Claude and enter a model when no server default exists.
+7. Select `CHECK CONNECTION`. Continue only when the selected provider reports `READY`.
+8. Optionally enable live web search/grounding.
+9. Send a Chat request and approve the MIO L4 request.
+
+The browser persists autonomy, network, provider, model, fallback, and web-search preferences in the controlled `settings` storage namespace. It never persists provider secrets.
 
 ## Local Ollama
-Select `Ollama — local endpoint`, provide a model name and local endpoint (default `http://127.0.0.1:11434`). Browser connectivity depends on the local Ollama/CORS environment. MIO never pretends that Ollama executed if the endpoint is unavailable.
 
-## Offline Mode
-`MIO Local Heuristic` is the transparent fallback. It supports local orchestration/classification behavior but explicitly states that it is not a cloud language model.
+Select `Ollama — local endpoint`, provide the endpoint and an installed model name (the default is `llama3.2`). `CHECK CONNECTION` validates both the endpoint and selected model. Ollama remains usable while MIO is in OFFLINE mode because the endpoint is local. Browser connectivity still depends on the local Ollama/CORS configuration.
 
-## Failure Behavior
-- Missing server secret: proxy returns an explicit configuration error.
-- Unsupported provider: proxy rejects the request.
-- Malformed/empty provider response: ModelRouter rejects it.
-- Provider timeout: request fails or, when explicitly enabled, uses the labeled local fallback.
-- Local fallback is disabled by default for a newly configured online provider so a missing secret or unavailable provider is surfaced as an error rather than appearing to be a successful online response.
-- Remote provider use is never silent; it passes the permission gate.
+## Failure behavior
+
+- Missing secret or model: readiness and generation return an explicit, provider-specific configuration error.
+- Unsupported provider: the proxy rejects it before any upstream request.
+- Provider HTTP error: MIO identifies the failing provider and shows a bounded upstream detail.
+- Malformed or empty response: MIO rejects it instead of presenting a fabricated answer.
+- Provider timeout: the request fails or uses the local heuristic only when the user explicitly enabled fallback.
+- Web search is reported as `USED` only when provider response metadata confirms execution.
+- Provider citation metadata is normalized and rendered as clickable `WEB SOURCES` below the response.
+
+The local heuristic is orchestration intelligence, not a cloud language model. It remains clearly labelled whenever explicitly selected or used as fallback.

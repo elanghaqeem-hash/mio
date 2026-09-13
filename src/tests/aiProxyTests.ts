@@ -1,5 +1,7 @@
 import { onRequestGet, onRequestPost } from '../../functions/api/ai/generate';
 
+type TestProvider = 'openai' | 'gemini' | 'claude';
+
 export async function runAiProxyTests(): Promise<{ passed: number; total: number }> {
   let passed = 0;
   let total = 0;
@@ -46,60 +48,104 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     });
 
   const missingSecret = await onRequestPost({ request: request(), env: {} });
-  assert(missingSecret.status === 503, 'AI proxy rejects cloud inference when server-side API secret is not configured');
+  assert(missingSecret.status === 503, 'AI proxy rejects cloud inference when the selected provider secret is absent');
 
-  const unsupported = await onRequestPost({ request: request('claude'), env: { OPENAI_API_KEY: 'server-secret' } });
-  assert(unsupported.status === 501, 'AI proxy rejects providers that are not explicitly enabled');
+  const unsupported = await onRequestPost({ request: request('mistral'), env: { OPENAI_API_KEY: 'server-secret' } });
+  assert(unsupported.status === 501, 'AI proxy rejects providers outside the explicit allowlist');
 
-  const unavailableReadiness = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate'), env: {} });
-  const unavailableBody = await unavailableReadiness.json() as { ready?: boolean };
-  assert(unavailableReadiness.status === 503 && unavailableBody.ready === false, 'Provider readiness reports missing server-side secret');
+  const missingModelReadiness = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate?provider=openai'), env: { OPENAI_API_KEY: 'server-secret' } });
+  const missingModelBody = await missingModelReadiness.json() as { ready?: boolean; modelConfigured?: boolean };
+  assert(missingModelReadiness.status === 503 && missingModelBody.ready === false && missingModelBody.modelConfigured === false, 'Readiness requires both a provider secret and an effective model');
 
-  const readyResponse = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate'), env: { OPENAI_API_KEY: 'server-secret' } });
-  const readyBody = await readyResponse.json() as { ready?: boolean };
-  assert(readyResponse.status === 200 && readyBody.ready === true, 'Provider readiness reports configured server-side proxy');
+  const readyResponse = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate?provider=gemini&model=browser-model'), env: { GEMINI_API_KEY: 'gemini-secret' } });
+  const readyBody = await readyResponse.json() as { provider?: string; ready?: boolean; model?: string };
+  assert(readyResponse.status === 200 && readyBody.provider === 'gemini' && readyBody.ready === true && readyBody.model === 'browser-model', 'Readiness evaluates the selected provider and browser-selected model');
 
   const originalFetch = globalThis.fetch;
-  let upstreamAuthorization = '';
-  let upstreamBody = '';
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    const headers = new Headers(init?.headers);
-    upstreamAuthorization = headers.get('Authorization') ?? '';
-    upstreamBody = String(init?.body ?? '');
-    const webSearchRequested = JSON.parse(upstreamBody) as { tools?: Array<{ type?: string }> };
-    return new Response(
-      JSON.stringify({
-        model: 'test-model',
+  const captured = new Map<TestProvider, { headers: Headers; body: string }>();
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const provider: TestProvider = url.includes('openai.com') ? 'openai' : url.includes('googleapis.com') ? 'gemini' : 'claude';
+    const body = String(init?.body ?? '');
+    captured.set(provider, { headers: new Headers(init?.headers), body });
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+
+    if (provider === 'openai') {
+      const tools = parsed.tools as Array<{ type?: string }> | undefined;
+      return new Response(JSON.stringify({
+        model: 'openai-test-model',
         status: 'completed',
         output: [
-          ...(webSearchRequested.tools?.some((tool) => tool.type === 'web_search') ? [{ type: 'web_search_call' }] : []),
-          { type: 'message', content: [{ type: 'output_text', text: 'normalized answer' }] },
+          ...(tools?.some((tool) => tool.type === 'web_search') ? [{ type: 'web_search_call' }] : []),
+          { type: 'message', content: [{ type: 'output_text', text: 'openai answer', annotations: tools ? [{ type: 'url_citation', url: 'https://openai.example/source', title: 'OpenAI source' }] : [] }] },
         ],
         usage: { input_tokens: 10, output_tokens: 3 },
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (provider === 'gemini') {
+      const tools = parsed.tools as Array<{ googleSearch?: object }> | undefined;
+      return new Response(JSON.stringify({
+        modelVersion: 'gemini-test-model',
+        candidates: [{
+          content: { parts: [{ text: 'gemini answer' }] },
+          finishReason: 'STOP',
+          ...(tools?.some((tool) => tool.googleSearch) ? { groundingMetadata: { webSearchQueries: ['current query'], groundingChunks: [{ web: { uri: 'https://gemini.example/source', title: 'Gemini source' } }] } } : {}),
+        }],
+        usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 4 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const tools = parsed.tools as Array<{ name?: string }> | undefined;
+    return new Response(JSON.stringify({
+      model: 'claude-test-model',
+      stop_reason: 'end_turn',
+      content: [
+        ...(tools?.some((tool) => tool.name === 'web_search') ? [{ type: 'server_tool_use', name: 'web_search' }] : []),
+        { type: 'text', text: 'claude answer', citations: tools ? [{ url: 'https://claude.example/source', title: 'Claude source' }] : [] },
+      ],
+      usage: { input_tokens: 12, output_tokens: 5, ...(tools ? { server_tool_use: { web_search_requests: 1 } } : {}) },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
 
   try {
-    const success = await onRequestPost({ request: request(), env: { OPENAI_API_KEY: 'server-secret', OPENAI_MODEL: 'server-model' } });
-    const body = (await success.json()) as { text?: string; source?: string };
-    assert(success.status === 200 && body.text === 'normalized answer' && body.source === 'CLOUD_PROXY', 'AI proxy normalizes successful provider output for the browser');
-    assert(upstreamAuthorization === 'Bearer server-secret', 'AI proxy applies provider secret only on the server-side upstream request');
-    assert(!upstreamBody.includes('server-secret'), 'Server secret is not embedded inside the provider request payload');
+    const environments = {
+      openai: { OPENAI_API_KEY: 'openai-secret' },
+      gemini: { GEMINI_API_KEY: 'gemini-secret' },
+      claude: { ANTHROPIC_API_KEY: 'claude-secret' },
+    };
+    const expectedText = { openai: 'openai answer', gemini: 'gemini answer', claude: 'claude answer' };
 
-    await onRequestPost({ request: request('openai', true), env: { OPENAI_API_KEY: 'server-secret', OPENAI_MODEL: 'server-model' } });
-    const parsed = JSON.parse(upstreamBody) as { instructions?: string; input?: Array<{ role?: string; content?: string }> };
-    const contextInput = parsed.input?.find((item) => item.content?.includes('[MIO_APPLICATION_CONTEXT]'));
-    assert(Boolean(contextInput) && contextInput?.role === 'user', 'Typed project context is materialized as provider input data rather than system authority');
-    assert(!parsed.instructions?.includes('MIO_APPLICATION_CONTEXT'), 'Project application context is never merged into provider instructions');
-    assert(contextInput?.content?.includes('policy=DATA_ONLY') === true && contextInput.content.includes('trust="QUARANTINED"'), 'Provider-boundary context preserves DATA_ONLY policy and source trust metadata');
+    for (const provider of ['openai', 'gemini', 'claude'] as TestProvider[]) {
+      const success = await onRequestPost({ request: request(provider), env: environments[provider] });
+      const body = await success.json() as { provider?: string; text?: string; source?: string };
+      assert(success.status === 200 && body.provider === provider && body.text === expectedText[provider] && body.source === 'CLOUD_PROXY', `${provider} output is normalized into the common browser response contract`);
+    }
 
-    const webSearchResponse = await onRequestPost({ request: request('openai', false, true), env: { OPENAI_API_KEY: 'server-secret', OPENAI_MODEL: 'server-model' } });
-    const webSearchBody = await webSearchResponse.json() as { webSearchUsed?: boolean };
-    const webSearchRequest = JSON.parse(upstreamBody) as { tools?: Array<{ type?: string }> };
-    assert(webSearchRequest.tools?.some((tool) => tool.type === 'web_search') === true, 'Online OpenAI request enables the provider web-search tool only when selected');
-    assert(webSearchBody.webSearchUsed === true, 'AI proxy reports actual web-search tool execution');
+    assert(captured.get('openai')?.headers.get('Authorization') === 'Bearer openai-secret', 'OpenAI secret is applied only to the server-side Authorization header');
+    assert(captured.get('gemini')?.headers.get('x-goog-api-key') === 'gemini-secret', 'Gemini secret is applied only to the server-side Google API header');
+    assert(captured.get('claude')?.headers.get('x-api-key') === 'claude-secret', 'Claude secret is applied only to the server-side Anthropic API header');
+    assert([...captured.values()].every((entry) => !entry.body.includes('secret')), 'No provider secret is embedded in an upstream request body');
+
+    await onRequestPost({ request: request('openai', true), env: environments.openai });
+    const openAiPayload = JSON.parse(captured.get('openai')?.body ?? '{}') as { instructions?: string; input?: Array<{ role?: string; content?: string }> };
+    const contextInput = openAiPayload.input?.find((item) => item.content?.includes('[MIO_APPLICATION_CONTEXT]'));
+    assert(Boolean(contextInput) && contextInput?.role === 'user', 'Project context remains provider input data rather than system authority');
+    assert(!openAiPayload.instructions?.includes('MIO_APPLICATION_CONTEXT'), 'Project data is never merged into trusted provider instructions');
+    assert(contextInput?.content?.includes('policy=DATA_ONLY') === true && contextInput.content.includes('trust="QUARANTINED"'), 'Provider-boundary context preserves policy and trust metadata');
+
+    for (const provider of ['openai', 'gemini', 'claude'] as TestProvider[]) {
+      const response = await onRequestPost({ request: request(provider, false, true), env: environments[provider] });
+      const body = await response.json() as { webSearchUsed?: boolean; citations?: Array<{ url?: string }> };
+      assert(body.webSearchUsed === true, `${provider} reports actual provider-side web search execution`);
+      assert(body.citations?.length === 1 && body.citations[0].url?.startsWith('https://') === true, `${provider} returns a normalized web citation for display`);
+    }
+    const openAiTools = JSON.parse(captured.get('openai')?.body ?? '{}') as { tools?: Array<{ type?: string }> };
+    const geminiTools = JSON.parse(captured.get('gemini')?.body ?? '{}') as { tools?: Array<{ googleSearch?: object }> };
+    const claudeTools = JSON.parse(captured.get('claude')?.body ?? '{}') as { tools?: Array<{ type?: string; name?: string }> };
+    assert(openAiTools.tools?.some((tool) => tool.type === 'web_search') === true, 'OpenAI web search uses the Responses API tool contract');
+    assert(geminiTools.tools?.some((tool) => Boolean(tool.googleSearch)) === true, 'Gemini web search uses Google Search grounding');
+    assert(claudeTools.tools?.some((tool) => tool.type === 'web_search_20250305' && tool.name === 'web_search') === true, 'Claude web search uses the Anthropic server tool contract');
   } finally {
     globalThis.fetch = originalFetch;
   }
