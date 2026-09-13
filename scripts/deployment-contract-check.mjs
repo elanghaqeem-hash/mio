@@ -11,6 +11,8 @@ const fail = (message) => {
 const envExample = read('.env.example');
 const healthSource = read('functions/api/health.ts');
 const releaseSource = read('src/release/ReleaseMetadata.ts');
+const headersSource = read('public/_headers');
+const verifierSource = read('scripts/verify-deployment.mjs');
 const pkg = JSON.parse(read('package.json'));
 
 const requiredEnvNames = [
@@ -43,6 +45,31 @@ for (const token of ['VITE_MIO_RELEASE_CHANNEL', 'VITE_MIO_RELEASE_SHA', 'VITE_M
   if (!releaseSource.includes(token)) fail(`renderer release metadata missing ${token}`);
 }
 
+for (const token of [
+  'X-Content-Type-Options: nosniff',
+  'Referrer-Policy: no-referrer',
+  'X-Frame-Options: DENY',
+  'Permissions-Policy:',
+  'Cross-Origin-Opener-Policy: same-origin',
+  'Cache-Control: public, max-age=31536000, immutable',
+  '/index.html',
+  'Cache-Control: no-store',
+]) {
+  if (!headersSource.includes(token)) fail(`static delivery headers missing ${token}`);
+}
+
+for (const token of [
+  "base.protocol !== 'https:'",
+  'base.username || base.password',
+  "new URL('/api/health', base)",
+  "health?.status !== 'ready'",
+  "x-content-type-options",
+  'AbortController',
+  '10000',
+]) {
+  if (!verifierSource.includes(token)) fail(`post-deploy verifier missing bounded control: ${token}`);
+}
+
 const build = pkg.build ?? {};
 const winTargets = build.win?.target ?? [];
 if (!Array.isArray(winTargets) || !winTargets.includes('nsis') || !winTargets.includes('portable')) {
@@ -55,8 +82,13 @@ if (!Array.isArray(build.files) || !build.files.includes('dist/**/*') || !build.
 if (typeof pkg.scripts?.['dist:win'] !== 'string' || !pkg.scripts['dist:win'].includes('electron-builder --win')) {
   fail('dist:win packaging command is missing');
 }
+if (pkg.scripts?.['deploy:verify'] !== 'node scripts/verify-deployment.mjs') {
+  fail('deploy:verify must remain the bounded read-only deployment verifier');
+}
 
 console.log('MIO DEPLOYMENT CONTRACT: PASS');
 console.log('Web health route: /api/health');
+console.log('Static delivery headers: bounded security/cache policy present');
+console.log('Post-deploy verifier: HTTPS-only, credential-free URL, 10s timeout');
 console.log(`Windows RC targets: ${winTargets.join(', ')}`);
 console.log('Secrets: values remain deployment-platform managed; no deployment performed.');
