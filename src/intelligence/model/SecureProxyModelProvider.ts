@@ -4,6 +4,7 @@ interface ProxyProviderOptions {
   provider: Exclude<ModelProviderId, 'local_heuristic' | 'ollama'>;
   endpoint: string;
   model?: string;
+  enableWebSearch?: boolean;
 }
 
 export class SecureProxyModelProvider implements ModelProvider {
@@ -13,12 +14,14 @@ export class SecureProxyModelProvider implements ModelProvider {
   public readonly displayName: string;
   private readonly endpoint: string;
   private readonly model?: string;
+  private readonly enableWebSearch: boolean;
 
   constructor(options: ProxyProviderOptions) {
     this.id = options.provider;
     this.displayName = `${options.provider.toUpperCase()} via MIO Secure Proxy`;
     this.endpoint = options.endpoint;
     this.model = options.model;
+    this.enableWebSearch = options.enableWebSearch === true;
   }
 
   public async generate(request: ModelRequest, signal?: AbortSignal): Promise<ModelResponse> {
@@ -34,6 +37,7 @@ export class SecureProxyModelProvider implements ModelProvider {
         applicationContext: request.applicationContext,
         temperature: request.temperature,
         maxOutputTokens: request.maxOutputTokens,
+        enableWebSearch: this.enableWebSearch,
       }),
     });
 
@@ -55,6 +59,7 @@ export class SecureProxyModelProvider implements ModelProvider {
       finishReason: payload.finishReason,
       generatedAt: Date.now(),
       source: 'CLOUD_PROXY',
+      webSearchUsed: payload.webSearchUsed === true,
     };
   }
 }

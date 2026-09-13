@@ -6,6 +6,7 @@ import { eventBus } from '../../core/EventBus';
 import { Shield, Wifi, WifiOff, AlertOctagon, RotateCcw, Minus, Square, X } from 'lucide-react';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { releaseMetadata, shortReleaseSha } from '../../release/ReleaseMetadata';
+import { systemPreferences } from '../../settings/SystemPreferences';
 
 interface TopBarProps {
   coreState: MioCoreState;
@@ -20,6 +21,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
   useEffect(() => {
     const unsubStop = eventBus.on('EMERGENCY_STOP_TRIGGERED', () => setIsStopped(true));
     const unsubReset = eventBus.on('EMERGENCY_STOP_RESET', () => setIsStopped(false));
+    const unsubPreferences = systemPreferences.subscribe((preferences) => setNetwork(preferences.networkState));
 
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
@@ -31,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
     return () => {
       unsubStop();
       unsubReset();
+      unsubPreferences();
       if (unregisterTrayStop) unregisterTrayStop();
     };
   }, []);
@@ -45,8 +48,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
 
   const toggleNetwork = () => {
     const next = network === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
-    setNetwork(next);
-    ModelRouter.setNetworkState(next);
+    void systemPreferences.setNetworkState(next);
     eventBus.emit('CORE_STATE_CHANGE', next === 'ONLINE' ? 'ONLINE' : 'OFFLINE');
     setTimeout(() => eventBus.emit('CORE_STATE_CHANGE', 'IDLE'), 1500);
   };

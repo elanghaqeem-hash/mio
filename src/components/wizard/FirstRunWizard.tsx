@@ -3,6 +3,7 @@ import { Shield, Mic, Camera, FolderCheck, Sliders, Database, CheckCircle2, Arro
 import { MioCoreVisualizer } from '../../core/MioCoreVisualizer';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { ModelProviderId } from '../../types/models';
+import { systemPreferences } from '../../settings/SystemPreferences';
 
 interface FirstRunWizardProps {
   onComplete: () => void;
@@ -18,14 +19,23 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
   const [autonomy, setAutonomy] = useState('ASSISTIVE');
   const [memoryEnabled, setMemoryEnabled] = useState(true);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < totalSteps) {
       setStep(step + 1);
       return;
     }
 
-    ModelRouter.configure({ provider, allowOfflineFallback: true, proxyEndpoint: '/api/ai/generate' });
-    ModelRouter.setNetworkState(provider === 'openai' ? 'ONLINE' : 'OFFLINE');
+    await systemPreferences.update({
+      autonomyLevel: autonomy as 'PASSIVE' | 'ASSISTIVE' | 'PROACTIVE' | 'AUTONOMOUS',
+      networkState: provider === 'openai' ? 'ONLINE' : 'OFFLINE',
+      modelRouter: {
+        ...ModelRouter.getConfig(),
+        provider,
+        allowOfflineFallback: false,
+        enableWebSearch: provider === 'openai',
+        proxyEndpoint: '/api/ai/generate',
+      },
+    });
     localStorage.setItem('mio_v2_setup_completed', 'true');
     onComplete();
   };
@@ -127,7 +137,7 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
 
         <div className="flex items-center justify-between border-t border-gray-800 pt-4 mt-6">
           <button onClick={handlePrev} disabled={step === 1} className="flex items-center gap-1 px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-gray-300 font-bold cursor-pointer"><ArrowLeft size={14} /> Back</button>
-          <button onClick={handleNext} className="flex items-center gap-1 px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-black font-bold shadow-lg shadow-cyan-500/20 cursor-pointer"><span>{step === totalSteps ? 'LAUNCH MIO WEB LAB' : 'Continue'}</span><ArrowRight size={14} /></button>
+          <button onClick={() => void handleNext()} className="flex items-center gap-1 px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-black font-bold shadow-lg shadow-cyan-500/20 cursor-pointer"><span>{step === totalSteps ? 'LAUNCH MIO WEB LAB' : 'Continue'}</span><ArrowRight size={14} /></button>
         </div>
       </div>
     </div>

@@ -53,6 +53,7 @@ export interface ModelResponse {
   finishReason?: string;
   generatedAt: number;
   source: 'LOCAL' | 'CLOUD_PROXY' | 'LOCAL_ENDPOINT';
+  webSearchUsed?: boolean;
 }
 
 export interface ModelProvider {
@@ -69,4 +70,12 @@ export interface ModelRouterConfig {
   proxyEndpoint?: string;
   ollamaEndpoint?: string;
   allowOfflineFallback: boolean;
+  enableWebSearch: boolean;
+}
+
+export interface ProviderReadiness {
+  provider: ModelProviderId;
+  ready: boolean;
+  status: 'READY' | 'LOCAL_ONLY' | 'NOT_CONFIGURED' | 'UNREACHABLE';
+  detail: string;
 }

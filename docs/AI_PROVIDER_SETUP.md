@@ -30,8 +30,12 @@ After server configuration:
 2. Select `ONLINE MODE`.
 3. Select `OpenAI — server-side MIO Secure Proxy`.
 4. Optionally enter a model identifier, or leave it blank to use `OPENAI_MODEL` from the server environment.
-5. Send a Chat request.
-6. MIO will display an L4 permission request before sending prompt content to the external provider.
+5. Select `CHECK CONNECTION`; continue only when the provider reports `READY`.
+6. Enable live web search when current internet information is required.
+7. Send a Chat request.
+8. MIO will display an L4 permission request before sending prompt content to the external provider or invoking web search.
+
+The browser persists autonomy, network, provider, model, fallback, and web-search preferences in the controlled `settings` storage namespace. Provider secrets remain server-side and are never persisted with these preferences.
 
 ## Local Ollama
 Select `Ollama — local endpoint`, provide a model name and local endpoint (default `http://127.0.0.1:11434`). Browser connectivity depends on the local Ollama/CORS environment. MIO never pretends that Ollama executed if the endpoint is unavailable.
@@ -44,4 +48,5 @@ Select `Ollama — local endpoint`, provide a model name and local endpoint (def
 - Unsupported provider: proxy rejects the request.
 - Malformed/empty provider response: ModelRouter rejects it.
 - Provider timeout: request fails or, when explicitly enabled, uses the labeled local fallback.
+- Local fallback is disabled by default for a newly configured online provider so a missing secret or unavailable provider is surfaced as an error rather than appearing to be a successful online response.
 - Remote provider use is never silent; it passes the permission gate.

@@ -45,7 +45,7 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
   assert(prepared.applicationContext === undefined, 'Typed application context is consumed only at the ModelRouter provider edge');
 
   ModelRouter.setNetworkState('OFFLINE');
-  ModelRouter.configure({ provider: 'openai', allowOfflineFallback: true, proxyEndpoint: '/api/ai/generate' });
+  ModelRouter.configure({ provider: 'openai', allowOfflineFallback: true, enableWebSearch: false, proxyEndpoint: '/api/ai/generate' });
   const offlineFallback = await ModelRouter.generate({ messages: [{ role: 'user', content: 'Hello' }] }, 1000);
   assert(offlineFallback.provider === 'local_heuristic' && offlineFallback.source === 'LOCAL', 'ModelRouter uses explicit local fallback when cloud provider is selected but network mode is OFFLINE');
 
@@ -63,7 +63,7 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
     assert(!/api.?key|bearer|secret/i.test(capturedBody), 'Browser-side proxy request contains no API key, bearer token, or secret field');
   } finally {
     globalThis.fetch = originalFetch;
-    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true });
+    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true, enableWebSearch: false });
     ModelRouter.setNetworkState('OFFLINE');
   }
 

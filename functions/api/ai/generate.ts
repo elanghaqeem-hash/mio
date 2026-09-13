@@ -33,6 +33,7 @@ interface ProxyRequest {
   applicationContext?: ProxyApplicationContext;
   temperature?: number;
   maxOutputTokens?: number;
+  enableWebSearch?: boolean;
 }
 
 interface PagesContext {
@@ -49,6 +50,18 @@ const json = (payload: unknown, status = 200) =>
       'X-Content-Type-Options': 'nosniff',
     },
   });
+
+export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const ready = Boolean(context.env.OPENAI_API_KEY);
+  return json({
+    provider: 'openai',
+    ready,
+    modelConfigured: Boolean(context.env.OPENAI_MODEL),
+    detail: ready
+      ? 'OpenAI secure proxy is configured. A real prompt still requires the MIO L4 permission gate.'
+      : 'OPENAI_API_KEY is missing from the Cloudflare Pages environment.',
+  }, ready ? 200 : 503);
+}
 
 function serializeApplicationContext(context?: ProxyApplicationContext): string | undefined {
   if (!context) return undefined;
@@ -152,6 +165,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
           ? { max_output_tokens: Math.max(16, Math.min(Math.round(body.maxOutputTokens), 8192)) }
           : {}),
         store: false,
+        ...(body.enableWebSearch === true ? { tools: [{ type: 'web_search' }] } : {}),
       }),
     });
 
@@ -190,6 +204,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       },
       finishReason: payload.incomplete_details?.reason ?? payload.status ?? 'completed',
       source: 'CLOUD_PROXY',
+      webSearchUsed: payload.output?.some((item) => item.type === 'web_search_call') === true,
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'AI proxy request failed' }, 502);

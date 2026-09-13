@@ -1,4 +1,4 @@
-import { onRequestPost } from '../../functions/api/ai/generate';
+import { onRequestGet, onRequestPost } from '../../functions/api/ai/generate';
 
 export async function runAiProxyTests(): Promise<{ passed: number; total: number }> {
   let passed = 0;
@@ -13,7 +13,7 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     }
   };
 
-  const request = (provider: string = 'openai', includeApplicationContext = false) =>
+  const request = (provider: string = 'openai', includeApplicationContext = false, enableWebSearch = false) =>
     new Request('https://mio.test/api/ai/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,6 +24,7 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
           { role: 'system', content: 'trusted system instruction' },
           { role: 'user', content: 'hello' },
         ],
+        enableWebSearch,
         ...(includeApplicationContext ? {
           applicationContext: {
             kind: 'PROJECT_KNOWLEDGE',
@@ -50,6 +51,14 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
   const unsupported = await onRequestPost({ request: request('claude'), env: { OPENAI_API_KEY: 'server-secret' } });
   assert(unsupported.status === 501, 'AI proxy rejects providers that are not explicitly enabled');
 
+  const unavailableReadiness = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate'), env: {} });
+  const unavailableBody = await unavailableReadiness.json() as { ready?: boolean };
+  assert(unavailableReadiness.status === 503 && unavailableBody.ready === false, 'Provider readiness reports missing server-side secret');
+
+  const readyResponse = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate'), env: { OPENAI_API_KEY: 'server-secret' } });
+  const readyBody = await readyResponse.json() as { ready?: boolean };
+  assert(readyResponse.status === 200 && readyBody.ready === true, 'Provider readiness reports configured server-side proxy');
+
   const originalFetch = globalThis.fetch;
   let upstreamAuthorization = '';
   let upstreamBody = '';
@@ -57,11 +66,15 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     const headers = new Headers(init?.headers);
     upstreamAuthorization = headers.get('Authorization') ?? '';
     upstreamBody = String(init?.body ?? '');
+    const webSearchRequested = JSON.parse(upstreamBody) as { tools?: Array<{ type?: string }> };
     return new Response(
       JSON.stringify({
         model: 'test-model',
         status: 'completed',
-        output: [{ type: 'message', content: [{ type: 'output_text', text: 'normalized answer' }] }],
+        output: [
+          ...(webSearchRequested.tools?.some((tool) => tool.type === 'web_search') ? [{ type: 'web_search_call' }] : []),
+          { type: 'message', content: [{ type: 'output_text', text: 'normalized answer' }] },
+        ],
         usage: { input_tokens: 10, output_tokens: 3 },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -81,6 +94,12 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     assert(Boolean(contextInput) && contextInput?.role === 'user', 'Typed project context is materialized as provider input data rather than system authority');
     assert(!parsed.instructions?.includes('MIO_APPLICATION_CONTEXT'), 'Project application context is never merged into provider instructions');
     assert(contextInput?.content?.includes('policy=DATA_ONLY') === true && contextInput.content.includes('trust="QUARANTINED"'), 'Provider-boundary context preserves DATA_ONLY policy and source trust metadata');
+
+    const webSearchResponse = await onRequestPost({ request: request('openai', false, true), env: { OPENAI_API_KEY: 'server-secret', OPENAI_MODEL: 'server-model' } });
+    const webSearchBody = await webSearchResponse.json() as { webSearchUsed?: boolean };
+    const webSearchRequest = JSON.parse(upstreamBody) as { tools?: Array<{ type?: string }> };
+    assert(webSearchRequest.tools?.some((tool) => tool.type === 'web_search') === true, 'Online OpenAI request enables the provider web-search tool only when selected');
+    assert(webSearchBody.webSearchUsed === true, 'AI proxy reports actual web-search tool execution');
   } finally {
     globalThis.fetch = originalFetch;
   }

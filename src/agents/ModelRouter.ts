@@ -7,7 +7,7 @@ import { PermissionEngine } from '../security/PermissionEngine';
 import { resourceGovernor } from '../security/ResourceGovernor';
 import { NetworkState } from '../types/core';
 import { AuthorizationGrant, AuthorizationScope } from '../types/security';
-import { ApplicationContextEnvelope, ModelMessage, ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig } from '../types/models';
+import { ApplicationContextEnvelope, ModelMessage, ModelProvider, ModelRequest, ModelResponse, ModelRouterConfig, ProviderReadiness } from '../types/models';
 
 export class ModelRouter {
   private static networkState: NetworkState = 'OFFLINE';
@@ -16,6 +16,7 @@ export class ModelRouter {
     proxyEndpoint: '/api/ai/generate',
     ollamaEndpoint: 'http://127.0.0.1:11434',
     allowOfflineFallback: true,
+    enableWebSearch: false,
   };
 
   public static setNetworkState(state: NetworkState) { this.networkState = state; }
@@ -23,6 +24,44 @@ export class ModelRouter {
   public static configure(config: Partial<ModelRouterConfig>) { this.config = { ...this.config, ...config }; }
   public static getConfig(): ModelRouterConfig { return { ...this.config }; }
   public static isOffline(): boolean { return this.networkState === 'OFFLINE' || this.config.provider === 'local_heuristic'; }
+
+  public static async checkProviderReadiness(timeoutMs: number = 8000): Promise<ProviderReadiness> {
+    const provider = this.config.provider;
+    if (provider === 'local_heuristic') {
+      return { provider, ready: true, status: 'LOCAL_ONLY', detail: 'Local heuristic is available, but it is not an online AI provider.' };
+    }
+    if (this.networkState !== 'ONLINE') {
+      return { provider, ready: false, status: 'UNREACHABLE', detail: 'Network mode is OFFLINE.' };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (provider === 'ollama') {
+        const endpoint = (this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
+        const response = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Ollama readiness returned HTTP ${response.status}`);
+        return { provider, ready: true, status: 'READY', detail: 'Ollama endpoint is reachable.' };
+      }
+
+      const endpoint = this.config.proxyEndpoint ?? '/api/ai/generate';
+      const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', signal: controller.signal });
+      const payload = await response.json().catch(() => ({})) as { ready?: boolean; detail?: string };
+      if (response.ok && payload.ready === true) {
+        return { provider, ready: true, status: 'READY', detail: payload.detail ?? `${provider} secure proxy is configured.` };
+      }
+      return { provider, ready: false, status: 'NOT_CONFIGURED', detail: payload.detail ?? `${provider} secure proxy is not configured.` };
+    } catch (error) {
+      return {
+        provider,
+        ready: false,
+        status: 'UNREACHABLE',
+        detail: error instanceof Error ? error.message : 'Provider readiness check failed.',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   public static materializeApplicationContext(request: ModelRequest): ModelRequest {
     if (!request.applicationContext || request.applicationContext.sources.length === 0) return { ...request, messages: [...request.messages] };
@@ -81,8 +120,8 @@ export class ModelRouter {
         target: 'MIO AI Inference',
         level: 'L4_EXECUTE',
         changes: [sourceCount > 0
-          ? `Send the current AI request plus ${sourceCount} selected project knowledge source(s) to the configured remote model provider through the MIO secure proxy`
-          : 'Send the current AI request to the configured remote model provider through the MIO secure proxy'],
+          ? `Send the current AI request plus ${sourceCount} selected project knowledge source(s) to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`
+          : `Send the current AI request to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`],
         risks: [sourceCount > 0
           ? 'Prompt and selected project context leave the local runtime and are processed by an external AI provider'
           : 'Prompt content leaves the local browser and is processed by an external AI provider'],
@@ -174,7 +213,7 @@ export class ModelRouter {
     const config = this.config;
     if (config.provider === 'local_heuristic') return new LocalHeuristicProvider();
     if (config.provider === 'ollama') return new OllamaProvider(config.ollamaEndpoint, config.model);
-    return new SecureProxyModelProvider({ provider: config.provider, endpoint: config.proxyEndpoint ?? '/api/ai/generate', model: config.model });
+    return new SecureProxyModelProvider({ provider: config.provider, endpoint: config.proxyEndpoint ?? '/api/ai/generate', model: config.model, enableWebSearch: config.enableWebSearch });
   }
 
   private static async executeProvider(provider: ModelProvider, request: ModelRequest, timeoutMs: number): Promise<ModelResponse> {
