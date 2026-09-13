@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AgentOrchestrator, StructuredAgentResponse } from '../../agents/AgentOrchestrator';
-import { Send, Mic, MicOff, Volume2, ShieldCheck, CornerDownLeft, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Send, Mic, MicOff, Volume2, ShieldCheck } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
-import { MioCoreVisualizer } from '../../core/MioCoreVisualizer';
 import { MioCoreState } from '../../types/core';
 
 interface Message {
@@ -26,7 +25,7 @@ export const ChatStudioView: React.FC = () => {
   const [input, setInput] = useState<string>('');
   const [isListening, setIsListening] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
+  const [, setCoreState] = useState<MioCoreState>('IDLE');
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -67,7 +66,6 @@ export const ChatStudioView: React.FC = () => {
 
     setMessages((prev) => [...prev, mioMsg]);
 
-    // TTS speech synthesis if requested
     if (isSpeaking && 'speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(structured.resultText);
       utterance.rate = 1.0;
@@ -76,7 +74,6 @@ export const ChatStudioView: React.FC = () => {
     }
   };
 
-  // Web Speech STT Recognition
   const toggleSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -114,46 +111,44 @@ export const ChatStudioView: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
-      {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-full min-h-0 w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:p-4 space-y-4 overscroll-contain">
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] text-gray-500">
+            <div className="flex items-center gap-2 mb-1 max-w-full">
+              <span className="text-[9px] sm:text-[10px] text-gray-500 truncate">
                 {msg.sender === 'user' ? 'USER' : 'MIO CORE'} // {new Date(msg.timestamp).toLocaleTimeString()}
               </span>
               {msg.sender === 'mio' && (
-                <span className="flex items-center gap-1 text-[9px] text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <span className="flex shrink-0 items-center gap-1 text-[9px] text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
                   <ShieldCheck size={10} /> VALIDATED
                 </span>
               )}
             </div>
 
             <div
-              className={`max-w-2xl p-4 rounded-xl leading-relaxed ${
+              className={`w-fit max-w-[94%] sm:max-w-2xl p-3 sm:p-4 rounded-xl leading-relaxed break-words ${
                 msg.sender === 'user'
                   ? 'bg-cyan-950/50 border border-cyan-500/40 text-cyan-200'
                   : 'bg-[#0d121d] border border-gray-800 text-gray-200'
               }`}
             >
-              <p className="whitespace-pre-wrap">{msg.text}</p>
+              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
 
-              {/* Structured Response Breakdown (Section 55) */}
               {msg.structured && (
-                <div className="mt-3 pt-3 border-t border-gray-800 space-y-2 text-[11px]">
+                <div className="mt-3 pt-3 border-t border-gray-800 space-y-2 text-[11px] min-w-0">
                   {msg.structured.emotionalContext && (
-                    <div className="text-sky-400 italic bg-sky-950/20 p-1.5 rounded border border-sky-500/20">
+                    <div className="text-sky-400 italic bg-sky-950/20 p-2 rounded border border-sky-500/20 break-words">
                       ℹ {msg.structured.emotionalContext}
                     </div>
                   )}
 
-                  <div className="bg-[#111726] p-2 rounded border border-gray-800">
+                  <div className="bg-[#111726] p-2 rounded border border-gray-800 min-w-0">
                     <span className="text-cyan-400 font-bold block mb-1">PLAN &amp; EXECUTION:</span>
-                    <ul className="list-disc list-inside space-y-0.5 text-gray-400">
+                    <ul className="list-disc list-inside space-y-1 text-gray-400 break-words">
                       {msg.structured.plan.map((step, idx) => (
                         <li key={idx}>{step}</li>
                       ))}
@@ -161,13 +156,14 @@ export const ChatStudioView: React.FC = () => {
                   </div>
 
                   {msg.structured.suggestedMode && msg.structured.suggestedMode !== 'CHAT' && (
-                    <div className="flex items-center justify-between bg-cyan-950/30 p-2 rounded border border-cyan-500/30">
-                      <span className="text-cyan-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-cyan-950/30 p-2 rounded border border-cyan-500/30">
+                      <span className="text-cyan-300 break-words">
                         Suggested Studio: <strong>{msg.structured.suggestedMode}</strong>
                       </span>
                       <button
+                        type="button"
                         onClick={() => eventBus.emit('SWITCH_MODE', msg.structured?.suggestedMode)}
-                        className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded text-[10px] cursor-pointer"
+                        className="min-h-10 px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded text-[10px] cursor-pointer touch-manipulation shrink-0"
                       >
                         OPEN {msg.structured.suggestedMode} STUDIO
                       </button>
@@ -181,44 +177,55 @@ export const ChatStudioView: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Interactive Input Bar */}
-      <div className="p-4 bg-[#0d121d] border-t border-gray-800">
-        <div className="flex items-center gap-2 bg-[#07090e] border border-gray-700 focus-within:border-cyan-400 rounded-xl p-2 transition">
+      <div className="shrink-0 p-2.5 sm:p-4 pb-[max(0.625rem,env(safe-area-inset-bottom))] bg-[#0d121d] border-t border-gray-800">
+        <div className="flex items-end gap-1.5 sm:gap-2 bg-[#07090e] border border-gray-700 focus-within:border-cyan-400 rounded-xl p-1.5 sm:p-2 transition">
           <button
+            type="button"
             onClick={toggleSpeechRecognition}
-            className={`p-2 rounded-lg transition cursor-pointer ${
+            className={`h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-lg transition cursor-pointer touch-manipulation ${
               isListening
                 ? 'bg-red-500 text-white animate-pulse'
-                : 'hover:bg-gray-800 text-gray-400 hover:text-cyan-300'
+                : 'hover:bg-gray-800 text-gray-400 hover:text-cyan-300 active:bg-gray-800'
             }`}
             title={isListening ? 'Stop Listening' : 'Voice Input (STT)'}
+            aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
           >
-            {isListening ? <Mic size={18} /> : <MicOff size={18} />}
+            {isListening ? <Mic size={19} /> : <MicOff size={19} />}
           </button>
 
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type your logical query, 3D design request, SFX prompt, or creative concept..."
-            className="flex-1 bg-transparent text-white text-xs outline-none px-2 font-mono placeholder:text-gray-600"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            rows={1}
+            placeholder="Ask MIO anything..."
+            className="flex-1 min-w-0 max-h-28 resize-none bg-transparent text-white text-base sm:text-xs leading-5 outline-none px-1.5 py-2.5 sm:py-2 font-mono placeholder:text-gray-600"
           />
 
           <button
+            type="button"
             onClick={() => setIsSpeaking(!isSpeaking)}
-            className={`p-2 rounded-lg transition cursor-pointer ${
+            className={`hidden xs:inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition cursor-pointer touch-manipulation ${
               isSpeaking ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' : 'text-gray-500 hover:bg-gray-800'
             }`}
             title={isSpeaking ? 'TTS Voice Enabled' : 'Enable TTS Voice'}
+            aria-label={isSpeaking ? 'Disable text to speech' : 'Enable text to speech'}
           >
             <Volume2 size={18} />
           </button>
 
           <button
+            type="button"
             onClick={handleSend}
-            className="p-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg transition cursor-pointer shadow-md shadow-cyan-500/20"
+            disabled={!input.trim()}
+            className="h-11 w-11 shrink-0 inline-flex items-center justify-center bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold rounded-lg transition cursor-pointer disabled:cursor-default touch-manipulation shadow-md shadow-cyan-500/20"
             title="Send Directive"
+            aria-label="Send message"
           >
             <Send size={18} />
           </button>
