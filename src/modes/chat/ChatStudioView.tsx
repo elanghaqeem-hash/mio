@@ -210,7 +210,7 @@ export const ChatStudioView: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsSpeaking(!isSpeaking)}
-            className={`hidden xs:inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition cursor-pointer touch-manipulation ${
+            className={`hidden sm:inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition cursor-pointer touch-manipulation ${
               isSpeaking ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' : 'text-gray-500 hover:bg-gray-800'
             }`}
             title={isSpeaking ? 'TTS Voice Enabled' : 'Enable TTS Voice'}
