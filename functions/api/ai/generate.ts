@@ -61,11 +61,11 @@ interface NormalizedProviderResponse {
 }
 
 const CLOUD_PROVIDERS: CloudProviderId[] = ['openrouter', 'openai', 'gemini', 'claude'];
-const PROVIDER_CONFIG: Record<CloudProviderId, { key: keyof Env; model: keyof Env; label: string }> = {
-  openrouter: { key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', label: 'OpenRouter' },
-  openai: { key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', label: 'OpenAI' },
-  gemini: { key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', label: 'Gemini' },
-  claude: { key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', label: 'Claude' },
+const PROVIDER_CONFIG: Record<CloudProviderId, { key: keyof Env; model: keyof Env; label: string; defaultModel: string }> = {
+  openrouter: { key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', label: 'OpenRouter', defaultModel: 'openrouter/auto' },
+  openai: { key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', label: 'OpenAI', defaultModel: 'gpt-5.6-luna' },
+  gemini: { key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', label: 'Gemini', defaultModel: 'gemini-3.6-flash' },
+  claude: { key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', label: 'Claude', defaultModel: 'claude-sonnet-5' },
 };
 
 const json = (payload: unknown, status = 200) =>
@@ -82,7 +82,7 @@ const isCloudProvider = (value: unknown): value is CloudProviderId =>
   typeof value === 'string' && CLOUD_PROVIDERS.includes(value as CloudProviderId);
 
 const selectedModel = (provider: CloudProviderId, requested: string | undefined, env: Env): string | undefined =>
-  requested?.trim() || env[PROVIDER_CONFIG[provider].model]?.trim() || (provider === 'openrouter' ? 'openrouter/auto' : undefined);
+  requested?.trim() || env[PROVIDER_CONFIG[provider].model]?.trim() || PROVIDER_CONFIG[provider].defaultModel;
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);

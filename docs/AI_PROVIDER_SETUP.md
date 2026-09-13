@@ -16,20 +16,20 @@ Configure provider variables in the Cloudflare Pages environment, never in sourc
 | Provider | Required secret | Optional server model | Native internet tool |
 | --- | --- | --- | --- |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (defaults to `openrouter/auto`) | Model-agnostic `web` plugin |
-| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` | Responses API `web_search` |
-| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Google Search grounding |
-| Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | Claude server-side web search |
+| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` (defaults to `gpt-5.6-luna`) | Responses API `web_search` |
+| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` (defaults to `gemini-3.6-flash`) | Google Search grounding |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (defaults to `claude-sonnet-5`) | Claude server-side web search |
 
-A server model variable is optional only when a valid model identifier is entered in MIO Settings. Secrets are never returned by the readiness endpoint.
+Each provider has a cost-conscious server default. The optional model variable or MIO Settings model field overrides that default. Secrets are never returned by the readiness endpoint.
 
 ## Cloudflare Pages setup
 
 1. Open the MIO Pages project in Cloudflare.
 2. Add the chosen API key as an encrypted secret for both Preview and Production where needed.
-3. Add its model variable, or plan to enter a model in MIO Settings.
+3. Optionally add its model variable to override the secure default, or enter a model in MIO Settings.
 4. Redeploy after changing environment variables.
 5. Open MIO Settings and select `ONLINE MODE`.
-6. Select OpenRouter, OpenAI, Gemini, or Claude and enter a model when no server default exists. OpenRouter can use `openrouter/auto` when its model is left empty.
+6. Select OpenRouter, OpenAI, Gemini, or Claude. Leave model empty to use the provider default, or enter an explicit model override.
 7. Select `CHECK CONNECTION`. Continue only when the selected provider reports `READY`.
 8. Optionally enable live web search/grounding.
 9. Send a Chat request and approve the MIO L4 request.
@@ -42,7 +42,7 @@ Select `Ollama — local endpoint`, provide the endpoint and an installed model 
 
 ## Failure behavior
 
-- Missing secret or model: readiness and generation return an explicit, provider-specific configuration error.
+- Missing secret: readiness and generation return an explicit, provider-specific configuration error. Every cloud provider has a default model, while invalid overrides remain visible as upstream errors.
 - Unsupported provider: the proxy rejects it before any upstream request.
 - Provider HTTP error: MIO identifies the failing provider and shows a bounded upstream detail.
 - Malformed or empty response: MIO rejects it instead of presenting a fabricated answer.

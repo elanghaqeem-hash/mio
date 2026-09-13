@@ -53,9 +53,23 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
   const unsupported = await onRequestPost({ request: request('mistral'), env: { OPENAI_API_KEY: 'server-secret' } });
   assert(unsupported.status === 501, 'AI proxy rejects providers outside the explicit allowlist');
 
-  const missingModelReadiness = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate?provider=openai'), env: { OPENAI_API_KEY: 'server-secret' } });
-  const missingModelBody = await missingModelReadiness.json() as { ready?: boolean; modelConfigured?: boolean };
-  assert(missingModelReadiness.status === 503 && missingModelBody.ready === false && missingModelBody.modelConfigured === false, 'Readiness requires both a provider secret and an effective model');
+  const providerDefaults: Record<TestProvider, string> = {
+    openrouter: 'openrouter/auto',
+    openai: 'gpt-5.6-luna',
+    gemini: 'gemini-3.6-flash',
+    claude: 'claude-sonnet-5',
+  };
+  const providerSecrets = {
+    openrouter: { OPENROUTER_API_KEY: 'openrouter-secret' },
+    openai: { OPENAI_API_KEY: 'openai-secret' },
+    gemini: { GEMINI_API_KEY: 'gemini-secret' },
+    claude: { ANTHROPIC_API_KEY: 'claude-secret' },
+  };
+  for (const provider of ['openrouter', 'openai', 'gemini', 'claude'] as TestProvider[]) {
+    const defaultReadiness = await onRequestGet({ request: new Request(`https://mio.test/api/ai/generate?provider=${provider}`), env: providerSecrets[provider] });
+    const defaultBody = await defaultReadiness.json() as { ready?: boolean; modelConfigured?: boolean; model?: string };
+    assert(defaultReadiness.status === 200 && defaultBody.ready === true && defaultBody.modelConfigured === true && defaultBody.model === providerDefaults[provider], `${provider} is ready with only its secret and secure server default model`);
+  }
 
   const readyResponse = await onRequestGet({ request: new Request('https://mio.test/api/ai/generate?provider=gemini&model=browser-model'), env: { GEMINI_API_KEY: 'gemini-secret' } });
   const readyBody = await readyResponse.json() as { provider?: string; ready?: boolean; model?: string };
@@ -118,12 +132,7 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
   }) as typeof fetch;
 
   try {
-    const environments = {
-      openrouter: { OPENROUTER_API_KEY: 'openrouter-secret' },
-      openai: { OPENAI_API_KEY: 'openai-secret' },
-      gemini: { GEMINI_API_KEY: 'gemini-secret' },
-      claude: { ANTHROPIC_API_KEY: 'claude-secret' },
-    };
+    const environments = providerSecrets;
     const expectedText = { openrouter: 'openrouter answer', openai: 'openai answer', gemini: 'gemini answer', claude: 'claude answer' };
 
     for (const provider of ['openrouter', 'openai', 'gemini', 'claude'] as TestProvider[]) {
