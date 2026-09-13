@@ -3,16 +3,35 @@ import { MioCoreState, MioSystemMode, NetworkState } from '../../types/core';
 import { MioCoreVisualizer } from '../../core/MioCoreVisualizer';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { eventBus } from '../../core/EventBus';
-import { Shield, Wifi, WifiOff, AlertOctagon, RotateCcw, Minus, Square, X } from 'lucide-react';
+import {
+  Shield,
+  Wifi,
+  WifiOff,
+  AlertOctagon,
+  RotateCcw,
+  Minus,
+  Square,
+  X,
+  Menu,
+  PanelRight,
+} from 'lucide-react';
 import { ModelRouter } from '../../agents/ModelRouter';
 
 interface TopBarProps {
   coreState: MioCoreState;
   activeMode: MioSystemMode;
   onOpenSecurity: () => void;
+  onToggleNavigation: () => void;
+  onToggleContext: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSecurity }) => {
+export const TopBar: React.FC<TopBarProps> = ({
+  coreState,
+  activeMode,
+  onOpenSecurity,
+  onToggleNavigation,
+  onToggleContext,
+}) => {
   const [network, setNetwork] = useState<NetworkState>(ModelRouter.getNetworkState());
   const [isStopped, setIsStopped] = useState<boolean>(emergencyStop.isEmergencyStopped());
   const isDesktop = typeof window !== 'undefined' && Boolean(window.mioDesktop);
@@ -21,7 +40,6 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
     const unsubStop = eventBus.on('EMERGENCY_STOP_TRIGGERED', () => setIsStopped(true));
     const unsubReset = eventBus.on('EMERGENCY_STOP_RESET', () => setIsStopped(false));
 
-    // Listen for system tray emergency stop only when running in Electron.
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
       unregisterTrayStop = window.mioDesktop.onEmergencyStopTriggered((reason) => {
@@ -52,38 +70,52 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
     setTimeout(() => eventBus.emit('CORE_STATE_CHANGE', 'IDLE'), 1500);
   };
 
-  // Desktop Window Controls
   const handleMinimize = () => window.mioDesktop?.minimizeWindow();
   const handleMaximize = () => window.mioDesktop?.maximizeWindow();
   const handleClose = () => window.mioDesktop?.closeWindow();
 
   return (
-    <header className="h-14 bg-[#090d16] border-b border-gray-800 flex items-center justify-between px-4 select-none z-30 font-mono text-xs" style={{ WebkitAppRegion: isDesktop ? 'drag' : 'no-drag' } as any}>
-      {/* Left: Branding & Core Mini Orb */}
-      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
-        <MioCoreVisualizer state={coreState} size={36} interactive={false} />
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-white tracking-wider text-sm flex items-center">
+    <header
+      className="h-16 lg:h-14 shrink-0 bg-[#090d16] border-b border-gray-800 flex items-center justify-between gap-2 px-2 sm:px-3 lg:px-4 pt-[env(safe-area-inset-top)] lg:pt-0 select-none z-30 font-mono text-xs"
+      style={{ WebkitAppRegion: isDesktop ? 'drag' : 'no-drag' } as any}
+    >
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <button
+          type="button"
+          onClick={onToggleNavigation}
+          className="lg:hidden h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-lg border border-gray-800 bg-[#0d121d] text-gray-300 active:bg-cyan-950/60 active:text-cyan-300 touch-manipulation"
+          aria-label="Open workspace menu"
+          title="Workspaces"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="hidden sm:block">
+          <MioCoreVisualizer state={coreState} size={34} interactive={false} />
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-extrabold text-white tracking-wider text-sm flex items-center shrink-0">
               MIO <span className="text-cyan-400 ml-1">V2</span>
             </span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+            <span className="hidden xl:inline-flex text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
               {isDesktop ? 'DESKTOP ENVIRONMENT' : 'WEB ENVIRONMENT'}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-gray-400">
-            <span>STATE: <strong className="text-cyan-300">{coreState}</strong></span>
-            <span>//</span>
-            <span>MODE: <strong className="text-gray-200">{activeMode}</strong></span>
+          <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-400 min-w-0">
+            <span className="hidden sm:inline">STATE: <strong className="text-cyan-300">{coreState}</strong></span>
+            <span className="hidden sm:inline">//</span>
+            <span className="truncate">MODE: <strong className="text-gray-200">{activeMode}</strong></span>
           </div>
         </div>
       </div>
 
-      {/* Center: Status & Connectivity Toggle */}
-      <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="hidden md:flex items-center gap-2 lg:gap-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
         <button
+          type="button"
           onClick={toggleNetwork}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition cursor-pointer ${
+          className={`min-h-9 flex items-center gap-1.5 px-3 py-1 rounded-full border transition cursor-pointer touch-manipulation ${
             network === 'ONLINE'
               ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-400'
               : 'bg-gray-800/60 border-gray-700 text-gray-400'
@@ -95,39 +127,54 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
         </button>
 
         <button
+          type="button"
           onClick={onOpenSecurity}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/40 transition cursor-pointer"
+          className="hidden lg:flex min-h-9 items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/40 transition cursor-pointer touch-manipulation"
         >
           <Shield size={12} />
-          <span className="text-[10px] font-bold">SECURITY: L0-L5 ENFORCED</span>
+          <span className="text-[10px] font-bold hidden xl:inline">SECURITY: L0-L5 ENFORCED</span>
+          <span className="text-[10px] font-bold xl:hidden">SECURITY</span>
         </button>
       </div>
 
-      {/* Right: Emergency STOP MIO Button & Desktop Window Controls */}
-      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <button
+          type="button"
+          onClick={onToggleContext}
+          className="xl:hidden h-11 w-11 inline-flex items-center justify-center rounded-lg border border-gray-800 bg-[#0d121d] text-gray-300 active:bg-cyan-950/60 active:text-cyan-300 touch-manipulation"
+          aria-label="Open context and telemetry"
+          title="Context & Telemetry"
+        >
+          <PanelRight size={19} />
+        </button>
+
         {isStopped ? (
           <button
+            type="button"
             onClick={handleStopToggle}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold shadow-lg shadow-emerald-500/30 transition cursor-pointer"
+            className="h-11 min-w-11 flex items-center justify-center gap-2 px-3 sm:px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold shadow-lg shadow-emerald-500/30 transition cursor-pointer touch-manipulation"
+            aria-label="Reset emergency stop"
           >
-            <RotateCcw size={14} />
-            <span>RESET EMERGENCY STOP</span>
+            <RotateCcw size={16} />
+            <span className="hidden sm:inline">RESET STOP</span>
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleStopToggle}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold shadow-lg shadow-red-600/40 animate-pulse transition cursor-pointer"
+            className="h-11 min-w-11 flex items-center justify-center gap-2 px-3 sm:px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold shadow-lg shadow-red-600/40 transition cursor-pointer touch-manipulation"
             title="Immediately halt all generations, audio, agent tasks, and network calls"
+            aria-label="Emergency stop MIO"
           >
-            <AlertOctagon size={14} />
-            <span>STOP MIO</span>
+            <AlertOctagon size={16} />
+            <span className="hidden sm:inline">STOP MIO</span>
           </button>
         )}
 
-        {/* Native window actions exist only inside the Electron shell. */}
         {isDesktop && (
-          <div className="flex items-center gap-1 border-l border-gray-800 pl-3">
+          <div className="hidden lg:flex items-center gap-1 border-l border-gray-800 pl-3">
             <button
+              type="button"
               onClick={handleMinimize}
               className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
               title="Minimize to taskbar"
@@ -135,6 +182,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
               <Minus size={13} />
             </button>
             <button
+              type="button"
               onClick={handleMaximize}
               className="p-1.5 text-gray-400 hover:text-cyan-300 hover:bg-gray-800 rounded transition cursor-pointer"
               title="Maximize / Restore window"
@@ -142,6 +190,7 @@ export const TopBar: React.FC<TopBarProps> = ({ coreState, activeMode, onOpenSec
               <Square size={12} />
             </button>
             <button
+              type="button"
               onClick={handleClose}
               className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-950/60 rounded transition cursor-pointer"
               title="Close Application"
