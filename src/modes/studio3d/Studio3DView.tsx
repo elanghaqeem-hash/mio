@@ -45,6 +45,7 @@ export const Studio3DView: React.FC = () => {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const meshMap = meshMapRef.current;
     const width = container.clientWidth;
     const height = container.clientHeight;
     const scene = new Scene();
@@ -98,11 +99,11 @@ export const Studio3DView: React.FC = () => {
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', resize);
-      meshMapRef.current.forEach((mesh) => {
+      meshMap.forEach((mesh) => {
         mesh.geometry.dispose();
         if (mesh.material instanceof MeshStandardMaterial) mesh.material.dispose();
       });
-      meshMapRef.current.clear();
+      meshMap.clear();
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
