@@ -75,11 +75,20 @@ export const inferCreativeDocumentKind = (fileName: string): CreativeDocumentKin
   return extensionKinds[extension] ?? null;
 };
 
-export const migrateLegacyCreativeDocument = (fileName: string, legacyData: unknown, now = Date.now()): CreativeDocument => {
+export const createCreativeWorkspaceId = (fileName: string): string => {
+  let hash = 2166136261;
+  for (const character of fileName.toLowerCase()) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `creative_workspace_${(hash >>> 0).toString(36)}`;
+};
+
+export const migrateLegacyCreativeDocument = (fileName: string, legacyData: unknown, now = Date.now(), documentId = `creative_${inferCreativeDocumentKind(fileName)}_${now}`): CreativeDocument => {
   const kind = inferCreativeDocumentKind(fileName);
   if (!kind) throw new Error(`Unsupported legacy creative format: ${fileName}`);
   const data = safeRecord(legacyData);
-  const document = createCreativeDocument(kind, fileName.replace(/\.[^.]+$/, ''), now, `creative_${kind}_${now}`);
+  const document = createCreativeDocument(kind, fileName.replace(/\.[^.]+$/, ''), now, documentId);
   const collectionKey = kind === '3d' ? 'objects' : kind === 'graphic' ? 'layers' : kind === 'sfx' ? 'layers' : kind === 'music' ? 'tracks' : kind === 'animation' ? 'tracks' : 'layers';
   const nodeType = kind === '3d' ? 'object-3d' : kind === 'graphic' ? 'graphic-layer' : kind === 'sfx' ? 'audio-layer' : kind === 'music' ? 'music-track' : kind === 'animation' ? 'animation-track' : `${kind}-layer`;
   const nodes = legacyCollection(data, collectionKey).map((value, index) => nodeFromLegacy(value, `${kind}_node_${index + 1}`, nodeType));
@@ -87,7 +96,12 @@ export const migrateLegacyCreativeDocument = (fileName: string, legacyData: unkn
   document.rootNodeIds = nodes.map((node) => node.id);
   document.selection = { nodeIds: nodes[0] ? [nodes[0].id] : [], primaryNodeId: nodes[0]?.id ?? null };
   document.timeline = kind === 'animation' ? timelineFromLegacy(data) : document.timeline;
-  document.metadata = { legacyFormat: `.${fileName.split('.').pop()?.toLowerCase()}`, legacyData: data };
+  document.metadata = {
+    legacyFormat: `.${fileName.split('.').pop()?.toLowerCase()}`,
+    legacyFileName: fileName,
+    legacyManagedNodeIds: [...document.rootNodeIds],
+    legacyData: data,
+  };
   document.operations.push({
     id: `op_migration_${now}`,
     timestamp: now,

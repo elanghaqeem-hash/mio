@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Play, Pause, RotateCcw, Clock, Plus, Film } from 'lucide-react';
 import { MioAnimationProject } from '../../types/creative';
 import { eventBus } from '../../core/EventBus';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
+import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 
 const runtimeTimestamp = () => Date.now();
 
-export const AnimationStudioView: React.FC = () => {
-  const [animProject, setAnimProject] = useState<MioAnimationProject>({
+const INITIAL_ANIMATION_PROJECT: MioAnimationProject = {
     duration: 5.0,
     fps: 60,
     currentTime: 0,
@@ -24,7 +25,13 @@ export const AnimationStudioView: React.FC = () => {
         { time: 5.0, value: 0, interpolation: 'linear' },
       ] },
     ],
-  });
+};
+
+export const AnimationStudioView: React.FC = () => {
+  const workspace = useCreativeStudioDocument<MioAnimationProject>('MIO_Animation.mioanim', INITIAL_ANIMATION_PROJECT);
+  const { state: storedProject, setState: setAnimProject } = workspace;
+  const [currentTime, setCurrentTime] = useState(0);
+  const animProject = { ...storedProject, currentTime };
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
@@ -34,24 +41,24 @@ export const AnimationStudioView: React.FC = () => {
     const tick = (now: number) => {
       const delta = (now - lastTime) / 1000;
       lastTime = now;
-      setAnimProject((previous) => {
-        let nextTime = previous.currentTime + delta;
-        if (nextTime > previous.duration) {
-          if (previous.loop) nextTime = 0;
+      setCurrentTime((previous) => {
+        let nextTime = previous + delta;
+        if (nextTime > storedProject.duration) {
+          if (storedProject.loop) nextTime = 0;
           else {
-            nextTime = previous.duration;
+            nextTime = storedProject.duration;
             setIsPlaying(false);
           }
         }
-        return { ...previous, currentTime: nextTime };
+        return nextTime;
       });
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [isPlaying]);
+  }, [isPlaying, storedProject.duration, storedProject.loop]);
 
-  const handleScrub = (time: number) => setAnimProject((previous) => ({ ...previous, currentTime: Math.max(0, Math.min(previous.duration, time)) }));
+  const handleScrub = (time: number) => setCurrentTime(Math.max(0, Math.min(storedProject.duration, time)));
 
   const addKeyframeToTrack = (trackId: string) => {
     setAnimProject((previous) => ({
@@ -66,7 +73,8 @@ export const AnimationStudioView: React.FC = () => {
   const hoverVal = Math.sin((animProject.currentTime / animProject.duration) * Math.PI * 2) * 20;
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+    <div className="relative flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+      <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="flex-1 relative flex items-center justify-center border-b border-gray-800 bg-[#0a0e17] overflow-hidden">
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/90 px-3 py-1.5 rounded border border-cyan-500/30 text-cyan-300"><Film size={14} /><span>ANIMATION WORKSPACE // KINETIC PREVIEW</span><span className="text-amber-300 text-[10px] ml-2">LOCAL STRUCTURAL PREVIEW</span></div>
         <div className="relative flex flex-col items-center justify-center p-8 rounded-2xl bg-cyan-950/20 border border-cyan-500/40 shadow-2xl shadow-cyan-500/10 transition-transform duration-75" style={{ transform: `translateY(${-hoverVal}px)` }}>

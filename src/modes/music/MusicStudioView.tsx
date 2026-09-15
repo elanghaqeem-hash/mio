@@ -3,9 +3,10 @@ import { MioMusicProject, NoteEvent } from '../../types/creative';
 import { Play, Square, Music, ShieldCheck, RotateCcw } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
+import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 
-export const MusicStudioView: React.FC = () => {
-  const [project, setProject] = useState<MioMusicProject>({
+const INITIAL_MUSIC_PROJECT: MioMusicProject = {
     tempo: 124,
     key: 'A',
     scale: 'Cyberpunk Aeolian',
@@ -29,7 +30,11 @@ export const MusicStudioView: React.FC = () => {
         { id: 'np2', pitch: 60, startStep: 8, durationSteps: 8, velocity: 0.7 },
       ] },
     ],
-  });
+};
+
+export const MusicStudioView: React.FC = () => {
+  const workspace = useCreativeStudioDocument<MioMusicProject>('MIO_Music_Project.miomusic', INITIAL_MUSIC_PROJECT);
+  const { state: project, setState: setProject } = workspace;
   const [activeTrackId, setActiveTrackId] = useState('trk_lead');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -97,7 +102,8 @@ export const MusicStudioView: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+    <div className="relative flex h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+      <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="flex-1 flex flex-col p-4 bg-[#0a0e17] overflow-hidden">
         <div className="flex items-center justify-between mb-3 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
           <div className="flex items-center gap-3">
