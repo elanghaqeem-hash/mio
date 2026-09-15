@@ -222,6 +222,97 @@ svg {
   letter-spacing: 0.16em;
 }
 
+.mission-pulse-shell {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 1rem auto;
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.72);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(13, 18, 29, 0.96), rgba(5, 10, 17, 0.96));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025), 0 16px 48px rgba(0, 0, 0, 0.22);
+}
+
+.mission-pulse-empty,
+.mission-pulse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.mission-pulse-kicker {
+  color: #67e8f9;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.mission-status-badge,
+.mission-action {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(54, 215, 255, 0.3);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.mission-action {
+  color: #67e8f9;
+  background: rgba(8, 47, 73, 0.32);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.mission-action:hover { border-color: rgba(103, 232, 249, 0.65); background: rgba(8, 47, 73, 0.55); color: #cffafe; }
+.mission-action-danger { border-color: rgba(244, 63, 94, 0.28); background: rgba(76, 5, 25, 0.22); color: #fda4af; }
+.mission-action-danger:hover { border-color: rgba(251, 113, 133, 0.6); background: rgba(76, 5, 25, 0.45); color: #ffe4e6; }
+
+.mission-progress-track {
+  height: 2px;
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.mission-progress-track > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #0891b2, #67e8f9);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.6);
+  transition: width 240ms ease;
+}
+
+.mission-step-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(30, 41, 59, 0.68);
+}
+
+.mission-step {
+  display: flex;
+  min-width: 0;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border-right: 1px solid rgba(30, 41, 59, 0.68);
+}
+
+.mission-step:last-child { border-right: 0; }
+.mission-step-icon { display: inline-flex; width: 1.25rem; height: 1.25rem; flex: 0 0 auto; align-items: center; justify-content: center; border: 1px solid #334155; border-radius: 999px; color: #64748b; }
+.mission-step-completed .mission-step-icon { border-color: rgba(16, 185, 129, 0.45); color: #6ee7b7; background: rgba(6, 78, 59, 0.3); }
+.mission-step-running .mission-step-icon { border-color: rgba(34, 211, 238, 0.55); color: #67e8f9; background: rgba(8, 47, 73, 0.45); box-shadow: 0 0 12px rgba(34, 211, 238, 0.2); }
+.mission-step-failed .mission-step-icon, .mission-step-cancelled .mission-step-icon { border-color: rgba(244, 63, 94, 0.45); color: #fda4af; background: rgba(76, 5, 25, 0.3); }
+.mission-step-pulse { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #67e8f9; box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.12); animation: mission-pulse 1.4s ease-in-out infinite; }
+
+@keyframes mission-pulse {
+  50% { transform: scale(0.72); opacity: 0.62; }
+}
+
 .studio-copilot-dock {
   position: absolute;
   z-index: 20;
@@ -293,6 +384,11 @@ svg {
   .agent-orb-stage { width: min(18rem, 82vw); }
   .agent-orb-stage canvas { transform: scale(0.84); }
   .agent-orb-caption { bottom: 1%; }
+  .mission-pulse-shell { width: calc(100% - 1rem); margin: 0.5rem auto; border-radius: 0.75rem; }
+  .mission-pulse-empty, .mission-pulse-header { align-items: flex-start; flex-direction: column; padding: 0.85rem; }
+  .mission-step-grid { grid-template-columns: minmax(0, 1fr); }
+  .mission-step { border-right: 0; border-bottom: 1px solid rgba(30, 41, 59, 0.68); padding: 0.7rem 0.85rem; }
+  .mission-step:last-child { border-bottom: 0; }
 
   /* Most creative studios use a desktop row layout with a fixed properties panel.
      On phones, stack those top-level regions vertically instead of squeezing the viewport. */

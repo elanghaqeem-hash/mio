@@ -6,6 +6,7 @@ import { ProjectManager } from '../../project/ProjectManager';
 import { systemPreferences } from '../../settings/SystemPreferences';
 import { MioCoreState, MioSystemMode } from '../../types/core';
 import { ChatStudioView } from '../chat/ChatStudioView';
+import { MissionPulse } from './MissionPulse';
 
 interface AgentCommandCenterProps {
   coreState: MioCoreState;
@@ -102,6 +103,8 @@ export const AgentCommandCenter: React.FC<AgentCommandCenterProps> = ({ coreStat
           </div>
         </div>
       </section>
+
+      <MissionPulse onSelectMode={onSelectMode} />
 
       <section id="mio-conversation" className="mx-auto min-h-[560px] max-w-6xl border-x border-gray-900/80 bg-[#070a10]">
         <ChatStudioView />
