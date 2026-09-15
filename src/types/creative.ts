@@ -80,6 +80,34 @@ export interface MioGraphicDocument {
   selectedLayerId?: string;
 }
 
+// Drawing Document Specification (.miodraw)
+export interface DrawingPoint { x: number; y: number; pressure: number }
+
+export interface DrawingStroke {
+  id: string;
+  points: DrawingPoint[];
+  color: string;
+  size: number;
+  opacity: number;
+  blendMode: 'normal' | 'multiply' | 'screen' | 'erase';
+}
+
+export interface DrawingLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  strokes: DrawingStroke[];
+}
+
+export interface MioDrawingDocument {
+  width: number;
+  height: number;
+  backgroundColor: string;
+  layers: DrawingLayer[];
+}
+
 // SFX Patch Specification (.miosfx)
 export interface SFXLayer {
   id: string;

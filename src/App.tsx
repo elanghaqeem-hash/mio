@@ -14,6 +14,7 @@ import { ChatStudioView } from './modes/chat/ChatStudioView';
 const Studio3DView = lazy(() => import('./modes/studio3d/Studio3DView').then((m) => ({ default: m.Studio3DView })));
 const AnimationStudioView = lazy(() => import('./modes/animation/AnimationStudioView').then((m) => ({ default: m.AnimationStudioView })));
 const GraphicStudioView = lazy(() => import('./modes/graphic/GraphicStudioView').then((m) => ({ default: m.GraphicStudioView })));
+const DrawingStudioView = lazy(() => import('./modes/drawing/DrawingStudioView').then((m) => ({ default: m.DrawingStudioView })));
 const SFXStudioView = lazy(() => import('./modes/sfx/SFXStudioView').then((m) => ({ default: m.SFXStudioView })));
 const MusicStudioView = lazy(() => import('./modes/music/MusicStudioView').then((m) => ({ default: m.MusicStudioView })));
 const ResearchStudioView = lazy(() => import('./modes/research/ResearchStudioView').then((m) => ({ default: m.ResearchStudioView })));
@@ -62,6 +63,7 @@ export const App: React.FC = () => {
       case '3D': return <Studio3DView />;
       case 'ANIMATION': return <AnimationStudioView />;
       case 'GRAPHIC': return <GraphicStudioView />;
+      case 'DRAWING': return <DrawingStudioView />;
       case 'SFX': return <SFXStudioView />;
       case 'MUSIC': return <MusicStudioView />;
       case 'RESEARCH': return <ResearchStudioView />;
