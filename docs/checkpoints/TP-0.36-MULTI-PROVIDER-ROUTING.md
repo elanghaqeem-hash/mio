@@ -19,7 +19,7 @@ MIO Web Lab routes OpenRouter, OpenAI, Google Gemini, and Anthropic Claude throu
 
 Configure at least one complete provider pair:
 
-- `OPENROUTER_API_KEY`; `OPENROUTER_MODEL` is optional and defaults to `openrouter/auto`.
+- `OPENROUTER_API_KEY`; `OPENROUTER_MODEL` is optional and defaults to `openrouter/free`. An incompatible explicit model falls back to the same free router.
 - `OPENAI_API_KEY` and either `OPENAI_MODEL` or a model selected in Settings.
 - `GEMINI_API_KEY` and either `GEMINI_MODEL` or a model selected in Settings.
 - `ANTHROPIC_API_KEY` and either `ANTHROPIC_MODEL` or a model selected in Settings.

@@ -61,8 +61,9 @@ interface NormalizedProviderResponse {
 }
 
 const CLOUD_PROVIDERS: CloudProviderId[] = ['openrouter', 'openai', 'gemini', 'claude'];
+const OPENROUTER_SAFE_FALLBACK_MODEL = 'openrouter/free';
 const PROVIDER_CONFIG: Record<CloudProviderId, { key: keyof Env; model: keyof Env; label: string; defaultModel: string }> = {
-  openrouter: { key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', label: 'OpenRouter', defaultModel: 'openrouter/auto' },
+  openrouter: { key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', label: 'OpenRouter', defaultModel: OPENROUTER_SAFE_FALLBACK_MODEL },
   openai: { key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', label: 'OpenAI', defaultModel: 'gpt-5.6-luna' },
   gemini: { key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', label: 'Gemini', defaultModel: 'gemini-3.6-flash' },
   claude: { key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', label: 'Claude', defaultModel: 'claude-sonnet-5' },
@@ -104,7 +105,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     modelConfigured: Boolean(model),
     model,
     detail: ready
-      ? `${config.label} secure proxy is configured for model '${model}'. A real prompt still requires the MIO L4 permission gate.`
+      ? `${config.label} secure proxy is configured for model '${model}'.${requestedProvider === 'openrouter' && model !== OPENROUTER_SAFE_FALLBACK_MODEL ? ` Unavailable or restricted models automatically fall back to '${OPENROUTER_SAFE_FALLBACK_MODEL}'.` : ''} A real prompt still requires the MIO L4 permission gate.`
       : `Missing server configuration: ${missing.join(', ')}. Configure it in the deployment environment, then redeploy and check again.`,
   }, ready ? 200 : 503);
 }
@@ -194,7 +195,12 @@ async function callOpenRouter(env: Env, model: string, prepared: { instructions:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model,
+      // OpenRouter tries this ordered list server-side. This keeps an explicit
+      // model preference while recovering from restricted, unavailable, or
+      // rate-limited endpoints without exposing the provider secret.
+      models: model === OPENROUTER_SAFE_FALLBACK_MODEL
+        ? [OPENROUTER_SAFE_FALLBACK_MODEL]
+        : [model, OPENROUTER_SAFE_FALLBACK_MODEL],
       messages,
       ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(body.temperature, 2)) } : {}),
       ...(typeof body.maxOutputTokens === 'number' ? { max_tokens: Math.max(16, Math.min(Math.round(body.maxOutputTokens), 8192)) } : {}),

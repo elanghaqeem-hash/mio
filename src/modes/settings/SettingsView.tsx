@@ -6,7 +6,7 @@ import { ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 
 const CLOUD_PROVIDER_CONFIG = {
-  openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/auto or provider/model' },
+  openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
   openai: { label: 'OpenAI', key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', placeholder: 'e.g. gpt-4.1-mini' },
   gemini: { label: 'Google Gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', placeholder: 'e.g. gemini-2.5-flash' },
   claude: { label: 'Anthropic Claude', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', placeholder: 'e.g. claude-sonnet-4-20250514' },

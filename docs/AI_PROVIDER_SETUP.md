@@ -15,12 +15,14 @@ Configure provider variables in the Cloudflare Pages environment, never in sourc
 
 | Provider | Required secret | Optional server model | Native internet tool |
 | --- | --- | --- | --- |
-| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (defaults to `openrouter/auto`) | Model-agnostic `web` plugin |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (defaults to `openrouter/free`) | Model-agnostic `web` plugin |
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` (defaults to `gpt-5.6-luna`) | Responses API `web_search` |
 | Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` (defaults to `gemini-3.6-flash`) | Google Search grounding |
 | Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (defaults to `claude-sonnet-5`) | Claude server-side web search |
 
 Each provider has a cost-conscious server default. The optional model variable or MIO Settings model field overrides that default. Secrets are never returned by the readiness endpoint.
+
+OpenRouter requests use an ordered provider-side model list. MIO tries the selected `OPENROUTER_MODEL` first and automatically falls back to `openrouter/free` when that model is restricted, unavailable, rate-limited, or otherwise rejected. The normalized response reports the model OpenRouter actually used.
 
 ## Cloudflare Pages setup
 
@@ -44,7 +46,7 @@ Select `Ollama — local endpoint`, provide the endpoint and an installed model 
 
 - Missing secret: readiness and generation return an explicit, provider-specific configuration error. Every cloud provider has a default model, while invalid overrides remain visible as upstream errors.
 - Unsupported provider: the proxy rejects it before any upstream request.
-- Provider HTTP error: MIO identifies the failing provider and shows a bounded upstream detail.
+- Provider HTTP error: MIO identifies the failing provider and shows a bounded upstream detail. OpenRouter first attempts its compatible `openrouter/free` fallback before returning an error.
 - Malformed or empty response: MIO rejects it instead of presenting a fabricated answer.
 - Provider timeout: the request fails or uses the local heuristic only when the user explicitly enabled fallback.
 - Web search is reported as `USED` only when provider response metadata confirms execution.

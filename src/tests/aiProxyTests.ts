@@ -54,7 +54,7 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
   assert(unsupported.status === 501, 'AI proxy rejects providers outside the explicit allowlist');
 
   const providerDefaults: Record<TestProvider, string> = {
-    openrouter: 'openrouter/auto',
+    openrouter: 'openrouter/free',
     openai: 'gpt-5.6-luna',
     gemini: 'gemini-3.6-flash',
     claude: 'claude-sonnet-5',
@@ -146,6 +146,10 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     assert(captured.get('gemini')?.headers.get('x-goog-api-key') === 'gemini-secret', 'Gemini secret is applied only to the server-side Google API header');
     assert(captured.get('claude')?.headers.get('x-api-key') === 'claude-secret', 'Claude secret is applied only to the server-side Anthropic API header');
     assert([...captured.values()].every((entry) => !entry.body.includes('secret')), 'No provider secret is embedded in an upstream request body');
+
+    const openRouterRoutingPayload = JSON.parse(captured.get('openrouter')?.body ?? '{}') as { model?: string; models?: string[] };
+    assert(openRouterRoutingPayload.model === undefined, 'OpenRouter uses the ordered model fallback contract instead of a single brittle model');
+    assert(openRouterRoutingPayload.models?.[0] === 'test-model' && openRouterRoutingPayload.models?.[1] === 'openrouter/free', 'OpenRouter falls back from a selected model to the compatible free router');
 
     await onRequestPost({ request: request('openai', true), env: environments.openai });
     const openAiPayload = JSON.parse(captured.get('openai')?.body ?? '{}') as { instructions?: string; input?: Array<{ role?: string; content?: string }> };
