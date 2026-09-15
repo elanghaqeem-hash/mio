@@ -1,14 +1,22 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
+export interface MioWorkspaceDescriptor {
+  id: string;
+  name: string;
+}
+
+export interface MioWorkspaceDirectoryEntry {
+  name: string;
+  type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
+}
+
 export interface MioDesktopAPI {
-  // Window Management
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<boolean>;
   closeWindow: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
 
-  // System & Environment Telemetry
   getSystemInfo: () => Promise<{
     platform: string;
     arch: string;
@@ -19,20 +27,15 @@ export interface MioDesktopAPI {
   }>;
   getAppVersion: () => Promise<string>;
 
-  // Notifications
-  showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<void>;
-
-  // Emergency Stop & Application Lifecycle
-  triggerEmergencyStop: (reason: string) => Promise<void>;
+  showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  triggerEmergencyStop: (reason: string) => Promise<{ success: boolean }>;
   quitApp: () => Promise<void>;
 
-  // Controlled File Sandbox (Scoped)
-  selectDirectory: () => Promise<string | null>;
-  readFile: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
-  writeFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
-  listDirectory: (dirPath: string) => Promise<{ success: boolean; files?: string[]; error?: string }>;
+  authorizeWorkspace: () => Promise<{ success: boolean; cancelled?: boolean; workspace?: MioWorkspaceDescriptor; error?: string }>;
+  revokeWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
+  readWorkspaceText: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; data?: string; bytes?: number; error?: string }>;
+  listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: MioWorkspaceDirectoryEntry[]; error?: string }>;
 
-  // Event Listeners from Main Process (e.g. Tray actions, Stop shortcuts)
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
 }
 
@@ -46,21 +49,18 @@ const desktopAPI: MioDesktopAPI = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
   showNotification: (options) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_NOTIFICATION, options),
-
   triggerEmergencyStop: (reason) => ipcRenderer.invoke(IPC_CHANNELS.EMERGENCY_STOP, reason),
   quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.QUIT_APP),
 
-  selectDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.FS_SELECT_DIRECTORY),
-  readFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, filePath),
-  writeFile: (filePath, content) => ipcRenderer.invoke(IPC_CHANNELS.FS_WRITE_FILE, filePath, content),
-  listDirectory: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_DIRECTORY, dirPath),
+  authorizeWorkspace: () => ipcRenderer.invoke(IPC_CHANNELS.FS_AUTHORIZE_WORKSPACE),
+  revokeWorkspace: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_REVOKE_WORKSPACE, workspaceId),
+  readWorkspaceText: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, request),
+  listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
 
   onEmergencyStopTriggered: (callback) => {
-    const handler = (_: any, reason: string) => callback(reason);
+    const handler = (_event: Electron.IpcRendererEvent, reason: string) => callback(reason);
     ipcRenderer.on('mio:event:emergencyStop', handler);
-    return () => {
-      ipcRenderer.removeListener('mio:event:emergencyStop', handler);
-    };
+    return () => ipcRenderer.removeListener('mio:event:emergencyStop', handler);
   },
 };
 

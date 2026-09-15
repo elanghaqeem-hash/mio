@@ -3,9 +3,12 @@ export type MioCoreState =
   | 'LISTENING'
   | 'THINKING'
   | 'PROCESSING'
+  | 'EXECUTING'
   | 'ONLINE'
   | 'OFFLINE'
   | 'CREATIVE'
+  | 'CREATING'
+  | 'WAITING_PERMISSION'
   | '3D MODE'
   | 'ANIMATION MODE'
   | 'GRAPHIC MODE'
@@ -28,6 +31,7 @@ export type MioSystemMode =
   | 'SFX'
   | 'MUSIC'
   | 'PROJECT'
+  | 'TASKS'
   | 'SETTINGS'
   | 'SECURITY';
 

@@ -3,11 +3,11 @@ import { ProjectManager } from './ProjectManager';
 import { eventBus } from '../core/EventBus';
 
 export class VersionManager {
-  private static historyStack: string[] = []; // serialized project snapshots
+  private static historyStack: string[] = [];
   private static redoStack: string[] = [];
   private static maxSnapshots = 20;
 
-  public static takeSnapshot(description: string = 'Snapshot taken') {
+  public static takeSnapshot(description: string = 'Snapshot taken'): void {
     const project = ProjectManager.getProject();
     const serialized = JSON.stringify(project);
 
@@ -15,7 +15,7 @@ export class VersionManager {
     if (this.historyStack.length > this.maxSnapshots) {
       this.historyStack.shift();
     }
-    this.redoStack = []; // clear redo on new action
+    this.redoStack = [];
 
     const versionItem: ProjectVersion = {
       versionId: `ver_${Date.now()}`,
@@ -25,6 +25,7 @@ export class VersionManager {
     };
     project.versions.unshift(versionItem);
     eventBus.emit('VERSION_SNAPSHOT_TAKEN', versionItem);
+    ProjectManager.commitProjectUpdate(`Created project snapshot: ${description}`);
   }
 
   public static undo(): boolean {
@@ -34,11 +35,9 @@ export class VersionManager {
     this.redoStack.push(current);
 
     const previous = this.historyStack[this.historyStack.length - 1];
-    if (previous) {
-      this.applySnapshot(previous, 'Undo operation performed');
-      return true;
-    }
-    return false;
+    if (!previous) return false;
+    this.applySnapshot(previous, 'Undo operation performed');
+    return true;
   }
 
   public static redo(): boolean {
@@ -52,28 +51,19 @@ export class VersionManager {
 
   public static rollbackToVersion(versionId: string): boolean {
     const project = ProjectManager.getProject();
-    const target = project.versions.find((v) => v.versionId === versionId);
-    if (target) {
-      this.applySnapshot(target.snapshot, `Rollback to version ${versionId}`);
-      return true;
-    }
-    return false;
+    const target = project.versions.find((version) => version.versionId === versionId);
+    if (!target) return false;
+
+    this.applySnapshot(target.snapshot, `Rollback to version ${versionId}`);
+    return true;
   }
 
-  private static applySnapshot(serialized: string, reason: string) {
+  private static applySnapshot(serialized: string, reason: string): void {
     try {
       const restored: MioProject = JSON.parse(serialized);
-      const current = ProjectManager.getProject();
-      Object.assign(current, restored);
-      current.lastModified = Date.now();
-      current.activityLog.unshift({
-        timestamp: Date.now(),
-        message: reason,
-        mode: 'PROJECT',
-      });
-      eventBus.emit('PROJECT_UPDATED', current);
-    } catch (e) {
-      console.error('Failed to restore snapshot:', e);
+      ProjectManager.replaceProject(restored, reason);
+    } catch (error) {
+      console.error('Failed to restore snapshot:', error);
     }
   }
 }

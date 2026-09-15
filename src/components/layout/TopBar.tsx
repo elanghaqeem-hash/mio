@@ -16,6 +16,8 @@ import {
   PanelRight,
 } from 'lucide-react';
 import { ModelRouter } from '../../agents/ModelRouter';
+import { releaseMetadata, shortReleaseSha } from '../../release/ReleaseMetadata';
+import { systemPreferences } from '../../settings/SystemPreferences';
 
 interface TopBarProps {
   coreState: MioCoreState;
@@ -39,6 +41,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   useEffect(() => {
     const unsubStop = eventBus.on('EMERGENCY_STOP_TRIGGERED', () => setIsStopped(true));
     const unsubReset = eventBus.on('EMERGENCY_STOP_RESET', () => setIsStopped(false));
+    const unsubPreferences = systemPreferences.subscribe((preferences) => setNetwork(preferences.networkState));
 
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
@@ -50,6 +53,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     return () => {
       unsubStop();
       unsubReset();
+      unsubPreferences();
       if (unregisterTrayStop) unregisterTrayStop();
     };
   }, []);
@@ -64,8 +68,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const toggleNetwork = () => {
     const next = network === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
-    setNetwork(next);
-    ModelRouter.setNetworkState(next);
+    void systemPreferences.setNetworkState(next);
     eventBus.emit('CORE_STATE_CHANGE', next === 'ONLINE' ? 'ONLINE' : 'OFFLINE');
     setTimeout(() => eventBus.emit('CORE_STATE_CHANGE', 'IDLE'), 1500);
   };
@@ -73,6 +76,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const handleMinimize = () => window.mioDesktop?.minimizeWindow();
   const handleMaximize = () => window.mioDesktop?.maximizeWindow();
   const handleClose = () => window.mioDesktop?.closeWindow();
+
+  const runtimeLabel = releaseMetadata.runtime === 'desktop' ? 'DESKTOP' : 'WEB LAB';
+  const releaseLabel = `${releaseMetadata.channel.toUpperCase()} · ${shortReleaseSha}`;
 
   return (
     <header
@@ -99,8 +105,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="font-extrabold text-white tracking-wider text-sm flex items-center shrink-0">
               MIO <span className="text-cyan-400 ml-1">V2</span>
             </span>
-            <span className="hidden xl:inline-flex text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
-              {isDesktop ? 'DESKTOP ENVIRONMENT' : 'WEB ENVIRONMENT'}
+            <span className="hidden xl:inline-flex text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40" title={`Version ${releaseMetadata.version} · Deployment ${releaseMetadata.deploymentId}`}>
+              {runtimeLabel} · {releaseLabel}
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-400 min-w-0">

@@ -1,134 +1,196 @@
-import { MioProject, ProjectAsset, AssetType, AssetOrigin } from '../types/project';
+import { MioProject, ProjectAsset, AssetType, AssetOrigin, KnowledgeGovernanceAction, KnowledgeSourceGovernanceRecord, KnowledgeSourcePriority, KnowledgeSourceTrust } from '../types/project';
 import { eventBus } from '../core/EventBus';
+import { StorageProvider } from '../storage/StorageProvider';
+import { defaultStorageProvider } from '../storage/StorageRuntime';
+
+const PROJECT_STORAGE_KEY = 'current-project';
+
+const createInitialProject = (name = 'MIO Web Lab Workspace', description = 'Persistent project workspace for MIO Technology Preview.'): MioProject => ({
+  id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+  name,
+  description,
+  createdAt: Date.now(),
+  lastModified: Date.now(),
+  activeMode: 'CHAT',
+  assets: [],
+  references: [],
+  versions: [],
+  creativePipelines: [],
+  activityLog: [{ timestamp: Date.now(), message: 'Project initialized in controlled MIO workspace', mode: 'PROJECT' }],
+  securityLog: [],
+  knowledgeGovernance: { sources: {}, history: [], updatedAt: Date.now() },
+});
 
 export class ProjectManager {
-  private static currentProject: MioProject = {
-    id: 'proj_default',
-    name: 'Cybernetic Sentinel Vanguard',
-    description: 'Unified multimodal project combining 3D mech drone, locomotion animation, kinetic SFX, and cyberpunk music score.',
-    createdAt: Date.now() - 7200000,
-    lastModified: Date.now(),
-    activeMode: 'CHAT',
-    assets: [
-      {
-        id: 'asset_3d_drone',
-        name: 'Vanguard_Mech_Core.mio3d',
-        type: '3d',
-        origin: 'GENERATED',
-        version: 1,
-        createdAt: Date.now() - 3600000,
-        updatedAt: Date.now() - 3600000,
-        filePath: 'GENERATED/3D/Vanguard_Mech_Core.mio3d',
-        verified: true,
-        data: null,
-      },
-      {
-        id: 'asset_anim_hover',
-        name: 'Locomotion_Hover.mioanim',
-        type: 'animation',
-        origin: 'GENERATED',
-        version: 1,
-        createdAt: Date.now() - 2400000,
-        updatedAt: Date.now() - 2400000,
-        filePath: 'GENERATED/ANIMATION/Locomotion_Hover.mioanim',
-        verified: true,
-        data: null,
-      },
-      {
-        id: 'asset_sfx_thruster',
-        name: 'Plasma_Thruster.miosfx',
-        type: 'sfx',
-        origin: 'GENERATED',
-        version: 1,
-        createdAt: Date.now() - 1800000,
-        updatedAt: Date.now() - 1800000,
-        filePath: 'GENERATED/SFX/Plasma_Thruster.miosfx',
-        verified: true,
-        data: null,
-      },
-      {
-        id: 'asset_music_score',
-        name: 'Cyberpunk_Aeolian_Theme.miomusic',
-        type: 'music',
-        origin: 'GENERATED',
-        version: 1,
-        createdAt: Date.now() - 1200000,
-        updatedAt: Date.now() - 1200000,
-        filePath: 'GENERATED/MUSIC/Cyberpunk_Aeolian_Theme.miomusic',
-        verified: true,
-        data: null,
-      },
-      {
-        id: 'asset_art_poster',
-        name: 'Vanguard_Briefing_Poster.mioart',
-        type: 'graphic',
-        origin: 'GENERATED',
-        version: 1,
-        createdAt: Date.now() - 600000,
-        updatedAt: Date.now() - 600000,
-        filePath: 'GENERATED/GRAPHIC/Vanguard_Briefing_Poster.mioart',
-        verified: true,
-        data: null,
-      },
-    ],
-    references: [
-      { id: 'ref_1', name: 'Design_Spec_Titan.pdf' }
-    ],
-    versions: [],
-    activityLog: [
-      { timestamp: Date.now() - 7200000, message: 'Project initialized in isolated sandbox', mode: 'PROJECT' },
-      { timestamp: Date.now() - 3600000, message: 'Generated 3D Mech Core geometry', mode: '3D' },
-      { timestamp: Date.now() - 2400000, message: 'Synchronized hover keyframe track', mode: 'ANIMATION' },
-      { timestamp: Date.now() - 1800000, message: 'Synthesized plasma thruster procedural SFX', mode: 'SFX' },
-      { timestamp: Date.now() - 1200000, message: 'Composed Cyberpunk Aeolian musical score', mode: 'MUSIC' },
-      { timestamp: Date.now() - 600000, message: 'Composed Vanguard vector poster layout', mode: 'GRAPHIC' },
-    ],
-    securityLog: [],
-  };
+  private static storage: StorageProvider = defaultStorageProvider;
+  private static currentProject: MioProject = createInitialProject();
+  private static initialized = false;
 
-  public static getProject(): MioProject {
+  public static async initialize(): Promise<MioProject> {
+    try {
+      const stored = await this.storage.get<MioProject>('projects', PROJECT_STORAGE_KEY);
+      if (stored) this.currentProject = this.normalizeProject(stored);
+      else await this.storage.set('projects', PROJECT_STORAGE_KEY, this.currentProject);
+      this.initialized = true;
+      eventBus.emit('PROJECT_UPDATED', this.currentProject);
+      return this.currentProject;
+    } catch (error) {
+      console.error('[ProjectManager] Persistence initialization failed; continuing with runtime state.', error);
+      eventBus.emit('STORAGE_ERROR', { scope: 'PROJECT', action: 'INITIALIZE', error: error instanceof Error ? error.message : String(error) });
+      this.initialized = true;
+      return this.currentProject;
+    }
+  }
+
+  public static setStorageProvider(provider: StorageProvider): void { this.storage = provider; this.initialized = false; }
+  public static isInitialized(): boolean { return this.initialized; }
+  public static getProject(): MioProject { return this.currentProject; }
+
+  public static createProject(name: string, description = ''): MioProject {
+    this.currentProject = createInitialProject(name, description);
+    this.commitProjectUpdate('Created new project workspace');
+    return this.currentProject;
+  }
+
+  public static replaceProject(project: MioProject, reason = 'Project state restored'): MioProject {
+    this.currentProject = this.normalizeProject(project);
+    this.currentProject.lastModified = Date.now();
+    this.currentProject.activityLog.unshift({ timestamp: Date.now(), message: reason, mode: 'PROJECT' });
+    this.commitProjectUpdate();
     return this.currentProject;
   }
 
   public static addAsset(asset: Omit<ProjectAsset, 'id' | 'createdAt' | 'updatedAt' | 'version'>): ProjectAsset {
-    const newAsset: ProjectAsset = {
-      ...asset,
-      id: `asset_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      version: 1,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
+    const newAsset: ProjectAsset = { ...asset, id: `asset_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, version: 1, createdAt: Date.now(), updatedAt: Date.now() };
     this.currentProject.assets.push(newAsset);
-    this.currentProject.lastModified = Date.now();
-    this.currentProject.activityLog.unshift({
-      timestamp: Date.now(),
-      message: `Added ${newAsset.origin} asset: ${newAsset.name}`,
-      mode: (newAsset.type.toUpperCase() as any) || 'PROJECT',
-    });
-
-    eventBus.emit('PROJECT_UPDATED', this.currentProject);
+    if (newAsset.type === 'document') {
+      this.ensureKnowledgeGovernance(newAsset);
+      this.appendGovernanceEvent(newAsset.id, 'REGISTERED', 'SYSTEM', { trust: newAsset.verified ? 'VERIFIED' : 'QUARANTINED', included: true, priority: 'STANDARD', note: `Registered ${newAsset.origin} document source` });
+    }
+    this.currentProject.activityLog.unshift({ timestamp: Date.now(), message: `Added ${newAsset.origin} asset: ${newAsset.name}`, mode: 'PROJECT' });
+    this.commitProjectUpdate();
     return newAsset;
   }
 
-  public static updateAssetData(assetId: string, data: any, origin: AssetOrigin = 'USER-EDITED') {
-    const asset = this.currentProject.assets.find((a) => a.id === assetId);
-    if (asset) {
-      asset.data = data;
-      asset.origin = origin;
-      asset.updatedAt = Date.now();
-      asset.version += 1;
-      this.currentProject.lastModified = Date.now();
-      eventBus.emit('PROJECT_UPDATED', this.currentProject);
+  public static updateAssetData(assetId: string, data: any, origin: AssetOrigin = 'USER-EDITED'): void {
+    const asset = this.currentProject.assets.find((item) => item.id === assetId);
+    if (!asset) return;
+    asset.data = data;
+    asset.origin = origin;
+    asset.updatedAt = Date.now();
+    asset.version += 1;
+    this.commitProjectUpdate(`Updated asset: ${asset.name}`);
+  }
+
+  public static getAssetByType(type: AssetType): ProjectAsset | undefined { return this.currentProject.assets.find((asset) => asset.type === type); }
+  public static getKnowledgeGovernance(assetId: string): KnowledgeSourceGovernanceRecord | undefined { return this.currentProject.knowledgeGovernance.sources[assetId]; }
+
+  public static setKnowledgeSourceIncluded(assetId: string, included: boolean): boolean {
+    const asset = this.currentProject.assets.find((item) => item.id === assetId && item.type === 'document');
+    if (!asset) return false;
+    const record = this.ensureKnowledgeGovernance(asset);
+    record.included = included;
+    record.updatedAt = Date.now();
+    this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, included ? 'INCLUDED' : 'EXCLUDED', 'USER', { included, trust: record.trust, priority: record.priority ?? 'STANDARD' });
+    this.commitProjectUpdate(`${included ? 'Included' : 'Excluded'} knowledge source: ${asset.name}`);
+    return true;
+  }
+
+  public static reviewKnowledgeSource(assetId: string, trust: KnowledgeSourceTrust, note?: string, freshUntil?: number): boolean {
+    const asset = this.currentProject.assets.find((item) => item.id === assetId && item.type === 'document');
+    if (!asset) return false;
+    const record = this.ensureKnowledgeGovernance(asset);
+    record.trust = trust;
+    record.reviewedAt = Date.now();
+    record.reviewNote = note;
+    record.freshUntil = freshUntil;
+    record.updatedAt = Date.now();
+    asset.verified = trust === 'VERIFIED';
+    this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, 'REVIEWED', 'USER', { trust, included: record.included, priority: record.priority ?? 'STANDARD', note, freshUntil });
+    this.commitProjectUpdate(`Reviewed knowledge source ${asset.name} as ${trust}`);
+    return true;
+  }
+
+  public static setKnowledgeSourcePriority(assetId: string, priority: KnowledgeSourcePriority): boolean {
+    const asset = this.currentProject.assets.find((item) => item.id === assetId && item.type === 'document');
+    if (!asset) return false;
+    const record = this.ensureKnowledgeGovernance(asset);
+    record.priority = priority;
+    record.updatedAt = Date.now();
+    this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, 'PRIORITY_CHANGED', 'USER', { trust: record.trust, included: record.included, priority, note: `Source priority set to ${priority}` });
+    this.commitProjectUpdate(`Set knowledge source priority ${asset.name} to ${priority}`);
+    return true;
+  }
+
+  public static supersedeKnowledgeSource(assetId: string, replacementAssetId: string): boolean {
+    const asset = this.currentProject.assets.find((item) => item.id === assetId && item.type === 'document');
+    const replacement = this.currentProject.assets.find((item) => item.id === replacementAssetId && item.type === 'document');
+    if (!asset || !replacement || assetId === replacementAssetId) return false;
+    const record = this.ensureKnowledgeGovernance(asset);
+    this.ensureKnowledgeGovernance(replacement);
+    record.supersededByAssetId = replacementAssetId;
+    record.included = false;
+    record.updatedAt = Date.now();
+    this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    this.appendGovernanceEvent(assetId, 'SUPERSEDED', 'USER', { trust: record.trust, included: false, priority: record.priority ?? 'STANDARD', replacementAssetId, note: `Replaced by ${replacement.name}` });
+    this.commitProjectUpdate(`Superseded knowledge source ${asset.name} with ${replacement.name}`);
+    return true;
+  }
+
+  public static updateMode(mode: MioProject['activeMode']): void { this.currentProject.activeMode = mode; this.commitProjectUpdate(); }
+
+  public static commitProjectUpdate(activityMessage?: string): void {
+    this.currentProject.lastModified = Date.now();
+    if (activityMessage) this.currentProject.activityLog.unshift({ timestamp: Date.now(), message: activityMessage, mode: 'PROJECT' });
+    eventBus.emit('PROJECT_UPDATED', this.currentProject);
+    void this.flush();
+  }
+
+  public static async flush(): Promise<void> {
+    try { await this.storage.set('projects', PROJECT_STORAGE_KEY, this.currentProject); }
+    catch (error) {
+      console.error('[ProjectManager] Failed to persist project state.', error);
+      eventBus.emit('STORAGE_ERROR', { scope: 'PROJECT', action: 'WRITE', error: error instanceof Error ? error.message : String(error) });
     }
   }
 
-  public static getAssetByType(type: AssetType): ProjectAsset | undefined {
-    return this.currentProject.assets.find((a) => a.type === type);
+  private static appendGovernanceEvent(assetId: string, action: KnowledgeGovernanceAction, actor: 'USER' | 'SYSTEM', details: { trust?: KnowledgeSourceTrust; priority?: KnowledgeSourcePriority; included?: boolean; note?: string; freshUntil?: number; replacementAssetId?: string } = {}): void {
+    const timestamp = Date.now();
+    this.currentProject.knowledgeGovernance.history.unshift({ id: `kg_${timestamp}_${Math.random().toString(36).substring(2, 7)}`, assetId, action, timestamp, actor, ...details });
+    this.currentProject.knowledgeGovernance.history = this.currentProject.knowledgeGovernance.history.slice(0, 500);
+    this.currentProject.knowledgeGovernance.updatedAt = timestamp;
   }
 
-  public static updateMode(mode: any) {
-    this.currentProject.activeMode = mode;
-    eventBus.emit('PROJECT_UPDATED', this.currentProject);
+  private static ensureKnowledgeGovernance(asset: ProjectAsset): KnowledgeSourceGovernanceRecord {
+    const existing = this.currentProject.knowledgeGovernance.sources[asset.id];
+    if (existing) { if (!existing.priority) existing.priority = 'STANDARD'; return existing; }
+    const record: KnowledgeSourceGovernanceRecord = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', priority: 'STANDARD', updatedAt: Date.now() };
+    this.currentProject.knowledgeGovernance.sources[asset.id] = record;
+    this.currentProject.knowledgeGovernance.updatedAt = record.updatedAt;
+    return record;
+  }
+
+  private static normalizeProject(project: MioProject): MioProject {
+    const normalized: MioProject = {
+      ...project,
+      assets: Array.isArray(project.assets) ? project.assets : [],
+      references: Array.isArray(project.references) ? project.references : [],
+      versions: Array.isArray(project.versions) ? project.versions : [],
+      creativePipelines: Array.isArray(project.creativePipelines) ? project.creativePipelines : [],
+      activityLog: Array.isArray(project.activityLog) ? project.activityLog : [],
+      securityLog: Array.isArray(project.securityLog) ? project.securityLog : [],
+      knowledgeGovernance: project.knowledgeGovernance && typeof project.knowledgeGovernance.sources === 'object'
+        ? { ...project.knowledgeGovernance, history: Array.isArray(project.knowledgeGovernance.history) ? project.knowledgeGovernance.history : [] }
+        : { sources: {}, history: [], updatedAt: Date.now() },
+    };
+    for (const asset of normalized.assets.filter((item) => item.type === 'document')) {
+      const existing = normalized.knowledgeGovernance.sources[asset.id];
+      if (!existing) normalized.knowledgeGovernance.sources[asset.id] = { assetId: asset.id, included: true, trust: asset.verified ? 'VERIFIED' : 'QUARANTINED', priority: 'STANDARD', updatedAt: asset.updatedAt || Date.now() };
+      else if (!existing.priority) existing.priority = 'STANDARD';
+    }
+    return normalized;
   }
 }

@@ -14,12 +14,16 @@ interface ContextPanelProps {
   mobile?: boolean;
 }
 
+const projectActivity = (project: MioProject): ActivityLogItem[] =>
+  project.activityLog.slice(0, 30).map((item) => ({
+    timestamp: item.timestamp,
+    message: item.message,
+    mode: item.mode,
+  }));
+
 export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) => {
   const [project, setProject] = useState<MioProject>(ProjectManager.getProject());
-  const [logs, setLogs] = useState<ActivityLogItem[]>([
-    { timestamp: Date.now() - 3600000, message: 'Project initialized', mode: 'SYSTEM' },
-    { timestamp: Date.now() - 1800000, message: 'Policy Engine active', mode: 'SECURITY' },
-  ]);
+  const [logs, setLogs] = useState<ActivityLogItem[]>(() => projectActivity(ProjectManager.getProject()));
 
   useEffect(() => {
     const unsubProj = eventBus.on('PROJECT_UPDATED', (p: MioProject) => setProject({ ...p }));
@@ -71,6 +75,7 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
           </div>
 
           <div className="space-y-2 overflow-y-auto max-h-56 pr-1 text-[10px]">
+            {logs.length === 0 && <div className="text-gray-500">No runtime activity events recorded in this session.</div>}
             {logs.map((log, i) => (
               <div key={i} className="border-l-2 border-cyan-500/50 pl-2 py-0.5">
                 <span className="text-gray-500 block text-[9px]">
@@ -85,22 +90,13 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
         <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800 space-y-2">
           <div className="flex items-center gap-2 text-gray-300 font-bold text-[10px]">
             <Cpu size={12} className="text-cyan-400" />
-            <span>SYSTEM HEALTH</span>
+            <span>KNOWN RUNTIME STATE</span>
           </div>
 
           <div className="space-y-1.5 text-[10px] text-gray-400">
-            <div className="flex justify-between gap-3">
-              <span>Execution State:</span>
-              <span className="text-emerald-400 font-bold text-right">OPTIMAL</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span>Sandbox File Scope:</span>
-              <span className="text-cyan-300 text-right">PROTECTED</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span>Sensor Privacy:</span>
-              <span className="text-emerald-400 text-right">OFF (NO SILENT FEED)</span>
-            </div>
+            <div className="flex justify-between gap-3"><span>Project ID:</span><span className="max-w-32 truncate text-gray-300">{project.id}</span></div>
+            <div className="flex justify-between gap-3"><span>Creative Pipelines:</span><span className="text-gray-300">{project.creativePipelines?.length ?? 0}</span></div>
+            <p className="pt-1 text-[9px] leading-relaxed text-gray-500">No sensor, sandbox-health, or system-health status is inferred here unless emitted by a real runtime capability.</p>
           </div>
         </div>
       </div>
