@@ -32,7 +32,9 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
         ...ModelRouter.getConfig(),
         provider,
         allowOfflineFallback: false,
-        enableWebSearch: provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude',
+        // Web grounding can incur separate provider charges, so it remains an
+        // explicit opt-in in System Settings instead of being enabled silently.
+        enableWebSearch: false,
         proxyEndpoint: '/api/ai/generate',
       },
     });

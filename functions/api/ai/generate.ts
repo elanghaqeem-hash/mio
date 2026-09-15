@@ -186,7 +186,7 @@ async function callOpenRouter(env: Env, model: string, prepared: { instructions:
     ...(prepared.instructions ? [{ role: 'system' as const, content: prepared.instructions }] : []),
     ...prepared.conversation,
   ];
-  const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const requestOpenRouter = (withWebSearch: boolean) => fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
@@ -204,9 +204,18 @@ async function callOpenRouter(env: Env, model: string, prepared: { instructions:
       messages,
       ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(body.temperature, 2)) } : {}),
       ...(typeof body.maxOutputTokens === 'number' ? { max_tokens: Math.max(16, Math.min(Math.round(body.maxOutputTokens), 8192)) } : {}),
-      ...(body.enableWebSearch === true ? { plugins: [{ id: 'web', max_results: 5 }] } : {}),
+      ...(withWebSearch ? { plugins: [{ id: 'web', max_results: 5 }] } : {}),
     }),
   });
+
+  const webSearchRequested = body.enableWebSearch === true;
+  let upstream = await requestOpenRouter(webSearchRequested);
+  // The OpenRouter free model router can be used without purchased credits,
+  // while its web-search plugin may still require a positive credit balance.
+  // Preserve free inference by retrying once without that optional paid tool.
+  if (upstream.status === 402 && webSearchRequested) {
+    upstream = await requestOpenRouter(false);
+  }
   if (!upstream.ok) return upstreamError('openrouter', upstream);
   const payload = (await upstream.json()) as {
     model?: string;

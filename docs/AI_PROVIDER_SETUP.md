@@ -24,6 +24,8 @@ Each provider has a cost-conscious server default. The optional model variable o
 
 OpenRouter requests use an ordered provider-side model list. MIO tries the selected `OPENROUTER_MODEL` first and automatically falls back to `openrouter/free` when that model is restricted, unavailable, rate-limited, or otherwise rejected. The normalized response reports the model OpenRouter actually used.
 
+Live web search is an explicit opt-in because provider-side search tools can require credits even when `openrouter/free` is selected. If OpenRouter rejects its optional web plugin with HTTP 402, MIO retries once without the plugin so free AI inference remains available and reports `webSearchUsed: false`. Add OpenRouter credits only when live web search is required.
+
 ## Cloudflare Pages setup
 
 1. Open the MIO Pages project in Cloudflare.

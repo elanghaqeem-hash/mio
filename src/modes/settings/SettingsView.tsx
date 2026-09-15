@@ -123,7 +123,7 @@ export const SettingsView: React.FC = () => {
         {cloudConfig && (
           <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
             <input type="checkbox" checked={enableWebSearch} onChange={(e) => updateRouter({ enableWebSearch: e.target.checked })} className="accent-cyan-400" />
-            <span className="text-gray-300">Enable {cloudConfig.label} live web search / grounding (internet access remains L4 permission-gated)</span>
+            <span className="text-gray-300">Enable {cloudConfig.label} live web search / grounding (may require provider credits; internet access remains L4 permission-gated)</span>
           </label>
         )}
 

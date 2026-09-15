@@ -77,6 +77,8 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
 
   const originalFetch = globalThis.fetch;
   const captured = new Map<TestProvider, { headers: Headers; body: string }>();
+  let rejectOpenRouterWebForCredits = false;
+  let openRouterCalls = 0;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const provider: TestProvider = url.includes('openrouter.ai') ? 'openrouter' : url.includes('openai.com') ? 'openai' : url.includes('googleapis.com') ? 'gemini' : 'claude';
@@ -85,7 +87,11 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     const parsed = JSON.parse(body) as Record<string, unknown>;
 
     if (provider === 'openrouter') {
+      openRouterCalls++;
       const plugins = parsed.plugins as Array<{ id?: string }> | undefined;
+      if (plugins && rejectOpenRouterWebForCredits) {
+        return new Response(JSON.stringify({ error: { code: 402, message: 'Insufficient credits' } }), { status: 402, headers: { 'Content-Type': 'application/json' } });
+      }
       return new Response(JSON.stringify({
         model: 'routed-test-model',
         choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'openrouter answer', annotations: plugins ? [{ type: 'url_citation', url_citation: { url: 'https://openrouter.example/source', title: 'OpenRouter source' } }] : [] } }],
@@ -172,6 +178,16 @@ export async function runAiProxyTests(): Promise<{ passed: number; total: number
     assert(openAiTools.tools?.some((tool) => tool.type === 'web_search') === true, 'OpenAI web search uses the Responses API tool contract');
     assert(geminiTools.tools?.some((tool) => Boolean(tool.googleSearch)) === true, 'Gemini web search uses Google Search grounding');
     assert(claudeTools.tools?.some((tool) => tool.type === 'web_search_20250305' && tool.name === 'web_search') === true, 'Claude web search uses the Anthropic server tool contract');
+
+    const callsBeforeCreditFallback = openRouterCalls;
+    rejectOpenRouterWebForCredits = true;
+    const creditFallback = await onRequestPost({ request: request('openrouter', false, true), env: environments.openrouter });
+    rejectOpenRouterWebForCredits = false;
+    const creditFallbackBody = await creditFallback.json() as { text?: string; webSearchUsed?: boolean };
+    const creditFallbackPayload = JSON.parse(captured.get('openrouter')?.body ?? '{}') as { plugins?: Array<{ id?: string }> };
+    assert(creditFallback.status === 200 && creditFallbackBody.text === 'openrouter answer', 'OpenRouter preserves free inference when paid web search is rejected for insufficient credits');
+    assert(creditFallbackBody.webSearchUsed === false && creditFallbackPayload.plugins === undefined, 'OpenRouter credit fallback clearly reports that web search was not used');
+    assert(openRouterCalls === callsBeforeCreditFallback + 2, 'OpenRouter retries a credit-rejected web request exactly once without the optional plugin');
   } finally {
     globalThis.fetch = originalFetch;
   }
