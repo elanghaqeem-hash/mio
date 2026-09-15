@@ -19,6 +19,8 @@ import { Mio3DObject, Mio3DScene } from '../../types/creative';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Cylinder, Layers, Download, Plus, Trash2, Eye } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
+import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 
 const INITIAL_SCENE: Mio3DScene = {
   objects: [
@@ -38,7 +40,8 @@ export const Studio3DView: React.FC = () => {
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
-  const [sceneData, setSceneData] = useState<Mio3DScene>(INITIAL_SCENE);
+  const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
+  const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
 
@@ -170,7 +173,8 @@ export const Studio3DView: React.FC = () => {
   );
 
   return (
-    <div className="flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
+    <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
+      <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="relative flex-1 h-full flex flex-col">
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>VIEWPORT: LOCAL WEBGL PREVIEW</span><span className="text-amber-300 text-[10px] ml-2">FPS NOT BENCHMARKED</span></div>
         <div ref={containerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing" />

@@ -3,22 +3,27 @@ import { Circle, Download, Eye, EyeOff, Lock, Palette, Square, Trash2, Type, Unl
 import { MioGraphicDocument, GraphicLayer } from '../../types/creative';
 import { ExportManager } from '../../project/ExportManager';
 import { eventBus } from '../../core/EventBus';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
+import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 
 const activityTimestamp = () => Date.now();
 
+const INITIAL_GRAPHIC_DOCUMENT: MioGraphicDocument = {
+  width: 600,
+  height: 700,
+  backgroundColor: '#07090e',
+  layers: [
+    { id: 'layer_frame', name: 'Technical Grid Frame', type: 'shape', shapeType: 'rectangle', visible: true, locked: true, opacity: 1, x: 20, y: 20, width: 560, height: 660, stroke: '#00f0ff', strokeWidth: 2, fill: '#0a0f1d' },
+    { id: 'layer_accent', name: 'Core Accent', type: 'shape', shapeType: 'circle', visible: true, locked: false, opacity: 0.8, x: 300, y: 260, width: 140, height: 140, fill: '#00f0ff22', stroke: '#00f0ff', strokeWidth: 3 },
+    { id: 'layer_title', name: 'Title Typography', type: 'text', visible: true, locked: false, opacity: 1, x: 50, y: 80, width: 500, height: 40, text: 'MIO // TECHNOLOGY PREVIEW', fontSize: 24, fontFamily: 'monospace', fill: '#00f0ff' },
+    { id: 'layer_subtitle', name: 'Sub-header', type: 'text', visible: true, locked: false, opacity: 0.85, x: 50, y: 120, width: 500, height: 30, text: 'LOCAL GRAPHIC COMPOSITION WORKSPACE', fontSize: 14, fontFamily: 'monospace', fill: '#94a3b8' },
+  ],
+};
+
 export const GraphicStudioView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [documentData, setDocumentData] = useState<MioGraphicDocument>({
-    width: 600,
-    height: 700,
-    backgroundColor: '#07090e',
-    layers: [
-      { id: 'layer_frame', name: 'Technical Grid Frame', type: 'shape', shapeType: 'rectangle', visible: true, locked: true, opacity: 1, x: 20, y: 20, width: 560, height: 660, stroke: '#00f0ff', strokeWidth: 2, fill: '#0a0f1d' },
-      { id: 'layer_accent', name: 'Core Accent', type: 'shape', shapeType: 'circle', visible: true, locked: false, opacity: 0.8, x: 300, y: 260, width: 140, height: 140, fill: '#00f0ff22', stroke: '#00f0ff', strokeWidth: 3 },
-      { id: 'layer_title', name: 'Title Typography', type: 'text', visible: true, locked: false, opacity: 1, x: 50, y: 80, width: 500, height: 40, text: 'MIO // TECHNOLOGY PREVIEW', fontSize: 24, fontFamily: 'monospace', fill: '#00f0ff' },
-      { id: 'layer_subtitle', name: 'Sub-header', type: 'text', visible: true, locked: false, opacity: 0.85, x: 50, y: 120, width: 500, height: 30, text: 'LOCAL GRAPHIC COMPOSITION WORKSPACE', fontSize: 14, fontFamily: 'monospace', fill: '#94a3b8' },
-    ],
-  });
+  const workspace = useCreativeStudioDocument<MioGraphicDocument>('MIO_Graphic.mioart', INITIAL_GRAPHIC_DOCUMENT);
+  const { state: documentData, setState: setDocumentData } = workspace;
   const [selectedLayerId, setSelectedLayerId] = useState('layer_title');
   const selectedLayer = documentData.layers.find((layer) => layer.id === selectedLayerId);
 
@@ -99,7 +104,8 @@ export const GraphicStudioView: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+    <div className="relative flex h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
+      <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="flex-1 flex flex-col p-4 overflow-hidden">
         <div className="mb-3 flex items-center justify-between rounded-xl border border-gray-800 bg-[#0d121d] p-3">
           <div className="flex items-center gap-2 text-cyan-300"><Palette size={15} /><span className="font-bold">GRAPHIC WORKSPACE // LOCAL CANVAS COMPOSITION</span><span className="text-[10px] text-amber-300">RIGHTS NOT ASSESSED</span></div>

@@ -4,6 +4,8 @@ import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { ExportManager } from '../../project/ExportManager';
 import type { MioSFXPatch, SFXLayer } from '../../types/creative';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
+import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -40,8 +42,11 @@ const createLayer = (sequence: number): SFXLayer => ({
   volume: 0.7,
 });
 
+const INITIAL_PATCH: MioSFXPatch = { name: 'Cyber_Plasma_Discharge', category: 'LASER', duration: 1.4, layers: INITIAL_LAYERS };
+
 export const SFXStudioView: React.FC = () => {
-  const [patch, setPatch] = useState<MioSFXPatch>({ name: 'Cyber_Plasma_Discharge', category: 'LASER', duration: 1.4, layers: INITIAL_LAYERS });
+  const workspace = useCreativeStudioDocument<MioSFXPatch>('MIO_SFX_Patch.miosfx', INITIAL_PATCH);
+  const { state: patch, setState: setPatch } = workspace;
   const [selectedLayerId, setSelectedLayerId] = useState(INITIAL_LAYERS[0].id);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -174,7 +179,8 @@ export const SFXStudioView: React.FC = () => {
   );
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#07090e] font-mono text-xs">
+    <div className="relative flex h-full w-full overflow-hidden bg-[#07090e] font-mono text-xs">
+      <CreativeWorkspaceToolbar workspace={workspace} />
       <section className="flex flex-1 flex-col overflow-y-auto bg-[#0a0e17] p-4">
         <header className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-cyan-300"><Volume2 size={16} /><span className="font-bold text-sm">SFX ENGINE // PROCEDURAL AUDIO SYNTHESIZER</span><span className="ml-2 flex items-center gap-1 text-[10px] text-emerald-400"><ShieldCheck size={12} /> LOCAL SYNTH</span></div>
