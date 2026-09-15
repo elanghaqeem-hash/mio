@@ -20,6 +20,26 @@ come from squash/rebase ancestry and do not identify missing product features.
 The audit branch was the only remaining open development line requiring a
 feature-level reconciliation.
 
+After PR #42 merged, a strict branch-tip ancestry check found seven historical
+tips that were not ancestors of `main`. Their features were already present in
+later implementations, but force-push/rebase history meant Git could not prove
+that from ancestry alone. They are reconciled as metadata parents with the
+current `main` tree retained:
+
+| Historical tip | Disposition |
+|---|---|
+| `milestone/mio-web-lab-tp-0.2` | Storage/memory implementation superseded by the current StorageProvider and governance stack. |
+| `milestone/mio-web-lab-tp-0.8` | Checkpoint-only divergent tip; current task scheduler is validated by later milestones. |
+| `milestone/mio-web-lab-tp-0.16` | Layered memory work is present in later memory/knowledge milestones. |
+| `milestone/mio-web-lab-tp-0.21` | Closed, superseded by merged `mio-web-lab-tp-0.21-memory`. |
+| `milestone/mio-web-lab-tp-0.21-lineage` | Closed, superseded by merged `mio-web-lab-tp-0.21b-lineage-rebased`. |
+| `milestone/mio-web-lab-tp-0.28` | Creative pipeline is present and covered by the current creative pipeline suite. |
+| `milestone/mio-web-lab-tp-0.29` | Permission completion is present and covered by the current security suite. |
+
+No file from these stale tips is copied over the current tree. This closes the
+repository-history gap without reviving old dependencies, UI, or security
+behavior.
+
 ## Feature filter
 
 | Audit feature group | Decision | Reason / implementation |
