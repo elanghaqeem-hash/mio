@@ -35,13 +35,17 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleContext,
 }) => {
   const [network, setNetwork] = useState<NetworkState>(ModelRouter.getNetworkState());
+  const [preferences, setPreferences] = useState(() => systemPreferences.getSnapshot());
   const [isStopped, setIsStopped] = useState<boolean>(emergencyStop.isEmergencyStopped());
   const isDesktop = typeof window !== 'undefined' && Boolean(window.mioDesktop);
 
   useEffect(() => {
     const unsubStop = eventBus.on('EMERGENCY_STOP_TRIGGERED', () => setIsStopped(true));
     const unsubReset = eventBus.on('EMERGENCY_STOP_RESET', () => setIsStopped(false));
-    const unsubPreferences = systemPreferences.subscribe((preferences) => setNetwork(preferences.networkState));
+    const unsubPreferences = systemPreferences.subscribe((nextPreferences) => {
+      setNetwork(nextPreferences.networkState);
+      setPreferences(nextPreferences);
+    });
 
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
@@ -117,7 +121,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      <div className="hidden md:flex items-center gap-2 lg:gap-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="hidden md:flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
         <button
           type="button"
           onClick={toggleNetwork}
@@ -130,6 +134,12 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           {network === 'ONLINE' ? <Wifi size={12} /> : <WifiOff size={12} />}
           <span className="text-[10px] font-bold">{network}</span>
+        </button>
+
+        <button type="button" onClick={() => eventBus.emit('SWITCH_MODE', 'SETTINGS')} className="hidden lg:flex min-h-9 items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-950/25 px-3 py-1 text-[10px] font-bold text-violet-200 hover:bg-violet-950/45" title="Open provider and autonomy settings">
+          <span>{preferences.modelRouter.provider.toUpperCase()}</span>
+          <span className="text-violet-500">·</span>
+          <span>{preferences.autonomyLevel}</span>
         </button>
 
         <button

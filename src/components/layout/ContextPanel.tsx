@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ProjectManager } from '../../project/ProjectManager';
 import { MioProject } from '../../types/project';
 import { eventBus } from '../../core/EventBus';
-import { FolderGit2, Activity, Cpu } from 'lucide-react';
+import { FolderGit2, Activity, Cpu, Boxes, ListChecks } from 'lucide-react';
 
 interface ActivityLogItem {
   timestamp: number;
@@ -24,6 +24,7 @@ const projectActivity = (project: MioProject): ActivityLogItem[] =>
 export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) => {
   const [project, setProject] = useState<MioProject>(ProjectManager.getProject());
   const [logs, setLogs] = useState<ActivityLogItem[]>(() => projectActivity(ProjectManager.getProject()));
+  const [tab, setTab] = useState<'context' | 'activity' | 'artifacts'>('context');
 
   useEffect(() => {
     const unsubProj = eventBus.on('PROJECT_UPDATED', (p: MioProject) => setProject({ ...p }));
@@ -43,10 +44,17 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
       aria-label="MIO context and telemetry"
     >
       <div className="p-3 text-[10px] text-gray-500 font-bold tracking-wider border-b border-gray-800/80">
-        CONTEXT // TELEMETRY
+        MISSION // CONTEXT
+      </div>
+
+      <div className="grid grid-cols-3 gap-1 border-b border-gray-800/80 p-2">
+        <button type="button" onClick={() => setTab('context')} className={`context-tab ${tab === 'context' ? 'context-tab-active' : ''}`}><ListChecks size={12} /> Context</button>
+        <button type="button" onClick={() => setTab('activity')} className={`context-tab ${tab === 'activity' ? 'context-tab-active' : ''}`}><Activity size={12} /> Activity</button>
+        <button type="button" onClick={() => setTab('artifacts')} className={`context-tab ${tab === 'artifacts' ? 'context-tab-active' : ''}`}><Boxes size={12} /> Assets</button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-4 overscroll-contain">
+        {tab === 'context' && <>
         <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800">
           <div className="flex items-center gap-2 mb-1.5 text-cyan-400">
             <FolderGit2 size={14} />
@@ -68,7 +76,9 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
           </div>
         </div>
 
-        <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800 flex-1 flex flex-col">
+        </>}
+
+        {tab === 'activity' && <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800 flex-1 flex flex-col">
           <div className="flex items-center gap-2 mb-2 text-gray-300 font-bold text-[10px]">
             <Activity size={12} className="text-cyan-400" />
             <span>ACTIVITY AUDIT MONITOR</span>
@@ -85,9 +95,9 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
-        <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800 space-y-2">
+        {tab === 'context' && <div className="bg-[#0d121d] p-3 rounded-xl border border-gray-800 space-y-2">
           <div className="flex items-center gap-2 text-gray-300 font-bold text-[10px]">
             <Cpu size={12} className="text-cyan-400" />
             <span>KNOWN RUNTIME STATE</span>
@@ -98,7 +108,12 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({ mobile = false }) =>
             <div className="flex justify-between gap-3"><span>Creative Pipelines:</span><span className="text-gray-300">{project.creativePipelines?.length ?? 0}</span></div>
             <p className="pt-1 text-[9px] leading-relaxed text-gray-500">No sensor, sandbox-health, or system-health status is inferred here unless emitted by a real runtime capability.</p>
           </div>
-        </div>
+        </div>}
+
+        {tab === 'artifacts' && <div className="space-y-2">
+          {project.assets.length === 0 && <div className="rounded-xl border border-dashed border-gray-800 bg-[#0d121d] p-5 text-center text-[10px] leading-5 text-gray-500">Belum ada artifact pada proyek ini. Hasil kerja Mio akan muncul di sini dengan versi dan asalnya.</div>}
+          {project.assets.slice(0, 30).map((asset) => <div key={asset.id} className="rounded-xl border border-gray-800 bg-[#0d121d] p-3"><div className="truncate font-bold text-gray-200">{asset.name}</div><div className="mt-1 flex items-center justify-between gap-2 text-[9px] text-gray-500"><span>{asset.type.toUpperCase()} · V{asset.version}</span><span className={asset.verified ? 'text-emerald-400' : 'text-amber-400'}>{asset.verified ? 'VERIFIED' : asset.origin}</span></div></div>)}
+        </div>}
       </div>
     </aside>
   );

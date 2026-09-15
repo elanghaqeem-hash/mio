@@ -14,6 +14,7 @@
   --mio-red: #ef4444;
   --mio-green: #10b981;
   --mio-purple: #a855f7;
+  --mio-violet: #8b5cf6;
   --mio-mobile-header-height: 4rem;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
@@ -111,6 +112,159 @@ svg {
   background-size: 24px 24px;
 }
 
+.agent-command-center {
+  scrollbar-gutter: stable;
+}
+
+.agent-hero {
+  background:
+    radial-gradient(circle at 72% 48%, rgba(0, 240, 255, 0.09), transparent 34%),
+    radial-gradient(circle at 64% 56%, rgba(139, 92, 246, 0.08), transparent 38%),
+    linear-gradient(135deg, #05070b 0%, #080d16 52%, #05070b 100%);
+}
+
+.agent-hero-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(54, 215, 255, 0.03) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.hud-corner {
+  position: absolute;
+  top: 1.25rem;
+  width: 4rem;
+  height: 2rem;
+  border-top: 1px solid rgba(54, 215, 255, 0.34);
+}
+
+.hud-corner::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  width: 1px;
+  height: 2rem;
+  background: linear-gradient(rgba(54, 215, 255, 0.34), transparent);
+}
+
+.hud-corner-tl { left: 1.25rem; border-left: 1px solid rgba(54, 215, 255, 0.34); }
+.hud-corner-tr { right: 1.25rem; border-right: 1px solid rgba(54, 215, 255, 0.34); }
+.hud-corner-tl::after { left: -1px; }
+.hud-corner-tr::after { right: -1px; }
+
+.agent-status-chip {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(71, 85, 105, 0.48);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  background: rgba(7, 12, 20, 0.74);
+  backdrop-filter: blur(10px);
+}
+
+.agent-quick-command {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(51, 65, 85, 0.72);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(13, 18, 29, 0.72);
+  color: #cbd5e1;
+  text-align: left;
+  font-size: 0.72rem;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.agent-quick-command:hover {
+  transform: translateY(-1px);
+  border-color: rgba(54, 215, 255, 0.42);
+  background: rgba(8, 47, 73, 0.34);
+}
+
+.agent-orb-stage {
+  position: relative;
+  display: flex;
+  width: min(23rem, 76vw);
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-orbit {
+  position: absolute;
+  inset: 8%;
+  border: 1px solid rgba(54, 215, 255, 0.16);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.agent-orbit-one { transform: rotate(22deg) scaleY(0.55); }
+.agent-orbit-two { transform: rotate(-38deg) scaleY(0.68); border-color: rgba(139, 92, 246, 0.16); }
+
+.agent-orb-caption {
+  position: absolute;
+  bottom: 3%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(54, 215, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  background: rgba(5, 10, 17, 0.78);
+  color: #67e8f9;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.studio-copilot-dock {
+  position: absolute;
+  z-index: 20;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 1rem;
+  display: flex;
+  width: min(19rem, calc(100vw - 2rem));
+  min-height: 4.1rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(54, 215, 255, 0.28);
+  border-radius: 1rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.35rem;
+  background: rgba(5, 10, 17, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42), inset 0 0 22px rgba(54, 215, 255, 0.035);
+  backdrop-filter: blur(16px);
+}
+
+.context-tab {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  color: #64748b;
+  font-size: 0.58rem;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.context-tab:hover { color: #cbd5e1; background: rgba(30, 41, 59, 0.45); }
+.context-tab-active { color: #67e8f9; border-color: rgba(34, 211, 238, 0.25); background: rgba(8, 47, 73, 0.4); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .mio-workspace,
 .mio-workspace > * {
   min-width: 0;
@@ -134,6 +288,11 @@ svg {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
+
+  .agent-hero { min-height: 640px; padding-top: 1.25rem; }
+  .agent-orb-stage { width: min(18rem, 82vw); }
+  .agent-orb-stage canvas { transform: scale(0.84); }
+  .agent-orb-caption { bottom: 1%; }
 
   /* Most creative studios use a desktop row layout with a fixed properties panel.
      On phones, stack those top-level regions vertically instead of squeezing the viewport. */
