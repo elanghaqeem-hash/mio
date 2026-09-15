@@ -26,6 +26,10 @@ OpenRouter requests use an ordered provider-side model list. MIO tries the selec
 
 Live web search is an explicit opt-in because provider-side search tools can require credits even when `openrouter/free` is selected. If OpenRouter rejects its optional web plugin with HTTP 402, MIO retries once without the plugin so free AI inference remains available and reports `webSearchUsed: false`. Add OpenRouter credits only when live web search is required.
 
+For L4 provider access, the permission dialog offers either a one-request approval or an explicit session grant. Session grants are held only in runtime memory, allow at most 60 matching requests, expire after 15 minutes of inactivity or 60 minutes total, and remain bound to the same project, provider resource, action, and network origin. Changing the routing boundary, switching offline, pressing STOP MIO, reaching the use limit, or ending the browser runtime revokes or discards the grant. L5 destructive actions remain single-use.
+
+A successful provider readiness result is cached only in the current runtime while the provider, model, endpoint, and network mode remain unchanged. The Settings `CHECK CONNECTION` action always forces a fresh check, and any routing change or provider execution failure invalidates the cached result.
+
 ## Cloudflare Pages setup
 
 1. Open the MIO Pages project in Cloudflare.

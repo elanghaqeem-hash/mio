@@ -52,9 +52,11 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
   const originalFetch = globalThis.fetch;
   let capturedBody = '';
   let capturedUrl = '';
+  let readinessGetCalls = 0;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     capturedUrl = String(input);
     if (!init?.method || init.method === 'GET') {
+      readinessGetCalls++;
       if (capturedUrl.includes('/api/tags')) return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       return new Response(JSON.stringify({ provider: 'gemini', ready: true, detail: 'Gemini ready.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -67,6 +69,11 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
     ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate' });
     const cloudReadiness = await ModelRouter.checkProviderReadiness();
     assert(cloudReadiness.ready === true && capturedUrl.includes('provider=gemini') && capturedUrl.includes('model=gemini-test'), 'Cloud readiness targets the currently selected provider and model');
+    const callsAfterFirstReadiness = readinessGetCalls;
+    const cachedReadiness = await ModelRouter.checkProviderReadiness();
+    assert(cachedReadiness.ready === true && readinessGetCalls === callsAfterFirstReadiness, 'Ready cloud-provider verification is reused within the unchanged browser session');
+    await ModelRouter.checkProviderReadiness(8000, true);
+    assert(readinessGetCalls === callsAfterFirstReadiness + 1, 'Explicit connection checks bypass the readiness cache');
 
     ModelRouter.setNetworkState('OFFLINE');
     ModelRouter.configure({ provider: 'ollama', model: 'llama3.2', ollamaEndpoint: 'http://127.0.0.1:11434' });

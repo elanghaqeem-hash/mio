@@ -11,6 +11,7 @@ import { ApplicationContextEnvelope, ModelMessage, ModelProvider, ModelRequest, 
 
 export class ModelRouter {
   private static networkState: NetworkState = 'OFFLINE';
+  private static readinessCache?: { key: string; result: ProviderReadiness };
   private static config: ModelRouterConfig = {
     provider: 'local_heuristic',
     proxyEndpoint: '/api/ai/generate',
@@ -19,13 +20,27 @@ export class ModelRouter {
     enableWebSearch: false,
   };
 
-  public static setNetworkState(state: NetworkState) { this.networkState = state; }
+  public static setNetworkState(state: NetworkState) {
+    if (state !== this.networkState && state === 'OFFLINE') PermissionEngine.revokeSessionGrants('Network mode changed to OFFLINE');
+    if (state !== this.networkState) this.readinessCache = undefined;
+    this.networkState = state;
+  }
   public static getNetworkState(): NetworkState { return this.networkState; }
-  public static configure(config: Partial<ModelRouterConfig>) { this.config = { ...this.config, ...config }; }
+  public static configure(config: Partial<ModelRouterConfig>) {
+    const next = { ...this.config, ...config };
+    const authorizationBoundaryChanged = next.provider !== this.config.provider
+      || next.model !== this.config.model
+      || next.proxyEndpoint !== this.config.proxyEndpoint
+      || next.ollamaEndpoint !== this.config.ollamaEndpoint
+      || next.enableWebSearch !== this.config.enableWebSearch;
+    if (authorizationBoundaryChanged) PermissionEngine.revokeSessionGrants('Model routing authorization boundary changed');
+    if (authorizationBoundaryChanged) this.readinessCache = undefined;
+    this.config = next;
+  }
   public static getConfig(): ModelRouterConfig { return { ...this.config }; }
   public static isOffline(): boolean { return this.networkState === 'OFFLINE' || this.config.provider === 'local_heuristic'; }
 
-  public static async checkProviderReadiness(timeoutMs: number = 8000): Promise<ProviderReadiness> {
+  public static async checkProviderReadiness(timeoutMs: number = 8000, forceRefresh: boolean = false): Promise<ProviderReadiness> {
     const provider = this.config.provider;
     if (provider === 'local_heuristic') {
       return { provider, ready: true, status: 'LOCAL_ONLY', detail: 'Local heuristic is available, but it is not an online AI provider.' };
@@ -50,13 +65,19 @@ export class ModelRouter {
         return { provider, ready: false, status: 'UNREACHABLE', detail: 'Network mode is OFFLINE. Select ONLINE MODE before using a cloud provider.' };
       }
 
+      const cacheKey = [provider, this.config.model ?? '', this.config.proxyEndpoint ?? '/api/ai/generate', this.networkState].join('|');
+      if (!forceRefresh && this.readinessCache?.key === cacheKey && this.readinessCache.result.ready) {
+        return { ...this.readinessCache.result };
+      }
       const endpoint = new URL(this.config.proxyEndpoint ?? '/api/ai/generate', typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
       endpoint.searchParams.set('provider', provider);
       if (this.config.model) endpoint.searchParams.set('model', this.config.model);
       const response = await fetch(endpoint.toString(), { method: 'GET', credentials: 'same-origin', signal: controller.signal });
       const payload = await response.json().catch(() => ({})) as { provider?: string; ready?: boolean; detail?: string };
       if (response.ok && payload.ready === true) {
-        return { provider, ready: true, status: 'READY', detail: payload.detail ?? `${provider} secure proxy is configured.` };
+        const result: ProviderReadiness = { provider, ready: true, status: 'READY', detail: payload.detail ?? `${provider} secure proxy is configured.` };
+        this.readinessCache = { key: cacheKey, result };
+        return { ...result };
       }
       return { provider, ready: false, status: 'NOT_CONFIGURED', detail: payload.detail ?? `${provider} secure proxy is not configured.` };
     } catch (error) {
@@ -154,12 +175,16 @@ export class ModelRouter {
         networkOrigin,
         ttlMs: Math.max(15_000, Math.min(timeoutMs + 10_000, 120_000)),
         maxUses: 1,
+        allowSessionGrant: true,
+        sessionMaxUses: 60,
+        sessionIdleTtlMs: 15 * 60_000,
+        sessionAbsoluteTtlMs: 60 * 60_000,
         forceDryRun: true,
       });
       if (!remoteGrant) throw new Error('Remote model execution permission denied');
 
       requiredScope = {
-        taskId: remoteGrant.scope.taskId,
+        taskId: taskId ?? remoteGrant.scope.taskId,
         projectId,
         action: `MODEL_PROVIDER:${provider.id}`,
         target: 'MIO AI Inference',
@@ -194,6 +219,7 @@ export class ModelRouter {
     try {
       return await this.executeProvider(provider, preparedRequest, timeoutMs);
     } catch (error) {
+      this.readinessCache = undefined;
       if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
       if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
       eventBus.emit('ACTIVITY_LOG', {

@@ -7,6 +7,9 @@ const DEFAULT_GRANT_TTL_MS = 60_000;
 const MAX_GRANT_TTL_MS = 5 * 60_000;
 const DEFAULT_MAX_USES = 2;
 const MAX_GRANT_USES = 10;
+const SESSION_GRANT_IDLE_TTL_MS = 15 * 60_000;
+const SESSION_GRANT_ABSOLUTE_TTL_MS = 60 * 60_000;
+const MAX_SESSION_GRANT_USES = 60;
 
 export class PermissionEngine {
   private static grants: Map<string, AuthorizationGrant> = new Map();
@@ -54,6 +57,25 @@ export class PermissionEngine {
           this.emitPermissionEvent(request, scope, false, `User approved bounded grant ${grant.id}; expires=${new Date(grant.expiresAt).toISOString()}; maxUses=${grant.maxUses}`);
           resolve(grant);
         },
+        ...(request.allowSessionGrant === true && request.level === 'L4_EXECUTE' ? {
+          sessionMaxUses: this.normalizeSessionMaxUses(request.sessionMaxUses),
+          sessionIdleTtlMs: this.normalizeSessionIdleTtl(request.sessionIdleTtlMs),
+          sessionAbsoluteTtlMs: this.normalizeSessionAbsoluteTtl(request.sessionAbsoluteTtlMs),
+          onApproveSession: () => {
+            const sessionMaxUses = this.normalizeSessionMaxUses(request.sessionMaxUses);
+            const sessionIdleTtlMs = this.normalizeSessionIdleTtl(request.sessionIdleTtlMs);
+            const sessionAbsoluteTtlMs = this.normalizeSessionAbsoluteTtl(request.sessionAbsoluteTtlMs);
+            const grant = this.issueGrant({
+              ...request,
+              ttlMs: sessionIdleTtlMs,
+              maxUses: sessionMaxUses,
+              reusableAcrossTasks: true,
+              absoluteTtlMs: sessionAbsoluteTtlMs,
+            }, scope, 'USER_APPROVAL');
+            this.emitPermissionEvent(request, scope, false, `User approved session grant ${grant.id}; idleTtlMs=${sessionIdleTtlMs}; absoluteExpires=${new Date(grant.absoluteExpiresAt ?? grant.expiresAt).toISOString()}; maxUses=${grant.maxUses}`);
+            resolve(grant);
+          },
+        } : {}),
         onReview: () => {
           this.emitPermissionEvent(request, scope, true, 'User requested review instead of execution');
           resolve(null);
@@ -82,6 +104,8 @@ export class PermissionEngine {
     if (grant.uses >= grant.maxUses) {
       grant.revoked = true;
       grant.revokeReason = 'Grant use limit exhausted';
+    } else if (grant.reusableAcrossTasks && grant.idleTtlMs && grant.absoluteExpiresAt) {
+      grant.expiresAt = Math.min(Date.now() + grant.idleTtlMs, grant.absoluteExpiresAt);
     }
     eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
     return this.cloneGrant(grant);
@@ -96,7 +120,7 @@ export class PermissionEngine {
   public static getActiveGrants(taskId?: string): AuthorizationGrant[] {
     this.pruneExpired();
     return [...this.grants.values()]
-      .filter((grant) => !grant.revoked && grant.uses < grant.maxUses && (!taskId || grant.scope.taskId === taskId))
+      .filter((grant) => !grant.revoked && grant.uses < grant.maxUses && (!taskId || grant.reusableAcrossTasks || grant.scope.taskId === taskId))
       .map((grant) => this.cloneGrant(grant));
   }
 
@@ -113,7 +137,7 @@ export class PermissionEngine {
   public static revokeTaskGrants(taskId: string, reason: string = 'Task authorization revoked'): number {
     let revoked = 0;
     for (const grant of this.grants.values()) {
-      if (grant.scope.taskId === taskId && !grant.revoked && grant.uses < grant.maxUses) {
+      if (grant.scope.taskId === taskId && !grant.reusableAcrossTasks && !grant.revoked && grant.uses < grant.maxUses) {
         grant.revoked = true;
         grant.revokeReason = reason;
         revoked += 1;
@@ -121,6 +145,22 @@ export class PermissionEngine {
     }
     if (revoked > 0) {
       this.emitSecurityEvent('warning', 'REVOKE_TASK_GRANTS', `${reason}; task=${taskId}; revoked=${revoked}`, true);
+      eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
+    }
+    return revoked;
+  }
+
+  public static revokeSessionGrants(reason: string = 'Session authorization revoked'): number {
+    let revoked = 0;
+    for (const grant of this.grants.values()) {
+      if (grant.reusableAcrossTasks && !grant.revoked && grant.uses < grant.maxUses) {
+        grant.revoked = true;
+        grant.revokeReason = reason;
+        revoked += 1;
+      }
+    }
+    if (revoked > 0) {
+      this.emitSecurityEvent('warning', 'REVOKE_SESSION_GRANTS', `${reason}; revoked=${revoked}`, true);
       eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
     }
     return revoked;
@@ -163,8 +203,10 @@ export class PermissionEngine {
 
   private static issueGrant(request: ScopedPermissionRequest, scope: AuthorizationScope, source: AuthorizationGrant['source']): AuthorizationGrant {
     const now = Date.now();
-    const maxUses = request.level === 'L5_DESTRUCTIVE' ? 1 : this.normalizeMaxUses(request.maxUses);
-    const ttlMs = request.level === 'L5_DESTRUCTIVE' ? Math.min(30_000, this.normalizeTtl(request.ttlMs)) : this.normalizeTtl(request.ttlMs);
+    const reusableAcrossTasks = request.level === 'L4_EXECUTE' && request.reusableAcrossTasks === true;
+    const maxUses = request.level === 'L5_DESTRUCTIVE' ? 1 : reusableAcrossTasks ? this.normalizeSessionMaxUses(request.maxUses) : this.normalizeMaxUses(request.maxUses);
+    const ttlMs = request.level === 'L5_DESTRUCTIVE' ? Math.min(30_000, this.normalizeTtl(request.ttlMs)) : reusableAcrossTasks ? this.normalizeSessionIdleTtl(request.ttlMs) : this.normalizeTtl(request.ttlMs);
+    const absoluteTtlMs = reusableAcrossTasks ? this.normalizeSessionAbsoluteTtl(request.absoluteTtlMs) : undefined;
     const grant: AuthorizationGrant = {
       id: `grant_${now}_${Math.random().toString(36).slice(2, 8)}`,
       level: request.level,
@@ -176,6 +218,8 @@ export class PermissionEngine {
       maxUses,
       uses: 0,
       requiresDryRun: source === 'USER_APPROVAL',
+      reusableAcrossTasks,
+      ...(reusableAcrossTasks ? { idleTtlMs: ttlMs, absoluteExpiresAt: now + absoluteTtlMs! } : {}),
     };
     this.grants.set(grant.id, grant);
     eventBus.emit('AUTHORIZATION_GRANTS_UPDATED', this.getActiveGrants());
@@ -189,7 +233,7 @@ export class PermissionEngine {
   private static grantCanAuthorize(grant: AuthorizationGrant, required: AuthorizationScope): boolean {
     if (grant.revoked || grant.expiresAt <= Date.now() || grant.uses >= grant.maxUses) return false;
     const scope = grant.scope;
-    if (scope.taskId !== required.taskId) return false;
+    if (!grant.reusableAcrossTasks && scope.taskId !== required.taskId) return false;
     if (scope.action !== required.action || scope.target !== required.target) return false;
     if (required.projectId && scope.projectId !== required.projectId) return false;
     if (required.toolId && scope.toolId !== required.toolId) return false;
@@ -208,6 +252,21 @@ export class PermissionEngine {
   private static normalizeMaxUses(maxUses?: number): number {
     if (!Number.isFinite(maxUses)) return DEFAULT_MAX_USES;
     return Math.min(MAX_GRANT_USES, Math.max(1, Math.floor(maxUses!)));
+  }
+
+  private static normalizeSessionMaxUses(maxUses?: number): number {
+    if (!Number.isFinite(maxUses)) return MAX_SESSION_GRANT_USES;
+    return Math.min(MAX_SESSION_GRANT_USES, Math.max(1, Math.floor(maxUses!)));
+  }
+
+  private static normalizeSessionIdleTtl(ttlMs?: number): number {
+    if (!Number.isFinite(ttlMs)) return SESSION_GRANT_IDLE_TTL_MS;
+    return Math.min(SESSION_GRANT_IDLE_TTL_MS, Math.max(1_000, Math.floor(ttlMs!)));
+  }
+
+  private static normalizeSessionAbsoluteTtl(ttlMs?: number): number {
+    if (!Number.isFinite(ttlMs)) return SESSION_GRANT_ABSOLUTE_TTL_MS;
+    return Math.min(SESSION_GRANT_ABSOLUTE_TTL_MS, Math.max(1_000, Math.floor(ttlMs!)));
   }
 
   private static pruneExpired(): void {

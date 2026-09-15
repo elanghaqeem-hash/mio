@@ -24,4 +24,6 @@ Configure at least one complete provider pair:
 - `GEMINI_API_KEY` and either `GEMINI_MODEL` or a model selected in Settings.
 - `ANTHROPIC_API_KEY` and either `ANTHROPIC_MODEL` or a model selected in Settings.
 
+L4 provider authorization supports explicit one-request approval or a runtime-only session grant capped at 60 matching requests. Session reuse remains project/provider/origin scoped, uses a 15-minute idle timeout and 60-minute absolute timeout, is visible and revocable in Security Center, and never applies to L5 destructive actions.
+
 After changing secrets, redeploy the Cloudflare Pages project and use `CHECK CONNECTION` for the selected provider before running a live Chat test.

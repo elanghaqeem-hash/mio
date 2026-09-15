@@ -30,6 +30,9 @@ export interface AuthorizationGrant {
   maxUses: number;
   uses: number;
   requiresDryRun: boolean;
+  reusableAcrossTasks?: boolean;
+  idleTtlMs?: number;
+  absoluteExpiresAt?: number;
 }
 
 export interface ScopedPermissionRequest {
@@ -49,6 +52,12 @@ export interface ScopedPermissionRequest {
   ttlMs?: number;
   maxUses?: number;
   forceDryRun?: boolean;
+  allowSessionGrant?: boolean;
+  sessionMaxUses?: number;
+  sessionIdleTtlMs?: number;
+  sessionAbsoluteTtlMs?: number;
+  reusableAcrossTasks?: boolean;
+  absoluteTtlMs?: number;
 }
 
 export interface DryRunRequest {
@@ -65,7 +74,11 @@ export interface DryRunRequest {
   scopeSummary?: string[];
   expiresInMs?: number;
   maxUses?: number;
+  sessionMaxUses?: number;
+  sessionIdleTtlMs?: number;
+  sessionAbsoluteTtlMs?: number;
   onApprove: () => void;
+  onApproveSession?: () => void;
   onReview: () => void;
   onCancel: () => void;
 }

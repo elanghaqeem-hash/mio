@@ -36,7 +36,7 @@ export const SettingsView: React.FC = () => {
 
   const checkProvider = async () => {
     setCheckingProvider(true);
-    setReadiness(await ModelRouter.checkProviderReadiness());
+    setReadiness(await ModelRouter.checkProviderReadiness(8000, true));
     setCheckingProvider(false);
   };
 
