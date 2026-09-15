@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AmbientLight,
   BoxGeometry,
@@ -15,9 +15,10 @@ import {
   WebGLRenderer,
   type BufferGeometry,
 } from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Mio3DObject, Mio3DScene } from '../../types/creative';
 import { ExportManager } from '../../project/ExportManager';
-import { Box, Circle, Cylinder, Layers, Download, Plus, Trash2, Eye } from 'lucide-react';
+import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
@@ -39,10 +40,12 @@ export const Studio3DView: React.FC = () => {
   const sceneRef = useRef<Scene | null>(null);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
   const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
+  const [transformMode, setTransformMode] = useState<'select' | 'move' | 'rotate' | 'scale'>('select');
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
 
   useEffect(() => {
@@ -66,6 +69,12 @@ export const Studio3DView: React.FC = () => {
     rendererRef.current = renderer;
     container.replaceChildren(renderer.domElement);
 
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controlsRef.current = controls;
+
     const grid = new GridHelper(10, 20, 0x00f0ff, 0x1e293b);
     grid.position.y = -1;
     scene.add(grid);
@@ -78,10 +87,8 @@ export const Studio3DView: React.FC = () => {
     scene.add(secondaryLight);
 
     let frameId = 0;
-    let phase = 0;
     const animate = () => {
-      phase += 0.01;
-      scene.rotation.y = Math.sin(phase * 0.4) * 0.35;
+      controls.update();
       renderer.render(scene, camera);
       frameId = requestAnimationFrame(animate);
     };
@@ -107,10 +114,12 @@ export const Studio3DView: React.FC = () => {
         if (mesh.material instanceof MeshStandardMaterial) mesh.material.dispose();
       });
       meshMap.clear();
+      controls.dispose();
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
       rendererRef.current = null;
+      controlsRef.current = null;
     };
   }, []);
 
@@ -135,6 +144,7 @@ export const Studio3DView: React.FC = () => {
       mesh.position.set(...object.position);
       mesh.rotation.set(...object.rotation);
       mesh.scale.set(...object.scale);
+      mesh.visible = object.visible !== false;
       scene.add(mesh);
       meshMapRef.current.set(object.id, mesh);
     }
@@ -153,15 +163,54 @@ export const Studio3DView: React.FC = () => {
     eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Created local 3D ${type} primitive: ${object.name}`, mode: '3D' });
   };
 
-  const deleteObject = (id: string) => {
+  const deleteObject = useCallback((id: string) => {
     setSceneData((previous) => {
       const objects = previous.objects.filter((object) => object.id !== id);
       if (selectedId === id) setSelectedId(objects[0]?.id ?? '');
       return { ...previous, objects };
     });
+  }, [selectedId, setSceneData]);
+
+  const duplicateObject = useCallback((id: string) => {
+    const source = sceneData.objects.find((object) => object.id === id);
+    if (!source) return;
+    const suffix = `${Date.now().toString(36)}`;
+    const duplicate: Mio3DObject = {
+      ...structuredClone(source),
+      id: `${source.id}_copy_${suffix}`,
+      name: `${source.name}_Copy`,
+      position: [source.position[0] + 0.35, source.position[1], source.position[2] + 0.35],
+    };
+    setSceneData((previous) => ({ ...previous, objects: [...previous.objects, duplicate] }));
+    setSelectedId(duplicate.id);
+  }, [sceneData.objects, setSceneData]);
+
+  const setCameraView = (view: 'perspective' | 'front' | 'top') => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+    if (view === 'front') camera.position.set(0, 0, 6);
+    else if (view === 'top') camera.position.set(0, 6, 0.01);
+    else camera.position.set(4.5, 3.2, 4.5);
+    controls.target.set(0, 0, 0);
+    controls.update();
   };
 
-  const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'scale') => (
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key.toLowerCase() === 'w') setTransformMode('move');
+      if (event.key.toLowerCase() === 'e') setTransformMode('rotate');
+      if (event.key.toLowerCase() === 'r') setTransformMode('scale');
+      if (event.key.toLowerCase() === 'q') setTransformMode('select');
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateObject(selectedId); }
+      if (event.key === 'Delete' && sceneData.objects.length > 1) deleteObject(selectedId);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
+
+  const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
       <div className="grid grid-cols-3 gap-2">{[0, 1, 2].map((index) => <input key={index} type="number" step="0.1" value={value[index]} onChange={(event) => {
@@ -176,28 +225,30 @@ export const Studio3DView: React.FC = () => {
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
       <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="relative flex-1 h-full flex flex-col">
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>VIEWPORT: LOCAL WEBGL PREVIEW</span><span className="text-amber-300 text-[10px] ml-2">FPS NOT BENCHMARKED</span></div>
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>OBJECT MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span></div>
+        <div className="absolute left-3 top-12 z-10 flex flex-col gap-1 rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono">{(['select', 'move', 'rotate', 'scale'] as const).map((mode) => <button key={mode} onClick={() => setTransformMode(mode)} className={`rounded px-2 py-1 text-left text-[10px] uppercase ${transformMode === mode ? 'bg-cyan-500 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'select' ? 'Q Select' : mode === 'move' ? 'W Move' : mode === 'rotate' ? 'E Rotate' : 'R Scale'}</button>)}</div>
         <div ref={containerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing" />
         <div className="h-10 bg-[#0d121d] border-t border-gray-800 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2"><span className="text-gray-400 font-mono">PRIMITIVES:</span>
+          <div className="flex items-center gap-2"><span className="text-gray-400 font-mono">ADD:</span>
             <button onClick={() => addObject('cube')} className="px-2 py-1 bg-gray-800 hover:bg-cyan-900/60 text-cyan-300 rounded border border-gray-700 flex items-center gap-1 cursor-pointer"><Box size={12} /> Cube</button>
             <button onClick={() => addObject('sphere')} className="px-2 py-1 bg-gray-800 hover:bg-cyan-900/60 text-cyan-300 rounded border border-gray-700 flex items-center gap-1 cursor-pointer"><Circle size={12} /> Sphere</button>
             <button onClick={() => addObject('cylinder')} className="px-2 py-1 bg-gray-800 hover:bg-cyan-900/60 text-cyan-300 rounded border border-gray-700 flex items-center gap-1 cursor-pointer"><Cylinder size={12} /> Cylinder</button>
           </div>
-          <button onClick={() => ExportManager.export3DAsObj(sceneData, 'MIO_Local_Scene.obj')} className="px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded flex items-center gap-1.5 cursor-pointer"><Download size={13} /> Export OBJ</button>
+          <div className="flex items-center gap-1"><button onClick={() => setCameraView('perspective')} className="rounded border border-gray-700 px-2 py-1 text-gray-300">Perspective</button><button onClick={() => setCameraView('front')} className="rounded border border-gray-700 px-2 py-1 text-gray-300">Front</button><button onClick={() => setCameraView('top')} className="rounded border border-gray-700 px-2 py-1 text-gray-300">Top</button><button onClick={() => ExportManager.export3DAsObj(sceneData, 'MIO_Local_Scene.obj')} className="px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded flex items-center gap-1.5 cursor-pointer"><Download size={13} /> Export OBJ</button></div>
         </div>
       </div>
 
       <div className="w-80 h-full bg-[#0d121d] border-l border-gray-800 flex flex-col font-mono">
         <div className="p-3 border-b border-gray-800">
           <div className="flex items-center justify-between mb-2"><span className="text-gray-300 font-bold flex items-center gap-1.5"><Layers size={14} className="text-cyan-400" /> SCENE OBJECTS ({sceneData.objects.length})</span><button onClick={() => addObject('cube')} className="p-1 hover:bg-gray-800 text-cyan-400 rounded cursor-pointer" title="Add Mesh"><Plus size={14} /></button></div>
-          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">{sceneData.objects.map((object) => <div key={object.id} onClick={() => setSelectedId(object.id)} className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition ${selectedId === object.id ? 'bg-cyan-950/60 border border-cyan-500/50 text-cyan-300' : 'hover:bg-gray-800/60 text-gray-400'}`}><div className="flex items-center gap-2 truncate"><Box size={12} /><span className="truncate">{object.name}</span></div>{sceneData.objects.length > 1 && <button onClick={(event) => { event.stopPropagation(); deleteObject(object.id); }} className="p-1 hover:text-red-400 text-gray-500 rounded"><Trash2 size={12} /></button>}</div>)}</div>
+          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">{sceneData.objects.map((object) => <div key={object.id} onClick={() => setSelectedId(object.id)} className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition ${selectedId === object.id ? 'bg-cyan-950/60 border border-cyan-500/50 text-cyan-300' : 'hover:bg-gray-800/60 text-gray-400'}`}><div className="flex items-center gap-2 truncate"><Box size={12} /><span className="truncate">{object.name}</span></div><div className="flex items-center"><button onClick={(event) => { event.stopPropagation(); setSceneData((previous) => ({ ...previous, objects: previous.objects.map((candidate) => candidate.id === object.id ? { ...candidate, visible: candidate.visible === false } : candidate) })); }} className="p-1 text-gray-500 hover:text-cyan-300">{object.visible === false ? <EyeOff size={12} /> : <Eye size={12} />}</button><button onClick={(event) => { event.stopPropagation(); duplicateObject(object.id); }} className="p-1 text-gray-500 hover:text-cyan-300"><Copy size={12} /></button>{sceneData.objects.length > 1 && <button onClick={(event) => { event.stopPropagation(); deleteObject(object.id); }} className="p-1 hover:text-red-400 text-gray-500 rounded"><Trash2 size={12} /></button>}</div></div>)}</div>
         </div>
 
         {selectedObj ? <div className="flex-1 p-3 overflow-y-auto space-y-4">
           <div><span className="text-gray-400 block text-[10px] mb-1">OBJECT IDENTIFIER</span><input type="text" value={selectedObj.name} onChange={(event) => updateSelectedObject({ name: event.target.value })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2 py-1 text-white text-xs outline-none focus:border-cyan-400" /></div>
           {vectorEditor('SCALE [X, Y, Z]', selectedObj.scale, 'scale')}
           {vectorEditor('POSITION [X, Y, Z]', selectedObj.position, 'position')}
+          {vectorEditor('ROTATION [X, Y, Z]', selectedObj.rotation, 'rotation')}
           <div><span className="text-gray-400 block text-[10px] mb-1">MATERIAL COLOR</span><div className="flex gap-2"><input type="color" value={selectedObj.color} onChange={(event) => updateSelectedObject({ color: event.target.value })} className="w-10 h-8 bg-transparent border-0" /><input type="text" value={selectedObj.color} onChange={(event) => updateSelectedObject({ color: event.target.value })} className="flex-1 bg-[#141b2b] border border-gray-700 rounded px-2 text-white" /></div></div>
           <div><span className="text-gray-400 block text-[10px] mb-1">METALNESS: {selectedObj.metalness.toFixed(2)}</span><input type="range" min="0" max="1" step="0.05" value={selectedObj.metalness} onChange={(event) => updateSelectedObject({ metalness: parseFloat(event.target.value) })} className="w-full accent-cyan-400" /></div>
           <div><span className="text-gray-400 block text-[10px] mb-1">ROUGHNESS: {selectedObj.roughness.toFixed(2)}</span><input type="range" min="0" max="1" step="0.05" value={selectedObj.roughness} onChange={(event) => updateSelectedObject({ roughness: parseFloat(event.target.value) })} className="w-full accent-cyan-400" /></div>
