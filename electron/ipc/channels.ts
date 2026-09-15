@@ -16,11 +16,12 @@ export const IPC_CHANNELS = {
   EMERGENCY_STOP: 'mio:emergency:stop',
   QUIT_APP: 'mio:app:quit',
 
-  // Controlled File Sandbox (Strict L0-L5)
-  FS_SELECT_DIRECTORY: 'mio:fs:selectDirectory',
-  FS_READ_FILE: 'mio:fs:readFile',
-  FS_WRITE_FILE: 'mio:fs:writeFile',
-  FS_LIST_DIRECTORY: 'mio:fs:listDirectory',
+  // Workspace-scoped desktop filesystem bridge.
+  // Renderer never sends arbitrary absolute filesystem paths.
+  FS_AUTHORIZE_WORKSPACE: 'mio:fs:authorizeWorkspace',
+  FS_REVOKE_WORKSPACE: 'mio:fs:revokeWorkspace',
+  FS_READ_WORKSPACE_TEXT: 'mio:fs:readWorkspaceText',
+  FS_LIST_WORKSPACE: 'mio:fs:listWorkspace',
 } as const;
 
 export type IpcChannelKey = keyof typeof IPC_CHANNELS;

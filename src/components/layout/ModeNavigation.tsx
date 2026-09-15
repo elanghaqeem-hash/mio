@@ -11,6 +11,7 @@ import {
   Volume2,
   Music,
   FolderGit2,
+  ListTodo,
   Shield,
   Settings,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ export const ModeNavigation: React.FC<ModeNavigationProps> = ({ activeMode, onSe
     { mode: 'SFX', label: 'SFX Synthesizer', icon: <Volume2 size={18} />, category: 'Creative' },
     { mode: 'MUSIC', label: 'Music Studio', icon: <Music size={18} />, category: 'Creative' },
     { mode: 'PROJECT', label: 'Project Context', icon: <FolderGit2 size={18} />, category: 'System' },
+    { mode: 'TASKS', label: 'Task Monitor', icon: <ListTodo size={18} />, category: 'System' },
     { mode: 'SECURITY', label: 'Security Center', icon: <Shield size={18} />, category: 'System' },
     { mode: 'SETTINGS', label: 'System Settings', icon: <Settings size={18} />, category: 'System' },
   ];
