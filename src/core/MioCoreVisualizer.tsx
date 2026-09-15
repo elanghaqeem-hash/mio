@@ -7,6 +7,7 @@ interface MioCoreVisualizerProps {
   audioLevel?: number;
   onClick?: () => void;
   interactive?: boolean;
+  priority?: 'hero' | 'standard' | 'compact';
 }
 
 export const MioCoreVisualizer: React.FC<MioCoreVisualizerProps> = ({
@@ -15,6 +16,7 @@ export const MioCoreVisualizer: React.FC<MioCoreVisualizerProps> = ({
   audioLevel = 0,
   onClick,
   interactive = true,
+  priority = 'standard',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -24,21 +26,32 @@ export const MioCoreVisualizer: React.FC<MioCoreVisualizerProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationFrameId: number;
+    let animationFrameId = 0;
     let t = 0;
+    let visible = !document.hidden;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, priority === 'hero' ? 1.75 : 1.4);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const particleCount = reducedMotion ? 12 : priority === 'hero' ? 58 : priority === 'compact' ? 20 : 36;
     const particles: { x: number; y: number; angle: number; dist: number; speed: number; size: number }[] = [];
-    for (let i = 0; i < 36; i++) {
-      particles.push({ x: 0, y: 0, angle: (i / 36) * Math.PI * 2, dist: 30 + Math.random() * 40, speed: 0.01 + Math.random() * 0.03, size: 1.5 + Math.random() * 2 });
+    for (let i = 0; i < particleCount; i++) {
+      const variance = ((i * 37) % 17) / 17;
+      particles.push({ x: 0, y: 0, angle: (i / particleCount) * Math.PI * 2, dist: size * (0.12 + variance * 0.16), speed: 0.006 + variance * 0.012, size: 0.8 + variance * 1.4 });
     }
 
     const render = () => {
-      t += 0.025;
-      const w = canvas.width;
-      const h = canvas.height;
+      if (!visible) return;
+      t += reducedMotion ? 0.004 : 0.018;
+      const w = size;
+      const h = size;
       const cx = w / 2;
       const cy = h / 2;
       const r = size * 0.32;
-      ctx.clearRect(0, 0, w, h);
+      ctx.clearRect(0, 0, size, size);
 
       let mainColor = '#00f0ff';
       let glowColor = 'rgba(0, 240, 255, 0.4)';
@@ -95,13 +108,23 @@ export const MioCoreVisualizer: React.FC<MioCoreVisualizerProps> = ({
         ctx.strokeStyle = mainColor; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, currentR + 8 + Math.sin(t * 1.5) * 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([4, 16]); ctx.beginPath(); ctx.arc(cx, cy, currentR + 16, -t * 0.5, -t * 0.5 + Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       }
 
-      particles.forEach((p) => { p.angle += p.speed; const px = cx + Math.cos(p.angle) * (currentR + p.dist); const py = cy + Math.sin(p.angle) * (currentR + p.dist); ctx.fillStyle = mainColor; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill(); });
-      animationFrameId = requestAnimationFrame(render);
+      particles.forEach((p) => { p.angle += reducedMotion ? 0 : p.speed; const px = cx + Math.cos(p.angle) * (currentR + p.dist); const py = cy + Math.sin(p.angle) * (currentR + p.dist); ctx.globalAlpha = 0.35 + (p.size / 2.2) * 0.45; ctx.fillStyle = mainColor; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill(); });
+      ctx.globalAlpha = 1;
+      if (!reducedMotion) animationFrameId = requestAnimationFrame(render);
     };
 
     render();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [state, size, audioLevel]);
+    const onVisibilityChange = () => {
+      visible = !document.hidden;
+      if (visible && !reducedMotion) animationFrameId = requestAnimationFrame(render);
+      else cancelAnimationFrame(animationFrameId);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [state, size, audioLevel, priority]);
 
-  return <div onClick={onClick} className={`relative flex items-center justify-center ${interactive ? 'cursor-pointer' : ''}`} style={{ width: size, height: size }} title={`Mio Core: ${state}`}><canvas ref={canvasRef} width={size * 1.5} height={size * 1.5} style={{ width: size, height: size }} className="transition-transform duration-300 hover:scale-105" /></div>;
+  return <div onClick={onClick} className={`relative flex shrink-0 items-center justify-center ${interactive ? 'cursor-pointer' : ''}`} style={{ width: size, height: size }} title={`Mio Core: ${state}`}><canvas ref={canvasRef} role="img" aria-label={`Mio Core status ${state}`} className="transition-transform duration-300 motion-reduce:transition-none hover:scale-[1.02]" /></div>;
 };

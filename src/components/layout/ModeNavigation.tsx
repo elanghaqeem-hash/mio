@@ -31,7 +31,7 @@ interface NavItem {
 
 export const ModeNavigation: React.FC<ModeNavigationProps> = ({ activeMode, onSelectMode, mobile = false }) => {
   const items: NavItem[] = [
-    { mode: 'CHAT', label: 'Chat & Logic', icon: <MessageSquare size={18} />, category: 'Intelligence' },
+    { mode: 'CHAT', label: 'Mio Core', icon: <MessageSquare size={18} />, category: 'Intelligence' },
     { mode: 'RESEARCH', label: 'Research', icon: <Globe size={18} />, category: 'Intelligence' },
     { mode: 'FILES', label: 'File Sandbox', icon: <FolderTree size={18} />, category: 'Intelligence' },
     { mode: 'MOTION', label: 'Motion Tracking', icon: <Activity size={18} />, category: 'Sensory' },
@@ -52,7 +52,7 @@ export const ModeNavigation: React.FC<ModeNavigationProps> = ({ activeMode, onSe
       aria-label="MIO workspaces"
     >
       <div className="p-3 text-[10px] text-gray-500 font-bold tracking-wider border-b border-gray-800/80">
-        MODES // WORKSPACES
+        MIO // WORKSPACES
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 space-y-1 overscroll-contain">
@@ -85,7 +85,7 @@ export const ModeNavigation: React.FC<ModeNavigationProps> = ({ activeMode, onSe
       </nav>
 
       <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-800/80 text-[10px] text-gray-500 text-center">
-        ONE CORE • ONE ARCHITECTURE
+        COMMAND • CREATE • CONTROL
       </div>
     </aside>
   );

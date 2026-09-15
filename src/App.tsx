@@ -7,8 +7,10 @@ import { ModeNavigation } from './components/layout/ModeNavigation';
 import { ContextPanel } from './components/layout/ContextPanel';
 import { PermissionModal } from './security/PermissionModal';
 import { FirstRunWizard } from './components/wizard/FirstRunWizard';
+import { AgentCommandCenter } from './modes/home/AgentCommandCenter';
+import { StudioCopilotDock } from './components/layout/StudioCopilotDock';
+import { ChatStudioView } from './modes/chat/ChatStudioView';
 
-const ChatStudioView = lazy(() => import('./modes/chat/ChatStudioView').then((m) => ({ default: m.ChatStudioView })));
 const Studio3DView = lazy(() => import('./modes/studio3d/Studio3DView').then((m) => ({ default: m.Studio3DView })));
 const AnimationStudioView = lazy(() => import('./modes/animation/AnimationStudioView').then((m) => ({ default: m.AnimationStudioView })));
 const GraphicStudioView = lazy(() => import('./modes/graphic/GraphicStudioView').then((m) => ({ default: m.GraphicStudioView })));
@@ -29,6 +31,7 @@ const WorkspaceLoader = () => (
 );
 
 export const App: React.FC = () => {
+  const agenticInterfaceEnabled = import.meta.env.VITE_MIO_AGENTIC_UI !== 'false' && localStorage.getItem('mio_agentic_ui') !== 'legacy';
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [activeMode, setActiveMode] = useState<MioSystemMode>('CHAT');
   const [dryRunRequest, setDryRunRequest] = useState<DryRunRequest | null>(null);
@@ -55,7 +58,7 @@ export const App: React.FC = () => {
 
   const renderActiveWorkspace = () => {
     switch (activeMode) {
-      case 'CHAT': return <ChatStudioView />;
+      case 'CHAT': return agenticInterfaceEnabled ? <AgentCommandCenter coreState={coreState} onSelectMode={selectMode} /> : <ChatStudioView />;
       case '3D': return <Studio3DView />;
       case 'ANIMATION': return <AnimationStudioView />;
       case 'GRAPHIC': return <GraphicStudioView />;
@@ -68,7 +71,7 @@ export const App: React.FC = () => {
       case 'PROJECT': return <ProjectOverviewView />;
       case 'TASKS': return <TaskMonitorView />;
       case 'SETTINGS': return <SettingsView />;
-      default: return <ChatStudioView />;
+      default: return agenticInterfaceEnabled ? <AgentCommandCenter coreState={coreState} onSelectMode={selectMode} /> : <ChatStudioView />;
     }
   };
 
@@ -93,6 +96,7 @@ export const App: React.FC = () => {
         </div>
         <main className="mio-workspace relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-contain lg:overflow-hidden">
           <Suspense fallback={<WorkspaceLoader />}>{renderActiveWorkspace()}</Suspense>
+          {agenticInterfaceEnabled && activeMode !== 'CHAT' && <StudioCopilotDock state={coreState} mode={activeMode} onOpenCore={() => selectMode('CHAT')} />}
         </main>
         <div className="hidden shrink-0 xl:flex">
           <ContextPanel />

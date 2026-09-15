@@ -47,10 +47,15 @@ export const ChatStudioView: React.FC = () => {
   const [excludedAssetIds, setExcludedAssetIds] = useState<string[]>(persistentExclusions);
   const [providerReadiness, setProviderReadiness] = useState<ProviderReadiness | null>(null);
   const [checkingProvider, setCheckingProvider] = useState(true);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
   useEffect(() => eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state)), []);
+  useEffect(() => eventBus.on('CHAT_DRAFT', (draft: string) => setInput(draft)), []);
   useEffect(() => eventBus.on('PROJECT_UPDATED', () => setExcludedAssetIds(persistentExclusions())), []);
   useEffect(() => {
     let active = true;
@@ -132,7 +137,7 @@ export const ChatStudioView: React.FC = () => {
         <span className="font-bold text-cyan-400">CORE: {coreState}</span>
       </div>
 
-      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:p-4">
+      <div ref={messagesContainerRef} className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:p-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
             <div className="mb-1 flex items-center gap-2">
