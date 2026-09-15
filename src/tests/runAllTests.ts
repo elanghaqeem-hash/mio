@@ -26,6 +26,7 @@ import { runKnowledgeReviewInboxTests } from './knowledgeReviewInboxTests';
 import { runEvidencePackageTests } from './evidencePackageTests';
 import { runCreativePipelineTests } from './creativePipelineTests';
 import { runSecurityPermissionCompletionTests } from './securityPermissionCompletionTests';
+import { runCreativeDocumentKernelTests } from './creativeDocumentKernelTests';
 
 const runners = [
   runMioTestSuite,
@@ -56,6 +57,7 @@ const runners = [
   runEvidencePackageTests,
   runCreativePipelineTests,
   runSecurityPermissionCompletionTests,
+  runCreativeDocumentKernelTests,
 ];
 
 async function main(): Promise<void> {
