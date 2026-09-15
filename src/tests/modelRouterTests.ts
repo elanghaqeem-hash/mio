@@ -45,25 +45,48 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
   assert(prepared.applicationContext === undefined, 'Typed application context is consumed only at the ModelRouter provider edge');
 
   ModelRouter.setNetworkState('OFFLINE');
-  ModelRouter.configure({ provider: 'openai', allowOfflineFallback: true, proxyEndpoint: '/api/ai/generate' });
+  ModelRouter.configure({ provider: 'openai', allowOfflineFallback: true, enableWebSearch: false, proxyEndpoint: '/api/ai/generate' });
   const offlineFallback = await ModelRouter.generate({ messages: [{ role: 'user', content: 'Hello' }] }, 1000);
   assert(offlineFallback.provider === 'local_heuristic' && offlineFallback.source === 'LOCAL', 'ModelRouter uses explicit local fallback when cloud provider is selected but network mode is OFFLINE');
 
   const originalFetch = globalThis.fetch;
   let capturedBody = '';
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  let capturedUrl = '';
+  let readinessGetCalls = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input);
+    if (!init?.method || init.method === 'GET') {
+      readinessGetCalls++;
+      if (capturedUrl.includes('/api/tags')) return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ provider: 'gemini', ready: true, detail: 'Gemini ready.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     capturedBody = String(init?.body ?? '');
     return new Response(JSON.stringify({ provider: 'openai', model: 'test-model', text: 'secure response', source: 'CLOUD_PROXY' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
 
   try {
+    ModelRouter.setNetworkState('ONLINE');
+    ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate' });
+    const cloudReadiness = await ModelRouter.checkProviderReadiness();
+    assert(cloudReadiness.ready === true && capturedUrl.includes('provider=gemini') && capturedUrl.includes('model=gemini-test'), 'Cloud readiness targets the currently selected provider and model');
+    const callsAfterFirstReadiness = readinessGetCalls;
+    const cachedReadiness = await ModelRouter.checkProviderReadiness();
+    assert(cachedReadiness.ready === true && readinessGetCalls === callsAfterFirstReadiness, 'Ready cloud-provider verification is reused within the unchanged browser session');
+    await ModelRouter.checkProviderReadiness(8000, true);
+    assert(readinessGetCalls === callsAfterFirstReadiness + 1, 'Explicit connection checks bypass the readiness cache');
+
+    ModelRouter.setNetworkState('OFFLINE');
+    ModelRouter.configure({ provider: 'ollama', model: 'llama3.2', ollamaEndpoint: 'http://127.0.0.1:11434' });
+    const ollamaReadiness = await ModelRouter.checkProviderReadiness();
+    assert(ollamaReadiness.ready === true && ollamaReadiness.status === 'READY', 'Local Ollama readiness works in OFFLINE mode and validates the installed model');
+
     const proxyProvider = new SecureProxyModelProvider({ provider: 'openai', endpoint: '/api/ai/generate', model: 'test-model' });
     const proxyResult = await proxyProvider.generate({ messages: [{ role: 'user', content: 'test prompt' }] });
     assert(proxyResult.source === 'CLOUD_PROXY' && proxyResult.text === 'secure response', 'SecureProxyModelProvider accepts normalized same-origin proxy responses');
     assert(!/api.?key|bearer|secret/i.test(capturedBody), 'Browser-side proxy request contains no API key, bearer token, or secret field');
   } finally {
     globalThis.fetch = originalFetch;
-    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true });
+    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true, enableWebSearch: false });
     ModelRouter.setNetworkState('OFFLINE');
   }
 

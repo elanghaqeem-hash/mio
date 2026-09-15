@@ -12,6 +12,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({ request, onClo
   if (!request) return null;
 
   const isDestructive = request.permissionLevel === 'L5_DESTRUCTIVE';
+  const canTrustSession = !isDestructive && Boolean(request.onApproveSession);
   const canApprove = !isDestructive || destructiveAcknowledged;
 
   return (
@@ -43,10 +44,13 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({ request, onClo
           {isDestructive && <label className="flex cursor-pointer items-start gap-3 rounded border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-200"><input type="checkbox" checked={destructiveAcknowledged} onChange={(event) => setDestructiveAcknowledged(event.target.checked)} className="mt-0.5" /><span>I understand this is an L5 destructive operation. I approve only the exact target and bounded single-use scope displayed above.</span></label>}
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-800">
+        {canTrustSession && <div className="mb-3 rounded border border-amber-500/30 bg-amber-950/15 p-3 font-mono text-[10px] leading-relaxed text-amber-200">Session trust permits up to {request.sessionMaxUses ?? 60} matching AI requests, expires after {Math.round((request.sessionIdleTtlMs ?? 0) / 60_000)} minutes idle or {Math.round((request.sessionAbsoluteTtlMs ?? 0) / 60_000)} minutes total, and is revoked by STOP MIO. It is not saved after this browser runtime ends.</div>}
+
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-800">
           <button onClick={() => { request.onCancel(); onClose(); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition cursor-pointer"><XCircle size={16} /> CANCEL</button>
           <button onClick={() => { request.onReview(); onClose(); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-950 border border-cyan-500/40 hover:bg-cyan-900/60 text-cyan-300 text-sm font-medium transition cursor-pointer"><Eye size={16} /> REVIEW</button>
-          <button disabled={!canApprove} onClick={() => { if (!canApprove) return; request.onApprove(); onClose(); }} className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-sm transition ${canApprove ? isDestructive ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20 cursor-pointer' : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/30 cursor-pointer' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}><CheckCircle size={16} /> {isDestructive ? 'CONFIRM L5 DESTRUCTIVE ACTION' : 'APPROVE BOUNDED SCOPE'}</button>
+          <button disabled={!canApprove} onClick={() => { if (!canApprove) return; request.onApprove(); onClose(); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition ${canApprove ? isDestructive ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20 cursor-pointer' : 'border border-cyan-500/50 bg-cyan-950 text-cyan-200 hover:bg-cyan-900/60 cursor-pointer' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}><CheckCircle size={16} /> {isDestructive ? 'CONFIRM L5 DESTRUCTIVE ACTION' : 'APPROVE ONCE'}</button>
+          {canTrustSession && <button onClick={() => { request.onApproveSession?.(); onClose(); }} className="flex cursor-pointer items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-black shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-400"><CheckCircle size={16} /> TRUST SESSION · {request.sessionMaxUses ?? 60}</button>}
         </div>
       </div>
     </div>

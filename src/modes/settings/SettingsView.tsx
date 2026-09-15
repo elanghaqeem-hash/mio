@@ -1,31 +1,43 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server } from 'lucide-react';
+import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server, RefreshCw } from 'lucide-react';
 import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
-import { ModelProviderId } from '../../types/models';
+import { ModelProviderId, ProviderReadiness } from '../../types/models';
+import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+
+const CLOUD_PROVIDER_CONFIG = {
+  openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
+  openai: { label: 'OpenAI', key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL', placeholder: 'e.g. gpt-4.1-mini' },
+  gemini: { label: 'Google Gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', placeholder: 'e.g. gemini-2.5-flash' },
+  claude: { label: 'Anthropic Claude', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', placeholder: 'e.g. claude-sonnet-4-20250514' },
+} as const;
 
 export const SettingsView: React.FC = () => {
-  const initialConfig = ModelRouter.getConfig();
-  const [autonomy, setAutonomy] = useState<AutonomyLevel>('ASSISTIVE');
-  const [network, setNetwork] = useState<NetworkState>(ModelRouter.getNetworkState());
-  const [provider, setProvider] = useState<ModelProviderId>(initialConfig.provider);
-  const [model, setModel] = useState<string>(initialConfig.model ?? '');
-  const [ollamaEndpoint, setOllamaEndpoint] = useState<string>(initialConfig.ollamaEndpoint ?? 'http://127.0.0.1:11434');
-  const [allowOfflineFallback, setAllowOfflineFallback] = useState<boolean>(initialConfig.allowOfflineFallback);
+  const [preferences, setPreferences] = useState<MioSystemPreferences>(() => systemPreferences.getSnapshot());
+  const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
+  const [checkingProvider, setCheckingProvider] = useState(false);
+  const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
+  const { provider, model = '', ollamaEndpoint = 'http://127.0.0.1:11434', allowOfflineFallback, enableWebSearch } = modelRouter;
+  const cloudConfig = provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude' ? CLOUD_PROVIDER_CONFIG[provider] : null;
 
   useEffect(() => {
-    ModelRouter.configure({
-      provider,
-      model: model.trim() || undefined,
-      ollamaEndpoint: ollamaEndpoint.trim() || undefined,
-      proxyEndpoint: '/api/ai/generate',
-      allowOfflineFallback,
-    });
-  }, [provider, model, ollamaEndpoint, allowOfflineFallback]);
+    return systemPreferences.subscribe(setPreferences);
+  }, []);
 
   const handleNetworkToggle = (newNet: NetworkState) => {
-    setNetwork(newNet);
-    ModelRouter.setNetworkState(newNet);
+    setReadiness(null);
+    void systemPreferences.setNetworkState(newNet);
+  };
+
+  const updateRouter = (patch: Parameters<typeof systemPreferences.setModelRouter>[0]) => {
+    setReadiness(null);
+    void systemPreferences.setModelRouter(patch);
+  };
+
+  const checkProvider = async () => {
+    setCheckingProvider(true);
+    setReadiness(await ModelRouter.checkProviderReadiness(8000, true));
+    setCheckingProvider(false);
   };
 
   return (
@@ -46,7 +58,7 @@ export const SettingsView: React.FC = () => {
           {(['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'] as AutonomyLevel[]).map((lvl) => (
             <button
               key={lvl}
-              onClick={() => setAutonomy(lvl)}
+              onClick={() => void systemPreferences.setAutonomyLevel(lvl)}
               className={`p-3 rounded-lg border cursor-pointer transition text-center ${autonomy === lvl ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/20' : 'bg-[#111726] border-gray-800 text-gray-400 hover:border-gray-700'}`}
             >
               <div className="font-bold text-xs">{lvl}</div>
@@ -77,38 +89,58 @@ export const SettingsView: React.FC = () => {
 
         <div className="space-y-2 pt-2 border-t border-gray-800">
           <span className="text-gray-400 text-[10px] block">AI INFERENCE PROVIDER</span>
-          <select value={provider} onChange={(e) => setProvider(e.target.value as ModelProviderId)} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
+          <select value={provider} onChange={(e) => updateRouter({ provider: e.target.value as ModelProviderId, model: undefined })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
             <option value="local_heuristic">MIO Local Heuristic — offline fallback / orchestration intelligence</option>
+            <option value="openrouter">OpenRouter — multi-provider AI gateway</option>
             <option value="openai">OpenAI — server-side MIO Secure Proxy</option>
+            <option value="gemini">Google Gemini — server-side MIO Secure Proxy</option>
+            <option value="claude">Anthropic Claude — server-side MIO Secure Proxy</option>
             <option value="ollama">Ollama — local endpoint</option>
           </select>
         </div>
 
-        {provider === 'openai' && (
+        {cloudConfig && (
           <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 space-y-2">
             <div className="flex items-center gap-2 text-emerald-300 font-bold"><ShieldCheck size={14} /> SERVER-SIDE SECRET BOUNDARY</div>
-            <p className="text-gray-400 text-[10px] leading-relaxed">No API key is accepted or stored by this browser. Configure <code className="text-cyan-300">OPENAI_API_KEY</code> and optionally <code className="text-cyan-300">OPENAI_MODEL</code> in the Web Lab server / Cloudflare environment. Remote inference still requires the MIO L4 permission gate.</p>
+            <p className="text-gray-400 text-[10px] leading-relaxed">No API key is accepted or stored by this browser. Configure <code className="text-cyan-300">{cloudConfig.key}</code> and optionally <code className="text-cyan-300">{cloudConfig.model}</code> in the Web Lab server / Cloudflare environment. Remote inference still requires the MIO L4 permission gate.</p>
           </div>
         )}
 
-        {(provider === 'openai' || provider === 'ollama') && (
+        {(cloudConfig || provider === 'ollama') && (
           <div className="space-y-1">
-            <span className="text-gray-400 text-[10px] block">MODEL {provider === 'openai' ? '(optional when configured server-side)' : ''}</span>
-            <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === 'openai' ? 'Server default when empty' : 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            <span className="text-gray-400 text-[10px] block">MODEL {cloudConfig ? `(optional when ${cloudConfig.model} is configured server-side)` : ''}</span>
+            <input type="text" value={model} onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })} placeholder={cloudConfig?.placeholder ?? 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
           </div>
         )}
 
         {provider === 'ollama' && (
           <div className="space-y-1">
             <span className="text-gray-400 text-[10px] flex items-center gap-1"><Server size={11} /> LOCAL OLLAMA ENDPOINT</span>
-            <input type="text" value={ollamaEndpoint} onChange={(e) => setOllamaEndpoint(e.target.value)} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            <input type="text" value={ollamaEndpoint} onChange={(e) => updateRouter({ ollamaEndpoint: e.target.value })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
           </div>
         )}
 
+        {cloudConfig && (
+          <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
+            <input type="checkbox" checked={enableWebSearch} onChange={(e) => updateRouter({ enableWebSearch: e.target.checked })} className="accent-cyan-400" />
+            <span className="text-gray-300">Enable {cloudConfig.label} live web search / grounding (may require provider credits; internet access remains L4 permission-gated)</span>
+          </label>
+        )}
+
         <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
-          <input type="checkbox" checked={allowOfflineFallback} onChange={(e) => setAllowOfflineFallback(e.target.checked)} className="accent-cyan-400" />
-          <span className="text-gray-300">Allow explicit fallback to local heuristic when selected provider is unavailable</span>
+          <input type="checkbox" checked={allowOfflineFallback} onChange={(e) => updateRouter({ allowOfflineFallback: e.target.checked })} className="accent-cyan-400" />
+          <span className="text-gray-300">Allow clearly labelled fallback to local heuristic when selected provider is unavailable</span>
         </label>
+
+        <div className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div><div className="font-bold text-gray-200">PROVIDER READINESS</div><div className="mt-1 text-[10px] text-gray-500">Checks the selected endpoint/configuration without sending chat content.</div></div>
+            <button onClick={() => void checkProvider()} disabled={checkingProvider} className="flex items-center gap-1.5 rounded border border-cyan-500/40 px-3 py-1.5 font-bold text-cyan-300 disabled:opacity-50">
+              <RefreshCw size={12} className={checkingProvider ? 'animate-spin' : ''} /> {checkingProvider ? 'CHECKING' : 'CHECK CONNECTION'}
+            </button>
+          </div>
+          {readiness && <div className={`rounded border px-3 py-2 text-[10px] ${readiness.ready && readiness.status === 'READY' ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300' : readiness.status === 'LOCAL_ONLY' ? 'border-amber-500/40 bg-amber-950/20 text-amber-300' : 'border-red-500/40 bg-red-950/20 text-red-300'}`}><strong>{readiness.status}</strong> — {readiness.detail}</div>}
+        </div>
       </div>
 
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">

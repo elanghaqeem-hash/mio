@@ -3,6 +3,7 @@ import { Shield, Mic, Camera, FolderCheck, Sliders, Database, CheckCircle2, Arro
 import { MioCoreVisualizer } from '../../core/MioCoreVisualizer';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { ModelProviderId } from '../../types/models';
+import { systemPreferences } from '../../settings/SystemPreferences';
 
 interface FirstRunWizardProps {
   onComplete: () => void;
@@ -18,14 +19,25 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
   const [autonomy, setAutonomy] = useState('ASSISTIVE');
   const [memoryEnabled, setMemoryEnabled] = useState(true);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < totalSteps) {
       setStep(step + 1);
       return;
     }
 
-    ModelRouter.configure({ provider, allowOfflineFallback: true, proxyEndpoint: '/api/ai/generate' });
-    ModelRouter.setNetworkState(provider === 'openai' ? 'ONLINE' : 'OFFLINE');
+    await systemPreferences.update({
+      autonomyLevel: autonomy as 'PASSIVE' | 'ASSISTIVE' | 'PROACTIVE' | 'AUTONOMOUS',
+      networkState: provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude' ? 'ONLINE' : 'OFFLINE',
+      modelRouter: {
+        ...ModelRouter.getConfig(),
+        provider,
+        allowOfflineFallback: false,
+        // Web grounding can incur separate provider charges, so it remains an
+        // explicit opt-in in System Settings instead of being enabled silently.
+        enableWebSearch: false,
+        proxyEndpoint: '/api/ai/generate',
+      },
+    });
     localStorage.setItem('mio_v2_setup_completed', 'true');
     onComplete();
   };
@@ -77,7 +89,10 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
               <div className="space-y-2">
                 {[
                   ['local_heuristic', 'MIO Local Heuristic', 'Offline orchestration, classification and transparent fallback.'],
+                  ['openrouter', 'OpenRouter Multi-provider Gateway', 'One server-side gateway for routed AI models and optional web grounding.'],
                   ['openai', 'OpenAI via MIO Secure Proxy', 'Real cloud inference; secret remains server-side and each remote use is permission-gated.'],
+                  ['gemini', 'Google Gemini via MIO Secure Proxy', 'Gemini inference and optional Google Search grounding through server-side credentials.'],
+                  ['claude', 'Anthropic Claude via MIO Secure Proxy', 'Claude inference and optional web search through server-side credentials.'],
                   ['ollama', 'Local Ollama', 'Local model endpoint for environments where Ollama is available.'],
                 ].map(([id, label, description]) => (
                   <button key={id} onClick={() => setProvider(id as ModelProviderId)} className={`w-full text-left p-3 rounded-lg border cursor-pointer ${provider === id ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300' : 'bg-[#111726] border-gray-800 text-gray-400'}`}>
@@ -127,7 +142,7 @@ export const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) =>
 
         <div className="flex items-center justify-between border-t border-gray-800 pt-4 mt-6">
           <button onClick={handlePrev} disabled={step === 1} className="flex items-center gap-1 px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-gray-300 font-bold cursor-pointer"><ArrowLeft size={14} /> Back</button>
-          <button onClick={handleNext} className="flex items-center gap-1 px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-black font-bold shadow-lg shadow-cyan-500/20 cursor-pointer"><span>{step === totalSteps ? 'LAUNCH MIO WEB LAB' : 'Continue'}</span><ArrowRight size={14} /></button>
+          <button onClick={() => void handleNext()} className="flex items-center gap-1 px-5 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-black font-bold shadow-lg shadow-cyan-500/20 cursor-pointer"><span>{step === totalSteps ? 'LAUNCH MIO WEB LAB' : 'Continue'}</span><ArrowRight size={14} /></button>
         </div>
       </div>
     </div>

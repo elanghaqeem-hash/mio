@@ -8,6 +8,7 @@ import { MioMemoryManager } from './security/MemoryManager';
 import { executionLedger } from './security/ExecutionLedger';
 import { securityAuditLog } from './security/SecurityAuditLog';
 import { taskRuntime } from './orchestrator/TaskRuntime';
+import { systemPreferences } from './settings/SystemPreferences';
 
 interface ErrorBoundaryProps { children: ReactNode; }
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
@@ -38,6 +39,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 async function bootstrapMio(): Promise<void> {
+  await systemPreferences.initialize();
   await ProjectManager.initialize();
   const project = ProjectManager.getProject();
   await Promise.all([

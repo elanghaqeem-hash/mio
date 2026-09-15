@@ -15,7 +15,7 @@ export async function runContextContinuityTests(): Promise<{ passed: number; tot
     }
   };
 
-  ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true });
+  ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true, enableWebSearch: false });
   ModelRouter.setNetworkState('OFFLINE');
 
   const history: ModelMessage[] = Array.from({ length: 20 }, (_, index) => ({

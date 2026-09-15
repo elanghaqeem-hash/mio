@@ -104,6 +104,32 @@ export async function runScopedAuthorizationTests(): Promise<SuiteResult> {
   const secondUse = reusableSecond ? PermissionEngine.consumeGrant(reusableSecond.id, reusableScope) : null;
   check(Boolean(secondUse?.revoked) && PermissionEngine.getActiveGrants(reusableScope.taskId).length === 0, 'Reuse budget exhaustion removes the grant from active authorization');
 
+  autoApprove();
+  PermissionEngine.clearForTests();
+  const sessionDryRuns: DryRunRequest[] = [];
+  const approveSession = eventBus.on<DryRunRequest>('REQUEST_DRY_RUN_PERMISSION', (request) => {
+    sessionDryRuns.push(request);
+    request.onApproveSession?.();
+  });
+  const sessionRequest = (task: string) => PermissionEngine.requestScopedPermission({
+    action: 'MODEL_PROVIDER:openrouter', target: 'MIO AI Inference', level: 'L4_EXECUTE',
+    changes: ['Send matching prompts to OpenRouter'], risks: ['Prompt leaves local runtime'], expectedResult: 'Remote response',
+    taskId: task, projectId: 'project-alpha', resourceId: 'model-provider:openrouter', networkAccess: true,
+    networkOrigin: 'https://mio.example.test', maxUses: 1, ttlMs: 30_000, forceDryRun: true,
+    allowSessionGrant: true, sessionMaxUses: 60, sessionIdleTtlMs: 15 * 60_000, sessionAbsoluteTtlMs: 60 * 60_000,
+  });
+  const sessionGrant = await sessionRequest('session-task-a');
+  check(Boolean(sessionGrant?.reusableAcrossTasks) && sessionGrant?.maxUses === 60 && sessionDryRuns.length === 1, 'User can explicitly approve an L4 provider session for at most 60 matching requests');
+  check(sessionGrant?.idleTtlMs === 15 * 60_000 && Boolean(sessionGrant.absoluteExpiresAt && sessionGrant.absoluteExpiresAt > sessionGrant.expiresAt), 'Session grant carries a 15-minute idle limit and a separate absolute lifetime');
+  const firstSessionUse = sessionGrant ? PermissionEngine.consumeGrant(sessionGrant.id, { ...sessionGrant.scope, taskId: 'session-task-a' }) : null;
+  const reusedSessionGrant = await sessionRequest('session-task-b');
+  check(Boolean(firstSessionUse && reusedSessionGrant && reusedSessionGrant.id === sessionGrant?.id && sessionDryRuns.length === 1), 'Matching provider scope reuses the session grant across chat task IDs without another prompt');
+  check(Boolean(reusedSessionGrant && PermissionEngine.validateGrant(reusedSessionGrant.id, { ...reusedSessionGrant.scope, taskId: 'session-task-b' })), 'Session grant authorizes a new task only inside the same project, provider, resource, and origin boundary');
+  check(Boolean(reusedSessionGrant && !PermissionEngine.validateGrant(reusedSessionGrant.id, { ...reusedSessionGrant.scope, taskId: 'session-task-b', projectId: 'project-beta' })), 'Session grant cannot cross its approved project boundary');
+  check(PermissionEngine.revokeTaskGrants('session-task-a', 'Original task completed') === 0 && PermissionEngine.getActiveGrants().length === 1, 'Completing one task does not revoke an explicitly approved matching session grant');
+  check(PermissionEngine.revokeSessionGrants('Routing changed') === 1 && PermissionEngine.getActiveGrants().length === 0, 'Routing changes can revoke all session grants immediately');
+  approveSession();
+
   PermissionEngine.clearForTests();
   const stoppable = await PermissionEngine.requestScopedPermission({
     action: 'PROJECT:READ', target: 'Project project-alpha', level: 'L1_SUGGEST',
@@ -116,7 +142,6 @@ export async function runScopedAuthorizationTests(): Promise<SuiteResult> {
   }), 'STOP MIO revokes all active scoped authorization grants');
   emergencyStop.reset();
 
-  autoApprove();
   PermissionEngine.clearForTests();
   return { passed, total };
 }

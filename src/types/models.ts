@@ -1,4 +1,4 @@
-export type ModelProviderId = 'local_heuristic' | 'openai' | 'gemini' | 'claude' | 'ollama';
+export type ModelProviderId = 'local_heuristic' | 'openrouter' | 'openai' | 'gemini' | 'claude' | 'ollama';
 
 export interface ModelMessage {
   role: 'system' | 'user' | 'assistant';
@@ -45,6 +45,11 @@ export interface ModelUsage {
   outputTokens?: number;
 }
 
+export interface ModelCitation {
+  url: string;
+  title?: string;
+}
+
 export interface ModelResponse {
   provider: ModelProviderId;
   model: string;
@@ -53,6 +58,8 @@ export interface ModelResponse {
   finishReason?: string;
   generatedAt: number;
   source: 'LOCAL' | 'CLOUD_PROXY' | 'LOCAL_ENDPOINT';
+  webSearchUsed?: boolean;
+  citations?: ModelCitation[];
 }
 
 export interface ModelProvider {
@@ -69,4 +76,12 @@ export interface ModelRouterConfig {
   proxyEndpoint?: string;
   ollamaEndpoint?: string;
   allowOfflineFallback: boolean;
+  enableWebSearch: boolean;
+}
+
+export interface ProviderReadiness {
+  provider: ModelProviderId;
+  ready: boolean;
+  status: 'READY' | 'LOCAL_ONLY' | 'NOT_CONFIGURED' | 'UNREACHABLE';
+  detail: string;
 }
