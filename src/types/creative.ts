@@ -10,6 +10,7 @@ export interface Mio3DObject {
   metalness: number;
   roughness: number;
   wireframe: boolean;
+  visible?: boolean;
   proceduralParams?: Record<string, number | string>;
 }
 
