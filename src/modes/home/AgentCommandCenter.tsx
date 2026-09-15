@@ -27,6 +27,7 @@ const stateCopy: Record<MioCoreState, { eyebrow: string; title: string; detail: 
   '3D MODE': { eyebrow: '3D STUDIO', title: 'Copilot 3D aktif', detail: 'Viewport dan alat pemodelan tetap menjadi ruang kerja utama.' },
   'ANIMATION MODE': { eyebrow: 'ANIMATION STUDIO', title: 'Copilot animasi aktif', detail: 'Timeline dan keyframe tetap berada di bawah kendali Anda.' },
   'GRAPHIC MODE': { eyebrow: 'DESIGN STUDIO', title: 'Copilot desain aktif', detail: 'Layer, frame, dan aset tetap dapat diedit secara nondestruktif.' },
+  'DRAWING MODE': { eyebrow: 'DRAWING STUDIO', title: 'Copilot gambar aktif', detail: 'Brush, stroke, dan layer tetap berada di dokumen lokal yang dapat dibatalkan.' },
   'SFX MODE': { eyebrow: 'SFX STUDIO', title: 'Copilot audio aktif', detail: 'Waveform, routing, dan efek tetap menjadi pusat pekerjaan.' },
   'MUSIC MODE': { eyebrow: 'MUSIC STUDIO', title: 'Copilot musik aktif', detail: 'Track, mixer, dan arrangement tetap menjadi ruang kerja utama.' },
   SECURITY: { eyebrow: 'SECURITY BOUNDARY', title: 'Kontrol keamanan aktif', detail: 'Izin dan batas eksekusi diterapkan pada seluruh tindakan.' },

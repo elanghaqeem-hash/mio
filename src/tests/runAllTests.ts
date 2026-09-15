@@ -29,6 +29,7 @@ import { runSecurityPermissionCompletionTests } from './securityPermissionComple
 import { runCreativeDocumentKernelTests } from './creativeDocumentKernelTests';
 import { runCreativeStudioIntegrationTests } from './creativeStudioIntegrationTests';
 import { runCreative3DAnimationWorkspaceTests } from './creative3DAnimationWorkspaceTests';
+import { runCreativeDrawingGraphicWorkspaceTests } from './creativeDrawingGraphicWorkspaceTests';
 
 const runners = [
   runMioTestSuite,
@@ -62,6 +63,7 @@ const runners = [
   runCreativeDocumentKernelTests,
   runCreativeStudioIntegrationTests,
   runCreative3DAnimationWorkspaceTests,
+  runCreativeDrawingGraphicWorkspaceTests,
 ];
 
 async function main(): Promise<void> {
