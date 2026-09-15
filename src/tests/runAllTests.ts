@@ -1,0 +1,73 @@
+import { runMioTestSuite } from './systemTests';
+import { runResearchConflictTests } from './researchConflictTests';
+import { runToolRouterTests } from './toolRouterTests';
+import { runModelRouterTests } from './modelRouterTests';
+import { runAiProxyTests } from './aiProxyTests';
+import { runResearchProxyTests } from './researchProxyTests';
+import { runContextContinuityTests } from './contextContinuityTests';
+import { runSystemPreferencesTests } from './systemPreferencesTests';
+import { runTaskRuntimeTests } from './taskRuntimeTests';
+import { runTaskSchedulerTests } from './taskSchedulerTests';
+import { runTaskIntegrityTests } from './taskIntegrityTests';
+import { runResourceGovernanceTests } from './resourceGovernanceTests';
+import { runScopedAuthorizationTests } from './scopedAuthorizationTests';
+import { runCapabilityGatewayTests } from './capabilityGatewayTests';
+import { runDesktopWorkspaceBridgeTests } from './desktopWorkspaceBridgeTests';
+import { runKnowledgeIngestionTests } from './knowledgeIngestionTests';
+import { runProjectKnowledgeIndexTests } from './projectKnowledgeIndexTests';
+import { runKnowledgeGovernanceWorkflowTests } from './knowledgeGovernanceWorkflowTests';
+import { runKnowledgeHealthTests } from './knowledgeHealthTests';
+import { runKnowledgeCorroborationTests } from './knowledgeCorroborationTests';
+import { runMemoryGovernanceTests } from './memoryGovernanceTests';
+import { runKnowledgeLineageDiagnosticsTests } from './knowledgeLineageDiagnosticsTests';
+import { runResearchKnowledgePromotionTests } from './researchKnowledgePromotionTests';
+import { runResearchRevalidationTests } from './researchRevalidationTests';
+import { runKnowledgeReviewInboxTests } from './knowledgeReviewInboxTests';
+import { runEvidencePackageTests } from './evidencePackageTests';
+import { runCreativePipelineTests } from './creativePipelineTests';
+import { runSecurityPermissionCompletionTests } from './securityPermissionCompletionTests';
+
+const runners = [
+  runMioTestSuite,
+  async () => runResearchConflictTests(),
+  runToolRouterTests,
+  runModelRouterTests,
+  runAiProxyTests,
+  runResearchProxyTests,
+  runContextContinuityTests,
+  runSystemPreferencesTests,
+  runTaskRuntimeTests,
+  runTaskSchedulerTests,
+  runTaskIntegrityTests,
+  runResourceGovernanceTests,
+  runScopedAuthorizationTests,
+  runCapabilityGatewayTests,
+  runDesktopWorkspaceBridgeTests,
+  runKnowledgeIngestionTests,
+  runProjectKnowledgeIndexTests,
+  runKnowledgeGovernanceWorkflowTests,
+  runKnowledgeHealthTests,
+  runKnowledgeCorroborationTests,
+  runMemoryGovernanceTests,
+  runKnowledgeLineageDiagnosticsTests,
+  runResearchKnowledgePromotionTests,
+  runResearchRevalidationTests,
+  runKnowledgeReviewInboxTests,
+  runEvidencePackageTests,
+  runCreativePipelineTests,
+  runSecurityPermissionCompletionTests,
+];
+
+async function main(): Promise<void> {
+  const results = [];
+  for (const run of runners) results.push(await run());
+  const passed = results.reduce((sum, result) => sum + result.passed, 0);
+  const total = results.reduce((sum, result) => sum + result.total, 0);
+  console.log(`TOTAL VALIDATION: ${passed}/${total}`);
+  if (passed !== total) process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -6,14 +6,25 @@ import { QueryPlanner } from './QueryPlanner';
 import { SearchProvider } from './SearchProvider';
 import { SourceEvaluator } from './SourceEvaluator';
 import { CrossrefProvider } from './providers/CrossrefProvider';
+import { MioResearchProxyProvider } from './providers/MioResearchProxyProvider';
 import { WikipediaProvider } from './providers/WikipediaProvider';
 import { ResearchReport, ResearchSource } from '../types/research';
 
 export class ResearchEngine {
   private providers: SearchProvider[];
 
-  constructor(providers: SearchProvider[] = [new WikipediaProvider(), new CrossrefProvider()]) {
+  constructor(providers: SearchProvider[] = ResearchEngine.defaultProviders()) {
     this.providers = providers;
+  }
+
+  private static defaultProviders(): SearchProvider[] {
+    // Cloudflare web builds keep outbound retrieval behind a same-origin
+    // function so secrets and the CSP boundary remain server-side. The
+    // Electron preview has no Pages Functions runtime yet, so it retains the
+    // public, secret-free providers until its main-process research IPC lands.
+    return typeof window !== 'undefined' && window.mioDesktop
+      ? [new WikipediaProvider(), new CrossrefProvider()]
+      : [new MioResearchProxyProvider()];
   }
 
   public async research(query: string, signal?: AbortSignal): Promise<ResearchReport> {
@@ -23,15 +34,18 @@ export class ResearchEngine {
 
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
 
-    const settled = await Promise.allSettled(
-      this.providers.map(async (provider) => ({ provider, results: await provider.search(plan, signal) }))
-    );
+    const settled = await Promise.allSettled(this.providers.map(async (provider) => ({
+      provider,
+      ...(provider.searchWithDiagnostics
+        ? await provider.searchWithDiagnostics(plan, signal)
+        : { results: await provider.search(plan, signal), providerErrors: [] }),
+    })));
 
     if (signal?.aborted) throw new Error('Research cancelled');
 
     const rawResults = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value.results : []));
     const providerErrors = settled.flatMap((item, index) => {
-      if (item.status === 'fulfilled') return [];
+      if (item.status === 'fulfilled') return item.value.providerErrors;
       return [{ provider: this.providers[index]?.id ?? `provider_${index}`, error: String(item.reason) }];
     });
 
