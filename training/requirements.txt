@@ -1,0 +1,7 @@
+torch
+transformers>=5.0.0
+datasets
+trl
+peft
+accelerate
+bitsandbytes

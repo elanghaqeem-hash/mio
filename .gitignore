@@ -13,6 +13,14 @@ dist-electron
 release
 out
 
+# MIO Local training artifacts
+training/output/
+training/datasets/*.jsonl
+*.safetensors
+*.gguf
+*.pt
+*.pth
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
