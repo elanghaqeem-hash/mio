@@ -23,6 +23,7 @@ export class ModelRouter {
     researchEndpoint: '/api/research',
     allowOfflineFallback: true,
     enableWebSearch: false,
+    enableBrowserRead: false,
   };
 
   public static setNetworkState(state: NetworkState) {
@@ -40,7 +41,8 @@ export class ModelRouter {
       || next.mioLocalBackend !== this.config.mioLocalBackend
       || next.mioLocalEndpoint !== this.config.mioLocalEndpoint
       || next.researchEndpoint !== this.config.researchEndpoint
-      || next.enableWebSearch !== this.config.enableWebSearch;
+      || next.enableWebSearch !== this.config.enableWebSearch
+      || next.enableBrowserRead !== this.config.enableBrowserRead;
     if (authorizationBoundaryChanged) PermissionEngine.revokeSessionGrants('Model routing authorization boundary changed');
     if (authorizationBoundaryChanged) this.readinessCache = undefined;
     this.config = next;
@@ -62,13 +64,20 @@ export class ModelRouter {
         const model = this.config.model ?? 'qwen3:8b';
         const backend = createLocalInferenceBackend(backendId, this.config.mioLocalEndpoint, model);
         const readiness = await backend.checkReadiness(controller.signal);
-        const webDetail = this.config.enableWebSearch
-          ? this.networkState === 'ONLINE'
-            ? ' Governed web grounding is enabled through the MIO research gateway.'
-            : ' Web grounding is configured but suspended while network mode is OFFLINE.'
-          : '';
+        const featureDetails = [
+          this.config.enableWebSearch
+            ? this.networkState === 'ONLINE'
+              ? 'Governed web grounding enabled.'
+              : 'Web grounding configured but suspended while OFFLINE.'
+            : undefined,
+          this.config.enableBrowserRead
+            ? this.networkState === 'ONLINE'
+              ? 'Governed desktop browser reading enabled when the desktop bridge is available.'
+              : 'Browser reading configured but suspended while OFFLINE.'
+            : undefined,
+        ].filter(Boolean).join(' ');
         return readiness.ready
-          ? { provider, ready: true, status: 'READY', detail: `MIO Local ${backend.displayName}: ${readiness.detail}${webDetail}` }
+          ? { provider, ready: true, status: 'READY', detail: `MIO Local ${backend.displayName}: ${readiness.detail}${featureDetails ? ` ${featureDetails}` : ''}` }
           : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `MIO Local ${backend.displayName}: ${readiness.detail}` };
       }
 
@@ -301,6 +310,7 @@ export class ModelRouter {
       endpoint: config.mioLocalEndpoint,
       model: config.model,
       enableWebSearch: config.enableWebSearch && this.networkState === 'ONLINE',
+      enableBrowserRead: config.enableBrowserRead === true && this.networkState === 'ONLINE',
       researchEndpoint: config.researchEndpoint,
     });
     if (config.provider === 'ollama') return new OllamaProvider(config.ollamaEndpoint, config.model);
