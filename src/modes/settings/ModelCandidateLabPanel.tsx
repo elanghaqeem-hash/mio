@@ -3,6 +3,7 @@ import {
   Activity,
   BadgeCheck,
   FileCheck2,
+  Fingerprint,
   FlaskConical,
   Gauge,
   Import,
@@ -18,6 +19,10 @@ import {
   CandidateRuntimeReadiness,
   trainingCandidateLabService,
 } from '../../training/TrainingCandidateLabService';
+import {
+  CandidateAdapterIntegrityEvidence,
+  trainingCandidateIntegrityService,
+} from '../../training/TrainingCandidateIntegrityService';
 import {
   TrainingCandidateReviewSnapshot,
   trainingCandidateReviewService,
@@ -47,6 +52,13 @@ interface ModelCandidateLabPanelProps {
 const pct = (value: number): string => `${(value * 100).toFixed(1)}%`;
 const signedPct = (value: number): string => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)} pp`;
 const signedMs = (value: number): string => `${value >= 0 ? '+' : ''}${Math.round(value)} ms`;
+const bytesLabel = (value: number): string => value >= 1024 * 1024 * 1024
+  ? `${(value / (1024 * 1024 * 1024)).toFixed(2)} GiB`
+  : value >= 1024 * 1024
+    ? `${(value / (1024 * 1024)).toFixed(2)} MiB`
+    : value >= 1024
+      ? `${(value / 1024).toFixed(1)} KiB`
+      : `${value} B`;
 
 export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ backend, endpoint }) => {
   const [texts, setTexts] = useState<ImportTexts>({ manifest: '', dataset: '', result: '' });
@@ -58,6 +70,7 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
   const [candidates, setCandidates] = useState<TrainingCandidateReviewSnapshot[]>([]);
   const [readiness, setReadiness] = useState<Record<string, CandidateRuntimeReadiness>>({});
   const [comparisons, setComparisons] = useState<Record<string, CandidateLabComparisonRecord>>({});
+  const [integrity, setIntegrity] = useState<Record<string, CandidateAdapterIntegrityEvidence>>({});
   const [baseAliases, setBaseAliases] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -66,13 +79,19 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
     const snapshots = await trainingCandidateReviewService.list();
     setCandidates(snapshots);
     const nextComparisons: Record<string, CandidateLabComparisonRecord> = {};
+    const nextIntegrity: Record<string, CandidateAdapterIntegrityEvidence> = {};
     const nextAliases: Record<string, string> = {};
     for (const snapshot of snapshots) {
-      const comparison = await trainingCandidateLabService.latestComparison(snapshot.candidate.id);
+      const [comparison, evidence] = await Promise.all([
+        trainingCandidateLabService.latestComparison(snapshot.candidate.id),
+        trainingCandidateIntegrityService.latest(snapshot.candidate.id),
+      ]);
       if (comparison) nextComparisons[snapshot.candidate.id] = comparison;
+      if (evidence) nextIntegrity[snapshot.candidate.id] = evidence;
       nextAliases[snapshot.candidate.id] = comparison?.baseRuntimeModel ?? snapshot.manifest.baseModel;
     }
     setComparisons(nextComparisons);
+    setIntegrity(nextIntegrity);
     setBaseAliases((existing) => ({ ...nextAliases, ...existing }));
   }, []);
 
@@ -153,6 +172,24 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
     }
   };
 
+  const scanIntegrity = async (candidateId: string) => {
+    setBusy(`integrity:${candidateId}`);
+    setMessage(null);
+    try {
+      const result = await trainingCandidateIntegrityService.scanCandidate(candidateId);
+      if (result.cancelled || !result.evidence) {
+        setMessage('Adapter integrity scan cancelled. No evidence was recorded.');
+        return;
+      }
+      setIntegrity((current) => ({ ...current, [candidateId]: result.evidence! }));
+      setMessage(`Adapter integrity ${result.evidence.comparison}: ${result.evidence.fileCount} file(s), ${bytesLabel(result.evidence.totalBytes)}, SHA-256 ${result.evidence.fingerprint.slice(0, 16)}…. Workspace authority was revoked after the scan.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Adapter integrity scan failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const runBenchmark = async (candidateId: string) => {
     setBusy(`bench:${candidateId}`);
     setMessage(null);
@@ -205,7 +242,7 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
       </div>
 
       <p className="text-gray-500 text-[10px] leading-relaxed">
-        Import a governed TP-0.46 bundle and its training result, verify cryptographic identity, register an EXPERIMENTAL runtime candidate, test local readiness, run MioBench, and compare base vs candidate. This Lab never promotes or activates a model. Artifact URI is an identity reference; byte-level adapter-file verification is not claimed here.
+        Import a governed TP-0.46 bundle and its training result, verify cryptographic identity, register an EXPERIMENTAL runtime candidate, fingerprint an explicitly authorized local adapter directory, test local readiness, run MioBench, and compare base vs candidate. This Lab never promotes or activates a model.
       </p>
       <div className="rounded border border-gray-800 bg-[#111726] px-3 py-2 text-[9px] text-gray-500">
         Evaluation backend: <strong className="text-gray-300">{backend}</strong> · endpoint: <code className="text-gray-400">{endpoint ?? 'backend default'}</code>. Candidate Lab uses this live Settings configuration without changing the active model router.
@@ -285,7 +322,13 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
           const candidateId = snapshot.candidate.id;
           const ready = readiness[candidateId];
           const comparison = comparisons[candidateId];
+          const evidence = integrity[candidateId];
           const busyForCandidate = busy?.endsWith(candidateId) === true;
+          const integrityClass = evidence?.comparison === 'DRIFT'
+            ? 'border-red-500/30 bg-red-950/10 text-red-300'
+            : evidence?.comparison === 'MATCH'
+              ? 'border-emerald-500/30 bg-emerald-950/10 text-emerald-300'
+              : 'border-cyan-500/30 bg-cyan-950/10 text-cyan-300';
           return (
             <div key={candidateId} className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-3">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -295,10 +338,23 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
                   <div className="mt-1 text-[9px] text-gray-600">Artifact identity: {snapshot.candidate.artifactUri}</div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
+                  <button onClick={() => void scanIntegrity(candidateId)} disabled={busy !== null} className="rounded border border-fuchsia-500/40 px-2.5 py-1.5 text-[9px] font-bold text-fuchsia-300 hover:bg-fuchsia-950/20 disabled:opacity-50"><Fingerprint size={10} className="inline mr-1" />{busyForCandidate && busy?.startsWith('integrity:') ? 'HASHING…' : 'HASH ADAPTER DIR'}</button>
                   <button onClick={() => void checkReadiness(candidateId)} disabled={busy !== null} className="rounded border border-gray-700 px-2.5 py-1.5 text-[9px] font-bold text-gray-300 hover:border-cyan-500/40 hover:text-cyan-300 disabled:opacity-50"><Activity size={10} className="inline mr-1" />READINESS</button>
                   <button onClick={() => void runBenchmark(candidateId)} disabled={busy !== null} className="rounded border border-cyan-500/40 px-2.5 py-1.5 text-[9px] font-bold text-cyan-300 hover:bg-cyan-950/20 disabled:opacity-50"><Play size={10} className="inline mr-1" />MIOBENCH</button>
                 </div>
               </div>
+
+              {evidence && (
+                <div className={`rounded border px-2.5 py-2 text-[9px] ${integrityClass}`}>
+                  <div className="font-bold flex items-center gap-1.5"><Fingerprint size={11} /> ADAPTER BYTE INTEGRITY — {evidence.comparison}</div>
+                  <div className="mt-1 grid gap-1 text-gray-400 md:grid-cols-3">
+                    <span>SHA-256: <code className="text-gray-300">{evidence.fingerprint.slice(0, 20)}…</code></span>
+                    <span>Files: <strong className="text-gray-300">{evidence.fileCount}</strong></span>
+                    <span>Bytes: <strong className="text-gray-300">{bytesLabel(evidence.totalBytes)}</strong></span>
+                  </div>
+                  {evidence.comparison === 'DRIFT' && <div className="mt-1 text-red-300">The selected adapter directory no longer matches the previous recorded fingerprint. Re-review the artifact before relying on earlier evaluation evidence.</div>}
+                </div>
+              )}
 
               {ready && (
                 <div className={`rounded border px-2.5 py-2 text-[9px] ${ready.ready ? 'border-emerald-500/30 bg-emerald-950/10 text-emerald-300' : 'border-red-500/30 bg-red-950/10 text-red-300'}`}>
@@ -345,7 +401,7 @@ export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ 
       </div>
 
       <div className="rounded border border-amber-500/20 bg-amber-950/10 p-2.5 text-[9px] text-amber-300">
-        <strong>Artifact-integrity boundary:</strong> this Lab validates bundle/result cryptographic identity and verifies that a configured local runtime serves the expected model alias. It does not hash the current adapter files on disk. Byte-level local artifact verification requires a separate desktop-scoped hashing capability.
+        <strong>Integrity boundary:</strong> directory hashing is desktop-only, explicit-directory, SHA-256, symlink-rejecting, and L4 permission-gated. It proves the bytes observed during that scan only; it does not prove model quality, origin authenticity, or future immutability.
       </div>
 
       {message && <div className="rounded border border-fuchsia-500/30 bg-fuchsia-950/10 px-3 py-2 text-[10px] text-fuchsia-200">{message}</div>}
