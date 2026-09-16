@@ -5,6 +5,7 @@ import { ModelRouter } from '../../agents/ModelRouter';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 import { PromotedModelPanel } from './PromotedModelPanel';
+import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 
 const CLOUD_PROVIDER_CONFIG = {
   openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
@@ -184,6 +185,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      <TrainingCandidatePanel />
       <PromotedModelPanel />
 
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
