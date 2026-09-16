@@ -6,18 +6,20 @@ This folder contains offline adapter-training tooling for MIO Local. It is inten
 
 Do not point a trainer directly at chat history, project files, browser/search evidence, feedback storage, or arbitrary JSONL.
 
-The required TP-0.46 flow is:
+The required governed flow is:
 
 1. Create/import candidate examples in the `MioTrainingExample` schema.
 2. Preserve provenance for every example.
 3. Complete privacy and copyright review.
 4. Score factuality, instruction-following, safety, and tool-use where applicable.
 5. Set `trainingApproved` only after controlled review.
-6. Export a governed bundle with `npm run training:export`.
+6. Export a governed TP-0.46 bundle with `npm run training:export`.
 7. Verify the bundle with `training/train_mio_lora.py --dry-run`.
 8. Train LoRA/QLoRA in a dedicated Python/GPU environment.
-9. Run MioBench and security/tool-boundary regressions against the candidate.
-10. Use the existing `ModelPromotionGate` before activation.
+9. Package the verified bundle + runner result as a TP-0.58 `mio-training-handoff.json`.
+10. Import the handoff into Mio as an `EXPERIMENTAL` / `REGISTERED_UNEVALUATED` candidate.
+11. Fingerprint/verify the local adapter artifact, run MioBench, and run security/tool-boundary regressions.
+12. Complete explicit review and `ModelPromotionGate` before activation.
 
 User feedback is opt-in and never becomes trainable merely because it was stored. `FeedbackCollector.toTrainingCandidate()` deliberately creates an unapproved candidate requiring further review.
 
@@ -97,6 +99,27 @@ nextRequiredGate: MioBench + ModelPromotionGate
 
 Training completion is therefore not a promotion signal.
 
+## Package a TP-0.58 training-run handoff
+
+After training completes, package the exact governed bundle and its runner result into one portable handoff file:
+
+```bash
+node scripts/training/create-training-run-handoff.mjs \
+  --bundle training/output/mio-local-8b-v1-bundle \
+  --result training/output/mio-local-8b-v1-adapter/mio-training-result.json \
+  --output training/output/mio-local-8b-v1-adapter/mio-training-handoff.json
+```
+
+The packager re-verifies bundle/result identity before writing. It refuses to overwrite an existing handoff and performs no model loading, training, benchmark, network upload, promotion, activation, or deployment.
+
+Contract-only self-test:
+
+```bash
+node scripts/training/create-training-run-handoff.mjs --self-test
+```
+
+The resulting handoff can be imported from **Settings → Governed Training Run Handoff**. Mio still requires explicit runtime alias and artifact URI. Handoff verification does not prove the adapter/model bytes; TP-0.50 integrity scanning and later provenance/review/promotion gates remain mandatory.
+
 ## Compatibility entrypoint
 
 `training/sft_lora.py` remains only as a compatibility shim and delegates to the governed bundle runner. The former raw `--dataset` path is intentionally no longer accepted because it could bypass bundle fingerprints and governance metadata.
@@ -109,4 +132,4 @@ Training completion is therefore not a promotion signal.
 - `Mio-Local-8B-v1-rc`: candidate that passes MioBench/security review.
 - `Mio-Local-8B-v1`: explicitly promoted model/adapter after documented review.
 
-Model weights, checkpoints, large datasets, and user data must not be committed to this repository.
+Model weights, checkpoints, large datasets, training handoff files containing dataset content, and user data must not be committed to this repository.
