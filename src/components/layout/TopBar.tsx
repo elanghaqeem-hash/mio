@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { MioCoreState, MioSystemMode, NetworkState } from '../../types/core';
-import { MioCoreVisualizer } from '../../core/MioCoreVisualizer';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { eventBus } from '../../core/EventBus';
 import {
@@ -96,10 +95,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <Menu size={20} />
         </button>
-
-        <div className="hidden sm:block opacity-90">
-          <MioCoreVisualizer state={coreState} size={34} interactive={false} priority="compact" />
-        </div>
 
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
