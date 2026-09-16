@@ -6,6 +6,7 @@ import { ExportManager } from '../../project/ExportManager';
 import type { MioSFXPatch, SFXLayer } from '../../types/creative';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
+import { envelopeTimes } from '../../creative/AudioWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -126,19 +127,29 @@ export const SFXStudioView: React.FC = () => {
     const oscillator = context.createOscillator();
     const filter = context.createBiquadFilter();
     const envelope = context.createGain();
+    const distortion = context.createWaveShaper();
+    const dry = context.createGain();
+    const delay = context.createDelay(2);
+    const feedback = context.createGain();
+    const wet = context.createGain();
     oscillator.type = layer.waveType;
     oscillator.frequency.setValueAtTime(Math.max(10, layer.baseFrequency), startTime);
     oscillator.frequency.exponentialRampToValueAtTime(Math.max(10, layer.frequencySweep), startTime + duration);
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(layer.filterCutoff, startTime);
     filter.Q.setValueAtTime(layer.filterResonance, startTime);
+    const times = envelopeTimes(layer, startTime, duration);
     envelope.gain.setValueAtTime(0.0001, startTime);
-    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume), startTime + layer.attack);
-    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume * layer.sustain), startTime + layer.attack + layer.decay);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume), times.attack);
+    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.decay);
+    envelope.gain.setValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.sustain);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, times.end);
+    const amount = Math.max(0, layer.distortion) * 80;
+    distortion.curve = new Float32Array(Array.from({ length: 256 }, (_, index) => { const x = index * 2 / 255 - 1; return ((3 + amount) * x * 20 * Math.PI / 180) / (Math.PI + amount * Math.abs(x)); }));
+    distortion.oversample = '2x'; dry.gain.setValueAtTime(1 - layer.reverbMix * .4, startTime); wet.gain.setValueAtTime(layer.reverbMix, startTime);
+    delay.delayTime.setValueAtTime(layer.delayTime, startTime); feedback.gain.setValueAtTime(Math.min(.85, layer.delayFeedback), startTime);
     oscillator.connect(filter);
-    filter.connect(envelope);
-    envelope.connect(destination);
+    filter.connect(distortion); distortion.connect(envelope); envelope.connect(dry); dry.connect(destination); envelope.connect(delay); delay.connect(wet); wet.connect(destination); delay.connect(feedback); feedback.connect(delay);
     oscillator.start(startTime);
     oscillator.stop(startTime + duration);
   };
@@ -215,7 +226,13 @@ export const SFXStudioView: React.FC = () => {
           {slider('ATTACK', selectedLayer.attack, 0.001, 0.5, 0.005, 'attack', ' s')}
           {slider('DECAY', selectedLayer.decay, 0.01, 1, 0.01, 'decay', ' s')}
           {slider('SUSTAIN', selectedLayer.sustain, 0.01, 1, 0.01, 'sustain')}
+          {slider('RELEASE', selectedLayer.release, 0.01, 2, 0.01, 'release', ' s')}
           {slider('FILTER CUTOFF', selectedLayer.filterCutoff, 50, 10000, 50, 'filterCutoff', ' Hz')}
+          {slider('RESONANCE', selectedLayer.filterResonance, 0, 20, 0.1, 'filterResonance')}
+          {slider('DISTORTION', selectedLayer.distortion, 0, 1, 0.01, 'distortion')}
+          {slider('DELAY TIME', selectedLayer.delayTime, 0, 1, 0.01, 'delayTime', ' s')}
+          {slider('DELAY FEEDBACK', selectedLayer.delayFeedback, 0, 0.85, 0.01, 'delayFeedback')}
+          {slider('SPACE MIX', selectedLayer.reverbMix, 0, 1, 0.01, 'reverbMix')}
           {slider('VOLUME', selectedLayer.volume, 0.01, 1, 0.01, 'volume')}
         </> : <div className="m-auto text-gray-500">Select a sound layer.</div>}
       </aside>

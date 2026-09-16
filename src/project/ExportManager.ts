@@ -113,7 +113,7 @@ export class ExportManager {
   /**
    * Export Audio Buffer to standard WAV format
    */
-  public static async exportAudioAsWAV(audioBuffer: AudioBuffer, filename: string = 'sound_effect.wav'): Promise<boolean> {
+  public static async exportAudioAsWAV(audioBuffer: AudioBuffer, filename: string = 'sound_effect.wav', mode: MioSystemMode = 'SFX'): Promise<boolean> {
     const authorized = await PermissionEngine.requestPermission({
       action: 'EXPORT_AUDIO_WAV',
       target: filename,
@@ -132,7 +132,7 @@ export class ExportManager {
     eventBus.emit('ACTIVITY_LOG', {
       timestamp: Date.now(),
       message: `Exported synthesized audio as ${filename}`,
-      mode: 'SFX',
+      mode,
     });
     return true;
   }
