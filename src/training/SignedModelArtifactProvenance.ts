@@ -87,6 +87,12 @@ function decodeBase64(value: string): Uint8Array {
   return bytes;
 }
 
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 function normalizeSpkiPublicKey(value: string): string {
   if (typeof value !== 'string' || !value.trim() || value.length > MAX_PUBLIC_KEY_CHARS) throw new Error('Model signer public key is empty or exceeds the bounded input limit');
   return value
@@ -97,7 +103,7 @@ function normalizeSpkiPublicKey(value: string): string {
 
 async function sha256BytesHex(bytes: Uint8Array): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('Web Crypto is unavailable in this runtime');
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', ownedArrayBuffer(bytes));
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -107,7 +113,7 @@ async function importP256PublicKey(spkiBase64: string): Promise<CryptoKey> {
   try {
     return await globalThis.crypto.subtle.importKey(
       'spki',
-      bytes,
+      ownedArrayBuffer(bytes),
       { name: 'ECDSA', namedCurve: 'P-256' },
       false,
       ['verify'],
@@ -259,6 +265,9 @@ export class TrainingCandidateProvenanceService {
     if (!candidate) throw new Error(`Training candidate '${candidateId}' is not registered`);
     const manifest = await this.manifests.get(candidate.manifestId);
     if (!manifest) throw new Error(`Model manifest '${candidate.manifestId}' is missing`);
+    if (manifest.trainingMethod !== 'LORA' && manifest.trainingMethod !== 'QLORA') {
+      throw new Error(`Signed training provenance requires LORA or QLORA candidate, found ${manifest.trainingMethod}`);
+    }
     const integrity = await this.integrity.latest(candidate.id);
     if (!integrity) throw new Error('A current adapter byte-integrity scan is required before preparing signed provenance');
     assertIntegrityBinding(candidate, manifest, integrity);
@@ -327,7 +336,7 @@ export class TrainingCandidateProvenanceService {
     const verified = await globalThis.crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },
       key,
-      signature,
+      ownedArrayBuffer(signature),
       new TextEncoder().encode(canonicalPayload),
     );
     if (!verified) throw new Error('Signed provenance signature verification failed');
