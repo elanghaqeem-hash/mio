@@ -4,6 +4,7 @@ import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+import { PromotedModelPanel } from './PromotedModelPanel';
 
 const CLOUD_PROVIDER_CONFIG = {
   openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
@@ -205,6 +206,8 @@ export const SettingsView: React.FC = () => {
           {readiness && <div className={`rounded border px-3 py-2 text-[10px] ${readiness.ready && readiness.status === 'READY' ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300' : readiness.status === 'LOCAL_ONLY' ? 'border-amber-500/40 bg-amber-950/20 text-amber-300' : 'border-red-500/40 bg-red-950/20 text-red-300'}`}><strong>{readiness.status}</strong> — {readiness.detail}</div>}
         </div>
       </div>
+
+      <PromotedModelPanel />
 
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
         <span className="text-gray-300 font-bold flex items-center gap-2"><Cpu size={14} className="text-cyan-400" /> RESOURCE LIMITS &amp; QUOTA GUARDS</span>
