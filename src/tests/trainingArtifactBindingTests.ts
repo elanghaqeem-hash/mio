@@ -151,8 +151,10 @@ export async function runTrainingArtifactBindingTests(): Promise<SuiteResult> {
 
   const matchingRescan = await integrity.scanCandidate(registration.candidate.id, fakePort);
   check(matchingRescan.evidence?.comparison === 'MATCH' && matchingRescan.evidence.id !== firstBinding.integrityEvidenceId, 'Unchanged adapter bytes produce a new MATCH scan evidence id');
+  const historicalVerification = await bindingService.verifyEvidence(firstBinding.id);
+  check(historicalVerification.valid && historicalVerification.integrity?.id === firstBinding.integrityEvidenceId, 'Promotion-time binding remains independently verifiable against its referenced historical integrity scan');
   const staleVerification = await bindingService.verifyLatest(registration.candidate.id);
-  check(!staleVerification.valid && staleVerification.errors.some((error) => error.includes('stale relative to the latest adapter integrity scan')), 'Any newer adapter scan makes the previous handoff binding stale');
+  check(!staleVerification.valid && staleVerification.errors.some((error) => error.includes('stale relative to the supplied adapter integrity evidence')), 'Any newer adapter scan makes the current-review binding stale');
 
   const secondBinding = await bindingService.bind(registration.candidate.id);
   check(secondBinding.id !== firstBinding.id && secondBinding.integrityEvidenceId === matchingRescan.evidence?.id, 'Explicit re-bind creates evidence against the latest MATCH scan');
