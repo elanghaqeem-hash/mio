@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Archive, Download, FileCheck2, RefreshCw, ShieldAlert } from 'lucide-react';
-import { trainingCandidateRegistry, type TrainingCandidateRecord } from '../../training/TrainingCandidateRegistry';
+import { TrainingCandidateRegistry, type TrainingCandidateRecord } from '../../training/TrainingCandidateRegistry';
 import {
   trainingCandidateEvidencePackageService,
   verifyCandidateEvidencePackage,
@@ -8,6 +8,7 @@ import {
 } from '../../training/TrainingCandidateEvidencePackage';
 
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
+const candidateRegistry = new TrainingCandidateRegistry();
 
 function downloadJson(fileName: string, value: unknown): void {
   const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' });
@@ -31,9 +32,9 @@ export const TrainingCandidateEvidencePackagePanel: React.FC = () => {
   const [verificationFile, setVerificationFile] = useState('');
 
   const refresh = async () => {
-    const next = await trainingCandidateRegistry.list(200);
+    const next = await candidateRegistry.list(200);
     setCandidates(next);
-    setCandidateId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? '');
+    setCandidateId((current) => current && next.some((item: TrainingCandidateRecord) => item.id === current) ? current : next[0]?.id ?? '');
   };
 
   useEffect(() => { void refresh(); }, []);
