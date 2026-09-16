@@ -1,5 +1,5 @@
 import { InMemoryStorageProvider } from '../storage/InMemoryStorageProvider';
-import type { ModelProvider } from '../types/models';
+import type { ModelProvider, ModelRouterConfig } from '../types/models';
 import type { AdapterIntegrityHashOutput } from '../platform/desktop/DesktopAdapterIntegrityGateway';
 import { buildTrainingBundle, stableJsonStringify, type MioTrainingRunConfig } from '../training/TrainingBundle';
 import type { MioTrainingExample } from '../training/TrainingDataset';
@@ -15,6 +15,10 @@ import {
 import { TrainingCandidateReviewService } from '../training/TrainingCandidateReviewService';
 import { ModelPromotionService } from '../training/ModelPromotionService';
 import { ModelManifestRepository } from '../training/ModelManifestRepository';
+import {
+  type ModelRouterPreferencePort,
+  PromotedModelActivationService,
+} from '../training/PromotedModelActivationService';
 
 interface SuiteResult { passed: number; total: number; }
 
@@ -146,14 +150,18 @@ export async function runSignedProvenancePromotionGateTests(): Promise<SuiteResu
     hashDirectory: async () => hash,
     revokeDirectory: async () => undefined,
   };
-  await new TrainingCandidateIntegrityService(storage).scanCandidate(registered.candidate.id, port);
+  const integrity = new TrainingCandidateIntegrityService(storage);
+  await integrity.scanCandidate(registered.candidate.id, port);
 
   const keys = new ModelSignerTrustStore(storage);
   const provenance = new TrainingCandidateProvenanceService(storage);
   const key = await signer();
   const trusted = await keys.trust('Promotion Signing Key', key.publicKey);
   const payload = await provenance.buildSigningPayload(registered.candidate.id, 'MIO Release Engineering');
-  await provenance.verifyAndBind(registered.candidate.id, JSON.stringify(await envelope(payload, key.privateKey, trusted.keyId)));
+  const signedEvidence = await provenance.verifyAndBind(
+    registered.candidate.id,
+    JSON.stringify(await envelope(payload, key.privateKey, trusted.keyId)),
+  );
 
   const review = new TrainingCandidateReviewService(storage);
   const rc = await review.advanceToReleaseCandidate({
@@ -189,6 +197,71 @@ export async function runSignedProvenancePromotionGateTests(): Promise<SuiteResu
   const manifests = new ModelManifestRepository(storage);
   check((await manifests.get(registered.manifest.id))?.lifecycle === 'RELEASE_CANDIDATE', 'Trust restoration never promotes or activates the model automatically');
   check((await manifests.getActivePromoted()) === undefined, 'No active promoted-model pointer is created by provenance or trust operations');
+
+  const promoted = await promotion.promote({
+    manifestId: registered.manifest.id,
+    promoter: 'final-promoter',
+    finalAttestation: true,
+  });
+  check(promoted.manifest.lifecycle === 'PROMOTED', 'Explicit final promotion succeeds after signer trust is restored');
+  check(
+    promoted.manifest.promotion?.provenanceEvidenceId === signedEvidence.id
+      && promoted.provenanceEvidenceId === signedEvidence.id,
+    'Promotion manifest binds the exact verified signed-provenance evidence id',
+  );
+
+  const postPromotion = await integrity.scanCandidate(registered.candidate.id, port);
+  check(postPromotion.evidence?.comparison === 'MATCH', 'Fresh post-promotion adapter scan remains MATCH against immutable baseline');
+
+  let router: ModelRouterConfig = {
+    provider: 'local_heuristic',
+    mioLocalBackend: 'vllm',
+    mioLocalEndpoint: 'http://127.0.0.1:8000',
+    allowOfflineFallback: false,
+    enableWebSearch: false,
+    enableBrowserRead: false,
+  };
+  const preferences: ModelRouterPreferencePort = {
+    getModelRouter: () => ({ ...router }),
+    setModelRouter: async (patch) => { router = { ...router, ...patch }; },
+  };
+  const activation = new PromotedModelActivationService(
+    manifests,
+    preferences,
+    registry,
+    integrity,
+    provenance,
+    keys,
+  );
+
+  const originalFetch = globalThis.fetch;
+  let readinessCalls = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    readinessCalls += 1;
+    if (String(input) === 'http://127.0.0.1:8000/v1/models') {
+      return new Response(JSON.stringify({ data: [{ id: 'mio-signed-promotion:latest' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('not found', { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    await keys.revoke(trusted.keyId);
+    let activationBlocked = false;
+    try { await activation.activatePromoted(registered.manifest.id, { backend: 'vllm' }); }
+    catch (error) { activationBlocked = error instanceof Error && error.message.toLowerCase().includes('no longer trusted'); }
+    check(activationBlocked, 'Signer revocation after PROMOTED blocks runtime activation');
+    check(readinessCalls === 0 && router.provider === 'local_heuristic', 'Signed-provenance trust gate runs before readiness calls or ModelRouter mutation');
+    check((await manifests.getActivePromoted()) === undefined, 'Blocked activation does not create an active promoted-model pointer');
+
+    await keys.trust('Promotion Signing Key activation re-trust', key.publicKey);
+    const activated = await activation.activatePromoted(registered.manifest.id, { backend: 'vllm' });
+    check(activated.provenanceEvidenceId === signedEvidence.id, 'Successful activation returns the exact signed-provenance evidence bound at promotion');
+    check(activated.integrityEvidenceId === postPromotion.evidence?.id, 'Successful activation also binds the fresh post-promotion integrity evidence');
+    check(router.provider === 'mio_local' && router.model === 'mio-signed-promotion:latest', 'Runtime changes only after integrity, provenance trust, and readiness all pass');
+    check((await manifests.getActivePromoted())?.id === registered.manifest.id, 'Successful activation persists the promoted active pointer');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   return { passed, total };
 }
