@@ -29,6 +29,30 @@ import {
 
 const MAX_PACKAGE_CHARS = 16 * 1024 * 1024;
 const SHA256 = /^[a-f0-9]{64}$/;
+const TOP_LEVEL_KEYS = new Set(['schemaVersion', 'kind', 'exportedAt', 'candidate', 'manifest', 'evidence', 'gates', 'disclosure', 'packageSha256']);
+const EVIDENCE_KEYS = new Set(['handoffReceipt', 'latestBenchmark', 'latestIntegrity', 'latestArtifactBinding', 'latestProvenance', 'signerSummaries', 'promotion']);
+const PROMOTION_KEYS = new Set(['benchmark', 'integrity', 'artifactBinding', 'provenance']);
+const GATE_KEYS = new Set(['releaseCandidateEligible', 'releaseBlockingReasons', 'promotionEligible', 'promotionBlockingReasons']);
+const FORBIDDEN_PORTABLE_KEYS = new Set([
+  'trainingjsonl',
+  'trainjsonl',
+  'messages',
+  'privatekey',
+  'privatekeypem',
+  'secret',
+  'secrets',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'credential',
+  'credentials',
+  'authorization',
+  'permissiongrant',
+  'permissiongrants',
+  'modelweights',
+  'adapterbytes',
+  'rawweights',
+]);
 
 export interface CandidateEvidenceSignerSummary {
   keyId: string;
@@ -38,8 +62,31 @@ export interface CandidateEvidenceSignerSummary {
   revokedAt?: number;
 }
 
+export interface CandidateEvidenceBenchmarkCaseSummary {
+  id: string;
+  domain: string;
+  score: number;
+  maxScore: number;
+  passed: boolean;
+  latencyMs: number;
+}
+
+export interface CandidateEvidenceBenchmarkSummary {
+  id: string;
+  manifestId: string;
+  recordedAt: number;
+  sourceReportSha256: string;
+  provider: string;
+  model: string;
+  generatedAt: number;
+  score: number;
+  maxScore: number;
+  passRate: number;
+  results: CandidateEvidenceBenchmarkCaseSummary[];
+}
+
 export interface CandidateEvidencePromotionArtifacts {
-  benchmark?: StoredBenchmarkReport;
+  benchmark?: CandidateEvidenceBenchmarkSummary;
   integrity?: CandidateAdapterIntegrityEvidence;
   artifactBinding?: TrainingArtifactBindingEvidence;
   provenance?: CandidateSignedProvenanceEvidence;
@@ -60,7 +107,7 @@ export interface MioCandidateEvidencePackageBody {
   manifest: MioModelManifest;
   evidence: {
     handoffReceipt?: TrainingRunHandoffReceipt;
-    latestBenchmark?: StoredBenchmarkReport;
+    latestBenchmark?: CandidateEvidenceBenchmarkSummary;
     latestIntegrity?: CandidateAdapterIntegrityEvidence;
     latestArtifactBinding?: TrainingArtifactBindingEvidence;
     latestProvenance?: CandidateSignedProvenanceEvidence;
@@ -105,6 +152,83 @@ function parsePackage(text: string): MioCandidateEvidencePackage {
   return parsed as MioCandidateEvidencePackage;
 }
 
+function normalizedPortableKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function privacyErrors(value: unknown, path = 'package', depth = 0): string[] {
+  if (depth > 32) return [`Candidate evidence package exceeds privacy-scan nesting limit at ${path}`];
+  if (value === null || typeof value !== 'object') return [];
+  const errors: string[] = [];
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) errors.push(...privacyErrors(value[index], `${path}[${index}]`, depth + 1));
+    return errors;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_PORTABLE_KEYS.has(normalizedPortableKey(key))) errors.push(`Candidate evidence package contains forbidden portable field '${path}.${key}'`);
+    errors.push(...privacyErrors(child, `${path}.${key}`, depth + 1));
+  }
+  return errors;
+}
+
+function unknownSchemaFieldErrors(pkg: MioCandidateEvidencePackage): string[] {
+  const errors: string[] = [];
+  for (const key of Object.keys(pkg)) if (!TOP_LEVEL_KEYS.has(key)) errors.push(`Unknown candidate evidence package top-level field '${key}'`);
+  if (pkg.evidence && typeof pkg.evidence === 'object' && !Array.isArray(pkg.evidence)) {
+    for (const key of Object.keys(pkg.evidence)) if (!EVIDENCE_KEYS.has(key)) errors.push(`Unknown candidate evidence field '${key}'`);
+    if (pkg.evidence.promotion && typeof pkg.evidence.promotion === 'object' && !Array.isArray(pkg.evidence.promotion)) {
+      for (const key of Object.keys(pkg.evidence.promotion)) if (!PROMOTION_KEYS.has(key)) errors.push(`Unknown candidate promotion evidence field '${key}'`);
+    }
+  }
+  if (pkg.gates && typeof pkg.gates === 'object' && !Array.isArray(pkg.gates)) {
+    for (const key of Object.keys(pkg.gates)) if (!GATE_KEYS.has(key)) errors.push(`Unknown candidate evidence gate field '${key}'`);
+  }
+  return errors;
+}
+
+async function benchmarkSummary(stored: StoredBenchmarkReport): Promise<CandidateEvidenceBenchmarkSummary> {
+  return {
+    id: stored.id,
+    manifestId: stored.manifestId,
+    recordedAt: stored.recordedAt,
+    sourceReportSha256: await sha256Hex(stableJsonStringify(stored.report)),
+    provider: stored.report.provider,
+    model: stored.report.model,
+    generatedAt: stored.report.generatedAt,
+    score: stored.report.score,
+    maxScore: stored.report.maxScore,
+    passRate: stored.report.passRate,
+    results: stored.report.results.map((result) => ({
+      id: result.id,
+      domain: result.domain,
+      score: result.score,
+      maxScore: result.maxScore,
+      passed: result.passed,
+      latencyMs: result.latencyMs,
+    })),
+  };
+}
+
+function benchmarkSummaryErrors(summary: CandidateEvidenceBenchmarkSummary, manifest: MioModelManifest, label: string): string[] {
+  const errors: string[] = [];
+  if (!summary.id?.trim() || !summary.manifestId?.trim()) errors.push(`${label} benchmark identity is malformed`);
+  if (summary.manifestId !== manifest.id) errors.push(`${label} benchmark is not bound to packaged manifest`);
+  if (summary.model !== manifest.runtimeModel) errors.push(`${label} benchmark model identity does not match packaged runtime model`);
+  if (!SHA256.test(summary.sourceReportSha256 ?? '')) errors.push(`${label} benchmark source report SHA-256 is malformed`);
+  if (!Number.isSafeInteger(summary.recordedAt) || summary.recordedAt <= 0 || !Number.isSafeInteger(summary.generatedAt) || summary.generatedAt <= 0) errors.push(`${label} benchmark timestamps are invalid`);
+  if (!Number.isFinite(summary.score) || !Number.isFinite(summary.maxScore) || summary.maxScore < 0 || !Number.isFinite(summary.passRate) || summary.passRate < 0 || summary.passRate > 1) errors.push(`${label} benchmark aggregate metrics are invalid`);
+  if (!Array.isArray(summary.results)) errors.push(`${label} benchmark results are invalid`);
+  else {
+    for (const result of summary.results) {
+      if (!result.id?.trim() || !result.domain?.trim() || !Number.isFinite(result.score) || !Number.isFinite(result.maxScore) || typeof result.passed !== 'boolean' || !Number.isFinite(result.latencyMs) || result.latencyMs < 0) {
+        errors.push(`${label} benchmark case summary is malformed`);
+        break;
+      }
+    }
+  }
+  return errors;
+}
+
 function candidateIdentityErrors(pkg: MioCandidateEvidencePackage): string[] {
   const { candidate, manifest, evidence } = pkg;
   const errors: string[] = [];
@@ -123,10 +247,7 @@ function candidateIdentityErrors(pkg: MioCandidateEvidencePackage): string[] {
   }
 
   const benchmark = evidence?.latestBenchmark;
-  if (benchmark) {
-    if (benchmark.manifestId !== manifest.id) errors.push('Latest benchmark is not bound to packaged manifest');
-    if (benchmark.report.model !== manifest.runtimeModel) errors.push('Latest benchmark model identity does not match packaged runtime model');
-  }
+  if (benchmark) errors.push(...benchmarkSummaryErrors(benchmark, manifest, 'Latest'));
 
   const integrity = evidence?.latestIntegrity;
   if (integrity) {
@@ -154,10 +275,14 @@ function candidateIdentityErrors(pkg: MioCandidateEvidencePackage): string[] {
   }
 
   const signers = evidence?.signerSummaries ?? [];
-  if (new Set(signers.map((item) => item.keyId)).size !== signers.length) errors.push('Candidate evidence package contains duplicate signer summaries');
-  if (provenance && !signers.some((item) => item.keyId === provenance.signerKeyId)) errors.push('Latest signed provenance signer summary is missing');
+  if (!Array.isArray(signers)) errors.push('Candidate evidence package signer summaries are invalid');
+  else {
+    if (new Set(signers.map((item) => item.keyId)).size !== signers.length) errors.push('Candidate evidence package contains duplicate signer summaries');
+    if (provenance && !signers.some((item) => item.keyId === provenance.signerKeyId)) errors.push('Latest signed provenance signer summary is missing');
+  }
 
   const promotion = evidence?.promotion ?? {};
+  if (promotion.benchmark) errors.push(...benchmarkSummaryErrors(promotion.benchmark, manifest, 'Promotion'));
   if (manifest.promotion) {
     if (!promotion.benchmark || promotion.benchmark.id !== manifest.promotion.benchmarkReportId) errors.push('Promotion benchmark evidence referenced by manifest is missing');
     if (manifest.promotion.integrityEvidenceId && promotion.integrity?.id !== manifest.promotion.integrityEvidenceId) errors.push('Promotion integrity evidence referenced by manifest is missing');
@@ -178,10 +303,12 @@ export async function verifyCandidateEvidencePackage(text: string): Promise<Cand
   if (pkg.schemaVersion !== 1) errors.push('Unsupported candidate evidence package schema');
   if (pkg.kind !== 'MIO_CANDIDATE_EVIDENCE_PACKAGE_V1') errors.push('Unsupported candidate evidence package kind');
   if (!Number.isSafeInteger(pkg.exportedAt) || pkg.exportedAt <= 0) errors.push('Candidate evidence package exportedAt is invalid');
-  if (!pkg.evidence || typeof pkg.evidence !== 'object') errors.push('Candidate evidence package evidence section is missing');
-  if (!pkg.gates || typeof pkg.gates !== 'object') errors.push('Candidate evidence package gate snapshot is missing');
+  if (!pkg.evidence || typeof pkg.evidence !== 'object' || Array.isArray(pkg.evidence)) errors.push('Candidate evidence package evidence section is missing');
+  if (!pkg.gates || typeof pkg.gates !== 'object' || Array.isArray(pkg.gates)) errors.push('Candidate evidence package gate snapshot is missing');
   if (!pkg.disclosure?.trim() || pkg.disclosure.length > 1500) errors.push('Candidate evidence package disclosure is invalid');
   if (!SHA256.test(pkg.packageSha256 ?? '')) errors.push('Candidate evidence package SHA-256 is malformed');
+  errors.push(...unknownSchemaFieldErrors(pkg));
+  errors.push(...privacyErrors(pkg));
   errors.push(...candidateIdentityErrors(pkg));
 
   let computed: string | undefined;
@@ -232,7 +359,7 @@ export class TrainingCandidateEvidencePackageService {
     const manifest = await this.manifests.get(candidate.manifestId);
     if (!manifest) throw new Error(`Model manifest '${candidate.manifestId}' is missing`);
 
-    const [review, promotionSnapshot, latestBenchmark, latestIntegrity, handoffReceipt, latestBinding, latestProvenance, integrityHistory, provenanceHistory] = await Promise.all([
+    const [review, promotionSnapshot, latestBenchmarkRaw, latestIntegrity, handoffReceipt, latestBinding, latestProvenance, integrityHistory, provenanceHistory] = await Promise.all([
       this.reviews.inspect(candidate.id),
       this.promotions.inspect(manifest.id),
       this.benchmarks.latestForManifest(manifest.id),
@@ -245,10 +372,12 @@ export class TrainingCandidateEvidencePackageService {
     ]);
     if (!review) throw new Error('Candidate review snapshot is unavailable');
 
+    const latestBenchmark = latestBenchmarkRaw ? await benchmarkSummary(latestBenchmarkRaw) : undefined;
     const promotionArtifacts: CandidateEvidencePromotionArtifacts = {};
     if (manifest.promotion) {
       const benchmarkHistory = await this.benchmarks.listForManifest(manifest.id, 200);
-      promotionArtifacts.benchmark = benchmarkHistory.find((item) => item.id === manifest.promotion!.benchmarkReportId);
+      const promotionBenchmark = benchmarkHistory.find((item) => item.id === manifest.promotion!.benchmarkReportId);
+      if (promotionBenchmark) promotionArtifacts.benchmark = await benchmarkSummary(promotionBenchmark);
       if (manifest.promotion.integrityEvidenceId) promotionArtifacts.integrity = integrityHistory.find((item) => item.id === manifest.promotion!.integrityEvidenceId);
       if (manifest.promotion.artifactBindingEvidenceId) promotionArtifacts.artifactBinding = await this.bindings.get(manifest.promotion.artifactBindingEvidenceId);
       if (manifest.promotion.provenanceEvidenceId) promotionArtifacts.provenance = provenanceHistory.find((item) => item.id === manifest.promotion!.provenanceEvidenceId);
@@ -292,7 +421,7 @@ export class TrainingCandidateEvidencePackageService {
         promotionEligible: promotionSnapshot?.promotionEligible ?? false,
         promotionBlockingReasons: [...(promotionSnapshot?.blockingReasons ?? [`Model lifecycle ${manifest.lifecycle} is not currently eligible for promotion inspection`])],
       },
-      disclosure: 'Portable MIO candidate evidence snapshot. It contains model/candidate metadata and bounded governance evidence only. It does not contain training JSONL, user message content, model weights, adapter bytes, private keys, credentials, authorization grants, or tool secrets. Package consistency does not itself prove model quality, safety, authenticity, promotion eligibility, or activation safety.',
+      disclosure: 'Portable MIO candidate evidence snapshot. It contains model/candidate metadata and bounded governance evidence only. Benchmark outputs are omitted and replaced by score summaries plus the source report SHA-256. It does not contain training JSONL, user message content, model weights, adapter bytes, private keys, credentials, authorization grants, or tool secrets. Package consistency does not itself prove model quality, safety, authenticity, promotion eligibility, or activation safety.',
     };
     const pkg: MioCandidateEvidencePackage = {
       ...body,
