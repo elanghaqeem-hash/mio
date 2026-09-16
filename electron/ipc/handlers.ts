@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'electron';
 import * as os from 'os';
+import { BrowserReadSandbox } from './browserReadSandbox';
 import { WorkspaceSandbox } from './workspaceSandbox';
 
 export interface WorkspacePathRequest {
@@ -7,12 +8,18 @@ export interface WorkspacePathRequest {
   relativePath: string;
 }
 
+export interface BrowserReadPageRequest {
+  url: string;
+}
+
 const MAX_NOTIFICATION_TEXT = 2000;
 const MAX_STOP_REASON = 500;
 const MAX_WORKSPACE_ID = 128;
+const MAX_BROWSER_URL = 2048;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
+  const browserReadSandbox = new BrowserReadSandbox();
 
   const validateWorkspaceId = (workspaceId: unknown): workspaceId is string => {
     return typeof workspaceId === 'string' && workspaceId.length > 0 && workspaceId.length <= MAX_WORKSPACE_ID && /^ws_[a-zA-Z0-9-]+$/.test(workspaceId);
@@ -22,6 +29,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     if (!request || typeof request !== 'object') return false;
     const value = request as Partial<WorkspacePathRequest>;
     return validateWorkspaceId(value.workspaceId) && typeof value.relativePath === 'string' && value.relativePath.length <= 4096;
+  };
+
+  const validateBrowserReadRequest = (request: unknown): request is BrowserReadPageRequest => {
+    if (!request || typeof request !== 'object') return false;
+    const value = request as Partial<BrowserReadPageRequest>;
+    return typeof value.url === 'string' && value.url.trim().length > 0 && value.url.length <= MAX_BROWSER_URL;
   };
 
   return {
@@ -109,6 +122,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       try {
         const entries = await workspaceSandbox.listDirectory(request.workspaceId, request.relativePath);
         return { success: true, entries };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
+    // Browser bridge is intentionally read-only in TP-0.41.
+    handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateBrowserReadRequest(request)) return { success: false, error: 'Invalid browser read request' };
+      try {
+        const result = await browserReadSandbox.read(request);
+        return { success: true, ...result };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
