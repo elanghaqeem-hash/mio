@@ -33,6 +33,24 @@ jobs:
       - name: Run standard-library training runner self-test
         run: python training/train_mio_lora.py --self-test
 
+      - name: Validate desktop governed training packaging contract
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const resources = pkg.build?.extraResources ?? [];
+          const training = resources.find((item) => item?.from === 'training' && item?.to === 'training');
+          if (!training || !Array.isArray(training.filter) || !training.filter.includes('train_mio_lora.py')) {
+            throw new Error('Packaged desktop build must carry the fixed governed training runner as an extraResource');
+          }
+          const manager = fs.readFileSync('electron/ipc/trainingJobManager.ts', 'utf8');
+          for (const marker of ["shell: false", "HF_HUB_OFFLINE = '1'", "TRANSFORMERS_OFFLINE = '1'", "HF_DATASETS_OFFLINE = '1'"]) {
+            if (!manager.includes(marker)) throw new Error(`Desktop training contract marker missing: ${marker}`);
+          }
+          if (manager.includes('exec(') || manager.includes('shell: true')) throw new Error('Desktop training manager must not expose shell/exec execution');
+          console.log('Desktop governed training packaging and fixed-entrypoint contract: PASS');
+          NODE
+
       - name: Validate training run handoff packager
         run: |
           node --check scripts/training/create-training-run-handoff.mjs
