@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
@@ -11,7 +11,7 @@ import {
   Scale,
   ShieldAlert,
 } from 'lucide-react';
-import { systemPreferences } from '../../settings/SystemPreferences';
+import { LocalInferenceBackendId } from '../../types/models';
 import {
   CandidateLabComparisonRecord,
   CandidateLabImportPreview,
@@ -39,11 +39,16 @@ interface ImportNames {
   result: string;
 }
 
+interface ModelCandidateLabPanelProps {
+  backend: LocalInferenceBackendId;
+  endpoint?: string;
+}
+
 const pct = (value: number): string => `${(value * 100).toFixed(1)}%`;
 const signedPct = (value: number): string => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)} pp`;
 const signedMs = (value: number): string => `${value >= 0 ? '+' : ''}${Math.round(value)} ms`;
 
-export const ModelCandidateLabPanel: React.FC = () => {
+export const ModelCandidateLabPanel: React.FC<ModelCandidateLabPanelProps> = ({ backend, endpoint }) => {
   const [texts, setTexts] = useState<ImportTexts>({ manifest: '', dataset: '', result: '' });
   const [names, setNames] = useState<ImportNames>({ manifest: '', dataset: '', result: '' });
   const [preview, setPreview] = useState<CandidateLabImportPreview | null>(null);
@@ -56,14 +61,6 @@ export const ModelCandidateLabPanel: React.FC = () => {
   const [baseAliases, setBaseAliases] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  const currentLocal = useMemo(() => {
-    const router = systemPreferences.getSnapshot().modelRouter;
-    return {
-      backend: router.mioLocalBackend ?? 'ollama',
-      endpoint: router.mioLocalEndpoint,
-    };
-  }, [candidates, preview]);
 
   const refresh = useCallback(async () => {
     const snapshots = await trainingCandidateReviewService.list();
@@ -146,7 +143,7 @@ export const ModelCandidateLabPanel: React.FC = () => {
     setBusy(`ready:${candidateId}`);
     setMessage(null);
     try {
-      const next = await trainingCandidateLabService.checkCandidateReadiness(candidateId, currentLocal.backend, currentLocal.endpoint);
+      const next = await trainingCandidateLabService.checkCandidateReadiness(candidateId, backend, endpoint);
       setReadiness((current) => ({ ...current, [candidateId]: next }));
       setMessage(next.ready ? `${next.model} is ready on ${next.backend}.` : `${next.model} is not ready: ${next.detail}`);
     } catch (error) {
@@ -162,8 +159,8 @@ export const ModelCandidateLabPanel: React.FC = () => {
     try {
       const evaluation = await trainingCandidateLabService.runCandidateBenchmark({
         candidateId,
-        backend: currentLocal.backend,
-        endpoint: currentLocal.endpoint,
+        backend,
+        endpoint,
       });
       setMessage(`MioBench completed for ${evaluation.manifest.runtimeModel}: pass ${pct(evaluation.metrics.passRate)}, score ${pct(evaluation.metrics.scoreRatio)}. Policy ${evaluation.policyPassed ? 'PASS' : 'FAIL'}. No lifecycle change was performed.`);
       await refresh();
@@ -180,8 +177,8 @@ export const ModelCandidateLabPanel: React.FC = () => {
     try {
       const comparison = await trainingCandidateLabService.runComparison({
         candidateId,
-        backend: currentLocal.backend,
-        endpoint: currentLocal.endpoint,
+        backend,
+        endpoint,
         baseRuntimeModel: baseAliases[candidateId] ?? '',
       });
       setComparisons((current) => ({ ...current, [candidateId]: comparison }));
@@ -210,6 +207,9 @@ export const ModelCandidateLabPanel: React.FC = () => {
       <p className="text-gray-500 text-[10px] leading-relaxed">
         Import a governed TP-0.46 bundle and its training result, verify cryptographic identity, register an EXPERIMENTAL runtime candidate, test local readiness, run MioBench, and compare base vs candidate. This Lab never promotes or activates a model. Artifact URI is an identity reference; byte-level adapter-file verification is not claimed here.
       </p>
+      <div className="rounded border border-gray-800 bg-[#111726] px-3 py-2 text-[9px] text-gray-500">
+        Evaluation backend: <strong className="text-gray-300">{backend}</strong> · endpoint: <code className="text-gray-400">{endpoint ?? 'backend default'}</code>. Candidate Lab uses this live Settings configuration without changing the active model router.
+      </div>
 
       <div className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-3">
         <div className="font-bold text-gray-200 flex items-center gap-2"><Import size={13} className="text-fuchsia-400" /> IMPORT GOVERNED TRAINING OUTPUT</div>
