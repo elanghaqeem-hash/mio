@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { WorkspaceSandbox } from '../../electron/ipc/workspaceSandbox';
 import {
-  AdapterIntegrityHashOutput,
+  type AdapterIntegrityHashOutput,
   createDesktopAdapterIntegrityGateway,
   type DesktopAdapterIntegrityBridge,
 } from '../platform/desktop/DesktopAdapterIntegrityGateway';
@@ -14,7 +14,7 @@ import { MioTrainingRunConfig, buildTrainingBundle } from '../training/TrainingB
 import { MioTrainingExample } from '../training/TrainingDataset';
 import { MioTrainingResultArtifact, TrainingCandidateRegistry } from '../training/TrainingCandidateRegistry';
 import {
-  CandidateIntegrityDesktopPort,
+  type CandidateIntegrityDesktopPort,
   TrainingCandidateIntegrityService,
 } from '../training/TrainingCandidateIntegrityService';
 
@@ -172,7 +172,9 @@ export async function runAdapterIntegrityTests(): Promise<SuiteResult> {
     displayName: 'Mio Integrity Candidate',
   });
 
-  const fingerprints = ['b'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)];
+  const baselineFingerprint = 'b'.repeat(64);
+  const driftFingerprint = 'c'.repeat(64);
+  const fingerprints = [baselineFingerprint, baselineFingerprint, driftFingerprint, driftFingerprint, baselineFingerprint];
   let revoked = 0;
   const fakePort: CandidateIntegrityDesktopPort = {
     authorizeDirectory: async () => ({ id: 'ws_integrity', name: 'adapter-local' }),
@@ -181,14 +183,23 @@ export async function runAdapterIntegrityTests(): Promise<SuiteResult> {
   };
   const integrity = new TrainingCandidateIntegrityService(storage);
   const baseline = await integrity.scanCandidate(registration.candidate.id, fakePort);
-  check(baseline.evidence?.comparison === 'BASELINE_CAPTURED', 'First authorized adapter scan captures a byte-level baseline without lifecycle mutation');
+  check(
+    baseline.evidence?.comparison === 'BASELINE_CAPTURED'
+      && baseline.evidence.baselineFingerprint === baselineFingerprint
+      && baseline.evidence.trainingResultSha256 === registration.candidate.trainingResultSha256,
+    'First authorized adapter scan captures an immutable baseline bound to the exact training-result identity',
+  );
   const match = await integrity.scanCandidate(registration.candidate.id, fakePort);
-  check(match.evidence?.comparison === 'MATCH' && match.evidence.previousFingerprint === baseline.evidence?.fingerprint, 'Repeated identical adapter scan is recorded as MATCH against previous evidence');
+  check(match.evidence?.comparison === 'MATCH' && match.evidence.baselineFingerprint === baselineFingerprint, 'Repeated identical adapter scan matches the immutable first-scan baseline');
   const drift = await integrity.scanCandidate(registration.candidate.id, fakePort);
-  check(drift.evidence?.comparison === 'DRIFT' && drift.evidence.previousFingerprint === match.evidence?.fingerprint, 'Changed adapter fingerprint is recorded explicitly as DRIFT');
-  check(revoked === 3, 'Workspace authority is revoked after every completed adapter integrity scan');
+  check(drift.evidence?.comparison === 'DRIFT' && drift.evidence.baselineFingerprint === baselineFingerprint, 'Changed adapter fingerprint is recorded explicitly as DRIFT against the original baseline');
+  const persistentDrift = await integrity.scanCandidate(registration.candidate.id, fakePort);
+  check(persistentDrift.evidence?.comparison === 'DRIFT' && persistentDrift.evidence.baselineFingerprint === baselineFingerprint, 'Persistent drift never becomes a false MATCH by moving the baseline forward');
+  const restored = await integrity.scanCandidate(registration.candidate.id, fakePort);
+  check(restored.evidence?.comparison === 'MATCH' && restored.evidence.fingerprint === baselineFingerprint, 'Returning to the original byte fingerprint restores MATCH without rewriting baseline evidence');
+  check(revoked === 5, 'Workspace authority is revoked after every completed adapter integrity scan');
   const history = await integrity.list(registration.candidate.id, 10);
-  check(history.length === 3 && history[0].comparison === 'DRIFT', 'Adapter integrity evidence persists newest-first without file-name disclosure');
+  check(history.length === 5 && history[0].comparison === 'MATCH' && history.at(-1)?.comparison === 'BASELINE_CAPTURED', 'Adapter integrity evidence persists newest-first while preserving the original baseline');
   const candidateManifest = await new ModelManifestRepository(storage).get(registration.candidate.manifestId);
   check(candidateManifest?.lifecycle === 'EXPERIMENTAL', 'Adapter integrity evidence never auto-advances model lifecycle');
   check((await new ModelManifestRepository(storage).getActivePromoted()) === undefined, 'Adapter integrity evidence never activates a model');
@@ -200,7 +211,7 @@ export async function runAdapterIntegrityTests(): Promise<SuiteResult> {
     revokeDirectory: async () => { cancelledRevoked += 1; },
   };
   const cancelled = await integrity.scanCandidate(registration.candidate.id, cancelledPort);
-  check(cancelled.cancelled && cancelledRevoked === 0 && (await integrity.list(registration.candidate.id, 10)).length === 3, 'Cancelled directory picker creates no integrity evidence or fake revocation event');
+  check(cancelled.cancelled && cancelledRevoked === 0 && (await integrity.list(registration.candidate.id, 10)).length === 5, 'Cancelled directory picker creates no integrity evidence or fake revocation event');
 
   return { passed, total };
 }
