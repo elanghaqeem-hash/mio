@@ -91,6 +91,7 @@ export interface MioDesktopAPI {
 
   startTrainingJob: (request: MioTrainingStartRequest) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
   getTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
+  listTrainingJobs: () => Promise<{ success: boolean; jobs?: MioTrainingJobSnapshot[]; error?: string }>;
   cancelTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
 
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
@@ -118,6 +119,7 @@ const desktopAPI: MioDesktopAPI = {
 
   startTrainingJob: (request) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_START_JOB, request),
   getTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_GET_JOB, jobId),
+  listTrainingJobs: () => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_LIST_JOBS),
   cancelTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_CANCEL_JOB, jobId),
 
   onEmergencyStopTriggered: (callback) => {
