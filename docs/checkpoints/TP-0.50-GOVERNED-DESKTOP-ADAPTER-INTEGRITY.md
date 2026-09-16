@@ -99,7 +99,18 @@ All subsequent scans compare against that first baseline:
 
 A persistent drift cannot become a false match simply because the drifted directory was scanned twice. Only returning to the original baseline bytes produces `MATCH` again.
 
-The native workspace authority is revoked after each completed or failed scan attempt. Cancelling the native picker records no evidence.
+The baseline fingerprint is carried forward on every evidence record, so the service can compare against the immutable baseline without re-reading hundreds of historical records.
+
+## One-shot workspace authority
+
+Each scan uses temporary directory authority from the native picker. The service revokes that workspace authority **before** successful integrity evidence is persisted.
+
+- successful revoke -> evidence may be persisted;
+- failed revoke -> the scan fails closed and no new success evidence is stored;
+- failed hashing/validation -> revocation is still attempted in `finally`;
+- cancelled native picker -> no workspace authority and no evidence.
+
+This prevents a successful-looking integrity record from being created while a supposedly one-shot filesystem authority is still known to be active.
 
 ## Lifecycle boundary
 
@@ -115,6 +126,17 @@ It does not change:
 - active promoted-model pointer;
 - ModelRouter configuration.
 
+However, once integrity evidence exists, the explicit TP-0.48 release-review gate must respect it. The latest evidence blocks `EXPERIMENTAL -> RELEASE_CANDIDATE` when:
+
+- it reports `DRIFT`;
+- its candidate/manifest binding does not match;
+- its runtime model identity does not match;
+- its artifact URI does not match;
+- its `trainingResultSha256` does not match;
+- its fingerprint contract is malformed.
+
+Absence of integrity evidence remains advisory for backward compatibility; integrity is not silently fabricated or inferred.
+
 A fingerprint match also does not prove semantic quality, provenance authenticity, or safety. Those remain separate MioBench, governance, security, promotion, and runtime-readiness gates.
 
 ## Candidate Lab UI
@@ -125,15 +147,15 @@ Native Model Candidate Lab now provides `HASH ADAPTER DIR` for each registered c
 2. creates temporary workspace authority;
 3. requests the scoped L4 hashing capability;
 4. hashes the selected directory within fixed bounds;
-5. persists candidate-bound evidence;
-6. revokes workspace authority;
+5. revokes workspace authority;
+6. persists candidate-bound evidence only after successful revocation;
 7. shows baseline/match/drift state plus aggregate fingerprint, file count, and byte count.
 
 The UI does not display absolute filesystem paths or a per-file manifest.
 
 ## Regression coverage
 
-`adapterIntegrityTests.ts` covers:
+`adapterIntegrityTests.ts` and `adapterIntegrityReviewGateTests.ts` cover:
 
 - deterministic SHA-256 tree fingerprinting;
 - byte-change detection;
@@ -150,7 +172,9 @@ The UI does not display absolute filesystem paths or a per-file manifest.
 - persistent drift staying DRIFT;
 - restoration to original bytes becoming MATCH;
 - workspace authority revocation;
+- revocation failure producing no new evidence;
 - cancelled picker creating no evidence;
+- DRIFT blocking RELEASE_CANDIDATE eligibility and transition;
 - no automatic lifecycle advancement;
 - no model activation.
 
