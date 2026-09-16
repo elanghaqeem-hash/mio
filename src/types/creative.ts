@@ -138,6 +138,20 @@ export interface MioPhotoDocument {
   layers: PhotoLayer[];
 }
 
+// 2D/Motion Graphics Specification (.miomotion)
+export type MotionProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity';
+export interface MotionKeyframe { id: string; time: number; value: number; interpolation: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'step' }
+export interface MotionTrack { id: string; nodeId: string; property: MotionProperty; keyframes: MotionKeyframe[] }
+export interface MotionLayer {
+  id: string; name: string; type: 'shape' | 'text'; visible: boolean; locked: boolean;
+  x: number; y: number; width: number; height: number; scale: number; rotation: number; opacity: number;
+  fill: string; text?: string; fontSize?: number; borderRadius?: number;
+}
+export interface MioMotionProject {
+  width: number; height: number; backgroundColor: string; duration: number; fps: number; currentTime: number; loop: boolean;
+  layers: MotionLayer[]; tracks: MotionTrack[];
+}
+
 // SFX Patch Specification (.miosfx)
 export interface SFXLayer {
   id: string;
