@@ -34,6 +34,7 @@ export const IPC_CHANNELS = {
   TRAINING_CANCEL_JOB: 'mio:training:cancelJob',
   TRAINING_PACKAGE_HANDOFF: 'mio:training:packageHandoff',
   TRAINING_GET_HANDOFF_RECEIPT: 'mio:training:getHandoffReceipt',
+  TRAINING_READ_HANDOFF: 'mio:training:readHandoff',
 } as const;
 
 export type IpcChannelKey = keyof typeof IPC_CHANNELS;

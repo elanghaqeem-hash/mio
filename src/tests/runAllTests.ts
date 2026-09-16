@@ -39,6 +39,7 @@ import { runCapabilityGatewayTests } from './capabilityGatewayTests';
 import { runDesktopWorkspaceBridgeTests } from './desktopWorkspaceBridgeTests';
 import { runDesktopBrowserBridgeTests } from './desktopBrowserBridgeTests';
 import { runDesktopTrainingGatewayTests } from './desktopTrainingGatewayTests';
+import { runDesktopTrainingHandoffIngestionTests } from './desktopTrainingHandoffIngestionTests';
 import { runKnowledgeIngestionTests } from './knowledgeIngestionTests';
 import { runProjectKnowledgeIndexTests } from './projectKnowledgeIndexTests';
 import { runKnowledgeGovernanceWorkflowTests } from './knowledgeGovernanceWorkflowTests';
@@ -104,6 +105,7 @@ const runners = [
   runDesktopWorkspaceBridgeTests,
   runDesktopBrowserBridgeTests,
   runDesktopTrainingGatewayTests,
+  runDesktopTrainingHandoffIngestionTests,
   runKnowledgeIngestionTests,
   runProjectKnowledgeIndexTests,
   runKnowledgeGovernanceWorkflowTests,
