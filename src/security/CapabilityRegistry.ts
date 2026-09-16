@@ -84,7 +84,7 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     kind: 'AGENT',
     description: 'Plan and coordinate MIO tasks within the active project while delegating privileged actions to bounded capabilities.',
     ownerLayer: 'AGENT',
-    modes: ['CHAT', 'RESEARCH', 'FILES', 'MOTION', '3D', 'ANIMATION', 'GRAPHIC', 'DRAWING', 'PHOTO', 'SFX', 'MUSIC', 'PROJECT', 'TASKS', 'SETTINGS', 'SECURITY'],
+    modes: ['CHAT', 'RESEARCH', 'FILES', 'MOTION', '3D', 'ANIMATION', 'MOTION_2D', 'GRAPHIC', 'DRAWING', 'PHOTO', 'SFX', 'MUSIC', 'PROJECT', 'TASKS', 'SETTINGS', 'SECURITY'],
     riskLevel: 'MODERATE',
     permissionLevel: 'L1_SUGGEST',
     availability: 'AVAILABLE',

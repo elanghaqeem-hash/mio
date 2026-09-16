@@ -95,7 +95,7 @@ export const migrateLegacyCreativeDocument = (fileName: string, legacyData: unkn
   for (const node of nodes) document.nodes[node.id] = node;
   document.rootNodeIds = nodes.map((node) => node.id);
   document.selection = { nodeIds: nodes[0] ? [nodes[0].id] : [], primaryNodeId: nodes[0]?.id ?? null };
-  document.timeline = kind === 'animation' ? timelineFromLegacy(data) : document.timeline;
+  document.timeline = kind === 'animation' || kind === 'motion-2d' ? timelineFromLegacy(data) : document.timeline;
   document.metadata = {
     legacyFormat: `.${fileName.split('.').pop()?.toLowerCase()}`,
     legacyFileName: fileName,

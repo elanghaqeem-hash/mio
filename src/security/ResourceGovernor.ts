@@ -9,6 +9,7 @@ const DEFAULT_BUDGETS: Record<MioSystemMode, TaskResourceBudget> = {
   FILES: { maxDurationMs: 45_000, maxToolCalls: 8, maxNetworkCalls: 1, maxModelCalls: 1 },
   MOTION: { maxDurationMs: 60_000, maxToolCalls: 4, maxNetworkCalls: 1, maxModelCalls: 1 },
   ANIMATION: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
+  MOTION_2D: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   '3D': { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   GRAPHIC: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   DRAWING: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
