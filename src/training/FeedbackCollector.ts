@@ -19,7 +19,7 @@ export interface MioFeedbackRecord {
   notes?: string;
 }
 
-const NAMESPACE = 'training-feedback';
+const NAMESPACE = 'training' as const;
 const INDEX_KEY = 'feedback-index-v1';
 const MAX_TEXT_CHARS = 16_000;
 
