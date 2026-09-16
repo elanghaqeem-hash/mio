@@ -128,9 +128,10 @@ export class TrainingCandidateIntegrityService {
           ? 'MATCH'
           : 'DRIFT';
       const scannedAt = Date.now();
+      const nonce = Math.random().toString(36).slice(2, 10);
       const evidence: CandidateAdapterIntegrityEvidence = {
         schemaVersion: 1,
-        id: `adapter-integrity:${candidateId}:${scannedAt}:${hash.fingerprint.slice(0, 12)}`,
+        id: `adapter-integrity:${candidateId}:${scannedAt}:${nonce}:${hash.fingerprint.slice(0, 12)}`,
         candidateId,
         manifestId: candidate.manifestId,
         runtimeModel: manifest.runtimeModel,
