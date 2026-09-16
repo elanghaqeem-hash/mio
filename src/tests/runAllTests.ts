@@ -14,6 +14,7 @@ import { runAdapterIntegrityTests } from './adapterIntegrityTests';
 import { runAdapterIntegrityReviewGateTests } from './adapterIntegrityReviewGateTests';
 import { runSignedModelArtifactProvenanceTests } from './signedModelArtifactProvenanceTests';
 import { runSignedProvenancePromotionGateTests } from './signedProvenancePromotionGateTests';
+import { runModelSignerTrustAuditTests } from './modelSignerTrustAuditTests';
 import { runModelPromotionTests } from './modelPromotionTests';
 import { runModelPromotionServiceTests } from './modelPromotionServiceTests';
 import { runPromotedModelActivationTests } from './promotedModelActivationTests';
@@ -71,6 +72,7 @@ const runners = [
   runAdapterIntegrityReviewGateTests,
   runSignedModelArtifactProvenanceTests,
   runSignedProvenancePromotionGateTests,
+  runModelSignerTrustAuditTests,
   runModelPromotionTests,
   runModelPromotionServiceTests,
   runPromotedModelActivationTests,
