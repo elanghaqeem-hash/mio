@@ -11,6 +11,7 @@ import { runPromotedModelActivationTests } from './promotedModelActivationTests'
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
 import { runContextContinuityTests } from './contextContinuityTests';
+import { runModelContextAssemblerTests } from './modelContextAssemblerTests';
 import { runSystemPreferencesTests } from './systemPreferencesTests';
 import { runTaskRuntimeTests } from './taskRuntimeTests';
 import { runTaskSchedulerTests } from './taskSchedulerTests';
@@ -57,6 +58,7 @@ const runners = [
   runAiProxyTests,
   runResearchProxyTests,
   runContextContinuityTests,
+  runModelContextAssemblerTests,
   runSystemPreferencesTests,
   runTaskRuntimeTests,
   runTaskSchedulerTests,

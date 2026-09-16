@@ -21,17 +21,32 @@ export class MemoryContextManager {
   private static working = new Map<string, ContextMemoryItem[]>();
   private static conversations = new Map<string, ContextMemoryItem[]>();
   private static projectMemory = new Map<string, ContextMemoryItem[]>();
+  private static initializedProjects = new Set<string>();
 
-  public static setStorageProvider(provider: StorageProvider): void { this.storage = provider; }
+  public static setStorageProvider(provider: StorageProvider): void {
+    this.storage = provider;
+    this.working.clear();
+    this.conversations.clear();
+    this.projectMemory.clear();
+    this.initializedProjects.clear();
+  }
 
   public static async initializeProject(projectId: string): Promise<void> {
+    if (!projectId) return;
     const stored = await this.storage.get<PersistedProjectMemoryState>('memory', projectStorageKey(projectId));
     const items = stored?.projectId === projectId && Array.isArray(stored.items)
       ? stored.items.filter((item) => item.layer === 'PROJECT' && item.projectId === projectId)
       : [];
     this.projectMemory.set(projectId, items);
+    this.initializedProjects.add(projectId);
     eventBus.emit('PROJECT_MEMORY_UPDATED', { projectId, count: items.length });
   }
+
+  public static async ensureProjectInitialized(projectId: string): Promise<void> {
+    if (!this.initializedProjects.has(projectId)) await this.initializeProject(projectId);
+  }
+
+  public static isProjectInitialized(projectId: string): boolean { return this.initializedProjects.has(projectId); }
 
   public static addWorking(taskId: string, content: string, source = 'runtime', ttlMs = 30 * 60 * 1000): ContextMemoryItem | null {
     const normalized = content.trim(); if (!taskId || !normalized) return null;
@@ -47,12 +62,19 @@ export class MemoryContextManager {
   public static getWorking(taskId: string): ContextMemoryItem[] { this.purgeExpired(); return (this.working.get(taskId) ?? []).map((item) => ({ ...item })); }
   public static clearWorking(taskId: string): void { this.working.delete(taskId); }
 
-  public static addConversation(sessionId: string, projectId: string, content: string, source: string): ContextMemoryItem | null {
+  public static addConversation(
+    sessionId: string,
+    projectId: string,
+    content: string,
+    source: string,
+    trust?: Extract<ContextMemoryTrust, 'USER_AUTHORED' | 'SYSTEM_DERIVED'>,
+  ): ContextMemoryItem | null {
     const normalized = content.trim(); if (!sessionId || !projectId || !normalized) return null;
     const now = Date.now();
+    const resolvedTrust = trust ?? (source.startsWith('chat:mio') ? 'SYSTEM_DERIVED' : 'USER_AUTHORED');
     const item: ContextMemoryItem = {
       id: `conversation_${now}_${Math.random().toString(36).slice(2, 7)}`, layer: 'CONVERSATION', content: normalized,
-      source, trust: 'USER_AUTHORED', sessionId, projectId, createdAt: now, updatedAt: now,
+      source, trust: resolvedTrust, sessionId, projectId, createdAt: now, updatedAt: now,
     };
     this.conversations.set(sessionId, [...(this.conversations.get(sessionId) ?? []), item].slice(-50)); return { ...item };
   }
@@ -69,6 +91,7 @@ export class MemoryContextManager {
       });
       return null;
     }
+    await this.ensureProjectInitialized(input.projectId);
     const now = Date.now();
     const item: ContextMemoryItem = {
       id: `project_memory_${now}_${Math.random().toString(36).slice(2, 7)}`, layer: 'PROJECT', content: normalized,
@@ -81,6 +104,7 @@ export class MemoryContextManager {
   public static getProjectMemory(projectId: string): ContextMemoryItem[] { return (this.projectMemory.get(projectId) ?? []).map((item) => ({ ...item })); }
 
   public static async deleteProjectMemory(projectId: string, itemId: string): Promise<boolean> {
+    await this.ensureProjectInitialized(projectId);
     const existing = this.projectMemory.get(projectId) ?? []; const next = existing.filter((item) => item.id !== itemId);
     if (next.length === existing.length) return false;
     this.projectMemory.set(projectId, next); await this.flushProject(projectId); eventBus.emit('PROJECT_MEMORY_UPDATED', { projectId, count: next.length }); return true;
