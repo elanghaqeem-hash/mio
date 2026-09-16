@@ -8,6 +8,7 @@ import { runLocalInferenceBackendTests } from './localInferenceBackendTests';
 import { runTrainingFoundationTests } from './trainingFoundationTests';
 import { runTrainingBundleTests } from './trainingBundleTests';
 import { runTrainingRunHandoffTests } from './trainingRunHandoffTests';
+import { runTrainingArtifactBindingTests } from './trainingArtifactBindingTests';
 import { runTrainingCandidateRegistryTests } from './trainingCandidateRegistryTests';
 import { runTrainingCandidateReviewTests } from './trainingCandidateReviewTests';
 import { runTrainingCandidateLabTests } from './trainingCandidateLabTests';
@@ -69,6 +70,7 @@ const runners = [
   runTrainingFoundationTests,
   runTrainingBundleTests,
   runTrainingRunHandoffTests,
+  runTrainingArtifactBindingTests,
   runTrainingCandidateRegistryTests,
   runTrainingCandidateReviewTests,
   runTrainingCandidateLabTests,

@@ -18,8 +18,11 @@ The required governed flow is:
 8. Train LoRA/QLoRA in a dedicated Python/GPU environment.
 9. Package the verified bundle + runner result as a TP-0.58 `mio-training-handoff.json`.
 10. Import the handoff into Mio as an `EXPERIMENTAL` / `REGISTERED_UNEVALUATED` candidate.
-11. Fingerprint/verify the local adapter artifact, run MioBench, and run security/tool-boundary regressions.
-12. Complete explicit review and `ModelPromotionGate` before activation.
+11. Fingerprint the explicitly authorized local adapter directory with TP-0.50.
+12. Explicitly bind the current integrity scan to the TP-0.58 handoff in **Settings → Training Handoff ↔ Adapter Integrity**.
+13. Run MioBench and security/tool-boundary regressions.
+14. Re-bind if a newer adapter scan is performed before release review or promotion.
+15. Complete explicit release review, promotion, post-promotion integrity scan, and activation gates.
 
 User feedback is opt-in and never becomes trainable merely because it was stored. `FeedbackCollector.toTrainingCandidate()` deliberately creates an unapproved candidate requiring further review.
 
@@ -119,6 +122,24 @@ node scripts/training/create-training-run-handoff.mjs --self-test
 ```
 
 The resulting handoff can be imported from **Settings → Governed Training Run Handoff**. Mio still requires explicit runtime alias and artifact URI. Handoff verification does not prove the adapter/model bytes; TP-0.50 integrity scanning and later provenance/review/promotion gates remain mandatory.
+
+## Bind TP-0.58 handoff identity to TP-0.50 adapter bytes
+
+For candidates imported through the governed handoff path, TP-0.59 requires an explicit binding between the verified handoff receipt and the current adapter-integrity scan.
+
+In Mio:
+
+1. Open Candidate Lab and run the explicit TP-0.50 adapter integrity scan against the intended local adapter directory.
+2. Open **Training Handoff ↔ Adapter Integrity** in Settings.
+3. Confirm the handoff, integrity state, runtime alias, and artifact identity.
+4. Choose **BIND CURRENT SCAN**.
+5. Continue with MioBench and release review only after the binding state is `CURRENT`.
+
+A later integrity scan intentionally makes the previous current-review binding `STALE`, even when the bytes still match the immutable baseline. Re-bind the latest clean scan before release review or promotion. A `DRIFT` scan cannot be bound.
+
+At promotion, Mio records the binding evidence ID as historical promotion provenance. TP-0.52 still requires a new post-promotion `MATCH` scan before activation; activation separately revalidates the historical promotion binding and the current post-promotion bytes.
+
+TP-0.59 does not replace signed model provenance and does not itself prove origin authenticity, model quality, safety, promotion readiness, or activation safety.
 
 ## Compatibility entrypoint
 

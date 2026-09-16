@@ -1,6 +1,11 @@
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
 import { BenchmarkReportRepository, type StoredBenchmarkReport } from './BenchmarkReportRepository';
+import {
+  TrainingArtifactBindingService,
+  type TrainingArtifactBindingEvidence,
+  type TrainingArtifactBindingVerification,
+} from './TrainingArtifactBindingService';
 import { type CandidateAdapterIntegrityEvidence, TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
 import {
   type CandidateSignedProvenanceEvidence,
@@ -13,12 +18,16 @@ import type { MioModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
 import { evaluateModelPromotion, promoteManifest } from './ModelPromotionGate';
 import { type TrainingCandidateRecord, TrainingCandidateRegistry } from './TrainingCandidateRegistry';
+import { TrainingRunHandoffService, type TrainingRunHandoffReceipt } from './TrainingRunHandoffService';
 
 export interface ModelPromotionSnapshot {
   candidate?: TrainingCandidateRecord;
   manifest: MioModelManifest;
   latestBenchmark?: StoredBenchmarkReport;
   latestIntegrity?: CandidateAdapterIntegrityEvidence;
+  handoffReceipt?: TrainingRunHandoffReceipt;
+  latestArtifactBinding?: TrainingArtifactBindingEvidence;
+  artifactBindingValid?: boolean;
   latestProvenance?: CandidateSignedProvenanceEvidence;
   provenanceSignerStatus?: ModelSignerTrustStatus;
   promotionEligible: boolean;
@@ -36,6 +45,7 @@ export interface PromoteModelResult {
   benchmarkReportId: string;
   promotedAt: number;
   integrityEvidenceId?: string;
+  artifactBindingEvidenceId?: string;
   provenanceEvidenceId?: string;
 }
 
@@ -44,6 +54,8 @@ export class ModelPromotionService {
   private readonly benchmarks: BenchmarkReportRepository;
   private readonly candidates: TrainingCandidateRegistry;
   private readonly integrity: TrainingCandidateIntegrityService;
+  private readonly handoffs: TrainingRunHandoffService;
+  private readonly artifactBindings: TrainingArtifactBindingService;
   private readonly provenance: TrainingCandidateProvenanceService;
   private readonly signers: ModelSignerTrustStore;
 
@@ -52,6 +64,8 @@ export class ModelPromotionService {
     this.benchmarks = new BenchmarkReportRepository(storage);
     this.candidates = new TrainingCandidateRegistry(storage);
     this.integrity = new TrainingCandidateIntegrityService(storage);
+    this.handoffs = new TrainingRunHandoffService(storage);
+    this.artifactBindings = new TrainingArtifactBindingService(storage);
     this.provenance = new TrainingCandidateProvenanceService(storage);
     this.signers = new ModelSignerTrustStore(storage);
   }
@@ -70,18 +84,34 @@ export class ModelPromotionService {
     const manifest = await this.manifests.get(manifestId);
     if (!manifest) return undefined;
     const candidate = await this.candidates.get(manifestId);
-    const [latestBenchmark, latestIntegrity, latestProvenance] = await Promise.all([
+    const [latestBenchmark, latestIntegrity, latestProvenance, handoffReceipt] = await Promise.all([
       this.benchmarks.latestForManifest(manifest.id),
       candidate ? this.integrity.latest(candidate.id) : Promise.resolve(undefined),
       candidate ? this.provenance.latest(candidate.id) : Promise.resolve(undefined),
+      candidate ? this.handoffs.getReceipt(candidate.id) : Promise.resolve(undefined),
     ]);
+    const artifactBindingVerification = candidate && handoffReceipt
+      ? await this.artifactBindings.verifyLatest(candidate.id)
+      : undefined;
     const provenanceSigner = latestProvenance ? await this.signers.get(latestProvenance.signerKeyId) : undefined;
-    const blockingReasons = this.blockingReasons(manifest, candidate, latestBenchmark, latestIntegrity, latestProvenance, provenanceSigner);
+    const blockingReasons = this.blockingReasons(
+      manifest,
+      candidate,
+      latestBenchmark,
+      latestIntegrity,
+      latestProvenance,
+      provenanceSigner,
+      handoffReceipt,
+      artifactBindingVerification,
+    );
     return {
       candidate,
       manifest,
       latestBenchmark,
       latestIntegrity,
+      handoffReceipt,
+      latestArtifactBinding: artifactBindingVerification?.binding,
+      artifactBindingValid: artifactBindingVerification?.valid,
       latestProvenance,
       provenanceSignerStatus: provenanceSigner?.status,
       promotionEligible: blockingReasons.length === 0,
@@ -110,12 +140,14 @@ export class ModelPromotionService {
         promotedAt,
         benchmarkReportId: snapshot.latestBenchmark.id,
         ...(snapshot.latestIntegrity ? { integrityEvidenceId: snapshot.latestIntegrity.id } : {}),
+        ...(snapshot.latestArtifactBinding ? { artifactBindingEvidenceId: snapshot.latestArtifactBinding.id } : {}),
         ...(snapshot.latestProvenance ? { provenanceEvidenceId: snapshot.latestProvenance.id } : {}),
       },
       notes: [
         snapshot.manifest.notes,
         `Promoted after explicit final attestation by ${promoter} using benchmark report ${snapshot.latestBenchmark.id}. Runtime activation remains a separate action.`,
         snapshot.latestIntegrity ? `Adapter byte-integrity evidence at promotion: ${snapshot.latestIntegrity.id} (${snapshot.latestIntegrity.comparison}, fingerprint ${snapshot.latestIntegrity.fingerprint}).` : undefined,
+        snapshot.latestArtifactBinding ? `Training handoff-to-adapter binding at promotion: ${snapshot.latestArtifactBinding.id} (SHA-256 ${snapshot.latestArtifactBinding.bindingSha256}).` : undefined,
         snapshot.latestProvenance ? `Signed artifact provenance at promotion: ${snapshot.latestProvenance.id} (signer ${snapshot.latestProvenance.signerKeyId}, trust ${snapshot.provenanceSignerStatus ?? 'UNKNOWN'}).` : undefined,
       ].filter(Boolean).join(' '),
     };
@@ -125,6 +157,7 @@ export class ModelPromotionService {
       benchmarkReportId: snapshot.latestBenchmark.id,
       promotedAt,
       integrityEvidenceId: snapshot.latestIntegrity?.id,
+      artifactBindingEvidenceId: snapshot.latestArtifactBinding?.id,
       provenanceEvidenceId: snapshot.latestProvenance?.id,
     };
   }
@@ -136,6 +169,8 @@ export class ModelPromotionService {
     latestIntegrity?: CandidateAdapterIntegrityEvidence,
     latestProvenance?: CandidateSignedProvenanceEvidence,
     provenanceSigner?: TrustedModelSigner,
+    handoffReceipt?: TrainingRunHandoffReceipt,
+    artifactBindingVerification?: TrainingArtifactBindingVerification,
   ): string[] {
     const reasons: string[] = [];
     if (manifest.lifecycle !== 'RELEASE_CANDIDATE') reasons.push(`Model lifecycle is ${manifest.lifecycle}, not RELEASE_CANDIDATE`);
@@ -160,6 +195,13 @@ export class ModelPromotionService {
         if (latestIntegrity.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Adapter integrity training-result SHA does not match the training candidate');
         if (!/^[a-f0-9]{64}$/.test(latestIntegrity.fingerprint) || !/^[a-f0-9]{64}$/.test(latestIntegrity.baselineFingerprint)) reasons.push('Adapter integrity fingerprint contract is invalid');
         if (latestIntegrity.comparison === 'DRIFT') reasons.push('Latest adapter byte-integrity evidence reports DRIFT from the immutable baseline');
+      }
+
+      if (handoffReceipt && !artifactBindingVerification?.valid) {
+        const bindingReasons = artifactBindingVerification?.errors.length
+          ? artifactBindingVerification.errors
+          : ['Current handoff-to-adapter binding is unavailable'];
+        reasons.push(...bindingReasons.map((reason) => `Training handoff artifact binding: ${reason}`));
       }
 
       if (latestProvenance) {

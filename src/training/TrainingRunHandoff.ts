@@ -36,6 +36,7 @@ export interface MioTrainingRunHandoff extends MioTrainingRunHandoffBody {
 export interface TrainingRunHandoffVerification {
   valid: boolean;
   errors: string[];
+  handoffCreatedAt?: number;
   handoffSha256?: string;
   trainingResultSha256?: string;
   bundleVerification?: TrainingBundleVerificationResult;
@@ -125,6 +126,7 @@ export async function verifyTrainingRunHandoff(text: string): Promise<TrainingRu
   return {
     valid: errors.length === 0,
     errors: [...new Set(errors)],
+    ...(Number.isSafeInteger(handoff.createdAt) && handoff.createdAt > 0 ? { handoffCreatedAt: handoff.createdAt } : {}),
     ...(computedHandoffSha256 ? { handoffSha256: computedHandoffSha256 } : {}),
     ...(trainingResultSha256 ? { trainingResultSha256 } : {}),
     ...(bundleVerification ? { bundleVerification } : {}),
