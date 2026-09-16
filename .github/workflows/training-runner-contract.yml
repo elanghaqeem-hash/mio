@@ -38,6 +38,11 @@ jobs:
           node --check scripts/training/sign-model-artifact-provenance.mjs
           node scripts/training/sign-model-artifact-provenance.mjs --self-test
 
+      - name: Validate portable signer audit verifier
+        run: |
+          node --check scripts/training/verify-signer-audit-bundle.mjs
+          node scripts/training/verify-signer-audit-bundle.mjs --self-test
+
       - name: Confirm training dependencies stay isolated
         run: |
           python - <<'PY'
