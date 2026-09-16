@@ -1,4 +1,4 @@
-export type StorageNamespace = 'projects' | 'creative' | 'memory' | 'settings' | 'runtime';
+export type StorageNamespace = 'projects' | 'creative' | 'memory' | 'settings' | 'runtime' | 'training';
 
 export interface StorageProvider {
   get<T>(namespace: StorageNamespace, key: string): Promise<T | null>;
