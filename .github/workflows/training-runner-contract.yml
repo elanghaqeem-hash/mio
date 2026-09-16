@@ -43,6 +43,16 @@ jobs:
           node --check scripts/training/verify-candidate-evidence-package.mjs
           node scripts/training/verify-candidate-evidence-package.mjs --self-test
 
+      - name: Validate signed candidate evidence signer
+        run: |
+          node --check scripts/training/sign-candidate-evidence-package.mjs
+          node scripts/training/sign-candidate-evidence-package.mjs --self-test
+
+      - name: Validate signed candidate evidence verifier
+        run: |
+          node --check scripts/training/verify-signed-candidate-evidence-package.mjs
+          node scripts/training/verify-signed-candidate-evidence-package.mjs --self-test
+
       - name: Validate signed artifact provenance utility
         run: |
           node --check scripts/training/sign-model-artifact-provenance.mjs
