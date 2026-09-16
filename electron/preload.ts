@@ -11,12 +11,6 @@ export interface MioWorkspaceDirectoryEntry {
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
 }
 
-export interface MioWorkspaceTreeHashFile {
-  relativePath: string;
-  bytes: number;
-  sha256: string;
-}
-
 export interface MioWorkspaceTreeHashResult {
   schemaVersion: 1;
   algorithm: 'SHA-256';
@@ -25,7 +19,6 @@ export interface MioWorkspaceTreeHashResult {
   fingerprint: string;
   fileCount: number;
   totalBytes: number;
-  files: MioWorkspaceTreeHashFile[];
   limits: { maxFiles: number; maxBytes: number; maxDepth: number };
 }
 
