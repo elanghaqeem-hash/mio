@@ -43,6 +43,11 @@ jobs:
           node --check scripts/training/verify-signer-audit-bundle.mjs
           node scripts/training/verify-signer-audit-bundle.mjs --self-test
 
+      - name: Validate offline signer audit attestation utility
+        run: |
+          node --check scripts/training/attest-signer-audit-bundle.mjs
+          node scripts/training/attest-signer-audit-bundle.mjs --self-test
+
       - name: Confirm training dependencies stay isolated
         run: |
           python - <<'PY'
