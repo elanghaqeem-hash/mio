@@ -93,6 +93,9 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE, (event, args) => handlers.handleListWorkspace(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, (event, args) => handlers.handleHashWorkspaceTree(event, args[0]));
   secureHandle(IPC_CHANNELS.BROWSER_READ_PAGE, (event, args) => handlers.handleBrowserReadPage(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_START_JOB, (event, args) => handlers.handleStartTrainingJob(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_GET_JOB, (event, args) => handlers.handleGetTrainingJob(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_CANCEL_JOB, (event, args) => handlers.handleCancelTrainingJob(event, args[0]));
 
   const distHtmlPath = path.join(__dirname, '../dist/index.html');
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
