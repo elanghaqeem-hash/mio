@@ -21,8 +21,10 @@ export async function runSystemPreferencesTests(): Promise<{ passed: number; tot
   await systemPreferences.setAutonomyLevel('AUTONOMOUS');
   await systemPreferences.setNetworkState('ONLINE');
   await systemPreferences.setModelRouter({
-    provider: 'openai',
-    model: 'test-model',
+    provider: 'mio_local',
+    model: 'Qwen/Qwen3-8B',
+    mioLocalBackend: 'vllm',
+    mioLocalEndpoint: 'http://127.0.0.1:8000',
     allowOfflineFallback: false,
     enableWebSearch: true,
   });
@@ -32,10 +34,11 @@ export async function runSystemPreferencesTests(): Promise<{ passed: number; tot
   const restored = systemPreferences.getSnapshot();
   assert(restored.autonomyLevel === 'AUTONOMOUS', 'Autonomy level survives workspace remount/runtime reinitialization');
   assert(restored.networkState === 'ONLINE', 'Network selection is restored from controlled settings storage');
-  assert(restored.modelRouter.provider === 'openai' && restored.modelRouter.model === 'test-model', 'Selected provider and model are restored');
+  assert(restored.modelRouter.provider === 'mio_local' && restored.modelRouter.model === 'Qwen/Qwen3-8B', 'Selected provider and model are restored');
+  assert(restored.modelRouter.mioLocalBackend === 'vllm' && restored.modelRouter.mioLocalEndpoint === 'http://127.0.0.1:8000', 'MIO Local backend and endpoint survive runtime reinitialization');
   assert(restored.modelRouter.allowOfflineFallback === false, 'Online provider does not silently opt into local fallback');
   assert(restored.modelRouter.enableWebSearch === true, 'Live web-search preference is restored');
-  assert(ModelRouter.getNetworkState() === 'ONLINE' && ModelRouter.getConfig().provider === 'openai', 'Restored preferences are applied to ModelRouter before use');
+  assert(ModelRouter.getNetworkState() === 'ONLINE' && ModelRouter.getConfig().provider === 'mio_local' && ModelRouter.getConfig().mioLocalBackend === 'vllm', 'Restored preferences are applied to ModelRouter before use');
 
   return { passed, total };
 }
