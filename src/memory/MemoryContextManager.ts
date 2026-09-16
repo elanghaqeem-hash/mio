@@ -62,12 +62,18 @@ export class MemoryContextManager {
   public static getWorking(taskId: string): ContextMemoryItem[] { this.purgeExpired(); return (this.working.get(taskId) ?? []).map((item) => ({ ...item })); }
   public static clearWorking(taskId: string): void { this.working.delete(taskId); }
 
-  public static addConversation(sessionId: string, projectId: string, content: string, source: string): ContextMemoryItem | null {
+  public static addConversation(
+    sessionId: string,
+    projectId: string,
+    content: string,
+    source: string,
+    trust: Extract<ContextMemoryTrust, 'USER_AUTHORED' | 'SYSTEM_DERIVED'> = 'USER_AUTHORED',
+  ): ContextMemoryItem | null {
     const normalized = content.trim(); if (!sessionId || !projectId || !normalized) return null;
     const now = Date.now();
     const item: ContextMemoryItem = {
       id: `conversation_${now}_${Math.random().toString(36).slice(2, 7)}`, layer: 'CONVERSATION', content: normalized,
-      source, trust: 'USER_AUTHORED', sessionId, projectId, createdAt: now, updatedAt: now,
+      source, trust, sessionId, projectId, createdAt: now, updatedAt: now,
     };
     this.conversations.set(sessionId, [...(this.conversations.get(sessionId) ?? []), item].slice(-50)); return { ...item };
   }
