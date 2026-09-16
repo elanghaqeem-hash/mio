@@ -1,5 +1,4 @@
 import { createLocalInferenceBackend } from '../intelligence/model/LocalInferenceBackend';
-import { MioLocalProvider } from '../intelligence/model/MioLocalProvider';
 import { InMemoryStorageProvider } from '../storage/InMemoryStorageProvider';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import { StorageProvider } from '../storage/StorageProvider';
@@ -93,14 +92,29 @@ export type CandidateLabReadinessChecker = (
   timeoutMs: number,
 ) => Promise<{ ready: boolean; detail: string }>;
 
-const defaultProviderFactory: CandidateLabProviderFactory = (model, backend, endpoint) => new MioLocalProvider({
-  model,
-  backend,
-  endpoint,
-  enableWebSearch: false,
-  enableBrowserRead: false,
-  maxToolRounds: 1,
-});
+const defaultProviderFactory: CandidateLabProviderFactory = (model, backendId, endpoint) => {
+  const backend = createLocalInferenceBackend(backendId, endpoint, model);
+  return {
+    id: 'mio_local',
+    displayName: `MIO Candidate Lab (${backend.displayName})`,
+    requiresNetwork: false,
+    requiresProxy: false,
+    async generate(request, signal) {
+      const local = await backend.chat(request.messages, request, signal);
+      return {
+        provider: 'mio_local',
+        model: local.model,
+        text: local.text,
+        usage: { inputTokens: local.inputTokens, outputTokens: local.outputTokens },
+        finishReason: local.finishReason,
+        generatedAt: Date.now(),
+        source: 'LOCAL_ENDPOINT',
+        webSearchUsed: false,
+        citations: [],
+      };
+    },
+  };
+};
 
 const defaultReadinessChecker: CandidateLabReadinessChecker = async (model, backendId, endpoint, timeoutMs) => {
   const backend = createLocalInferenceBackend(backendId, endpoint, model);
@@ -263,8 +277,10 @@ export class TrainingCandidateLabService {
   public async runCandidateBenchmark(input: RunCandidateBenchmarkInput): Promise<CandidateBenchmarkEvaluation> {
     const readiness = await this.checkCandidateReadiness(input.candidateId, input.backend, input.endpoint, input.timeoutMs ?? 8_000);
     if (!readiness.ready) throw new Error(`Candidate runtime is not ready: ${readiness.detail}`);
-    const manifest = await this.manifests.get(input.candidateId);
-    if (!manifest) throw new Error(`Model manifest '${input.candidateId}' is missing`);
+    const candidate = await this.candidates.get(input.candidateId);
+    if (!candidate) throw new Error(`Training candidate '${input.candidateId}' is not registered`);
+    const manifest = await this.manifests.get(candidate.manifestId);
+    if (!manifest) throw new Error(`Model manifest '${candidate.manifestId}' is missing`);
     const provider = this.providerFactory(manifest.runtimeModel, input.backend, input.endpoint);
     return this.candidates.evaluate(input.candidateId, provider, MIO_BENCH_CORE);
   }
