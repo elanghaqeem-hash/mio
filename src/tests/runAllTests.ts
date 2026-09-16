@@ -13,6 +13,7 @@ import { runTrainingCandidateLabTests } from './trainingCandidateLabTests';
 import { runAdapterIntegrityTests } from './adapterIntegrityTests';
 import { runAdapterIntegrityReviewGateTests } from './adapterIntegrityReviewGateTests';
 import { runModelPromotionTests } from './modelPromotionTests';
+import { runModelPromotionServiceTests } from './modelPromotionServiceTests';
 import { runPromotedModelActivationTests } from './promotedModelActivationTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
@@ -66,6 +67,7 @@ const runners = [
   runAdapterIntegrityTests,
   runAdapterIntegrityReviewGateTests,
   runModelPromotionTests,
+  runModelPromotionServiceTests,
   runPromotedModelActivationTests,
   runAiProxyTests,
   runResearchProxyTests,
