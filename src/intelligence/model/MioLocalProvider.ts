@@ -37,6 +37,7 @@ type MioLocalToolCall =
   | { name: 'browser.read'; url: string };
 
 const TOOL_CALL_PATTERN = /^<MIO_TOOL_CALL>\s*(\{[\s\S]*\})\s*<\/MIO_TOOL_CALL>$/;
+const TOOL_CALL_ENVELOPE_PATTERN = /^<MIO_TOOL_CALL>/;
 const DEFAULT_MODEL = 'qwen3:8b';
 const DEFAULT_RESEARCH_ENDPOINT = '/api/research';
 const MAX_EVIDENCE_ITEMS = 6;
@@ -119,7 +120,17 @@ export class MioLocalProvider implements ModelProvider {
       finishReason = local.finishReason;
 
       const toolCall = this.parseToolCall(local.text);
-      if (!toolCall) return this.toResponse(local.text, model, finishReason, inputTokens, outputTokens, attemptedWebSearch, citations);
+      if (!toolCall) {
+        if (TOOL_CALL_ENVELOPE_PATTERN.test(local.text.trim())) {
+          messages.push({ role: 'assistant', content: local.text });
+          messages.push({
+            role: 'user',
+            content: '[MIO_TOOL_RESULT status="DENIED"]\nThe requested tool call was malformed, unsupported, or outside the allowed URL/query policy. Do not claim the tool executed. Produce a safe answer or a corrected governed tool call.\n[/MIO_TOOL_RESULT]',
+          });
+          continue;
+        }
+        return this.toResponse(local.text, model, finishReason, inputTokens, outputTokens, attemptedWebSearch, citations);
+      }
 
       messages.push({ role: 'assistant', content: local.text });
       if (toolCall.name === 'web.search') {
@@ -158,7 +169,7 @@ export class MioLocalProvider implements ModelProvider {
     const finalLocal = await this.chat(messages, request, signal);
     inputTokens = sumOptional(inputTokens, finalLocal.inputTokens);
     outputTokens = sumOptional(outputTokens, finalLocal.outputTokens);
-    const finalText = this.parseToolCall(finalLocal.text)
+    const finalText = this.parseToolCall(finalLocal.text) || TOOL_CALL_ENVELOPE_PATTERN.test(finalLocal.text.trim())
       ? 'MIO Local could not produce a final answer after the bounded tool cycle completed.'
       : finalLocal.text;
 
