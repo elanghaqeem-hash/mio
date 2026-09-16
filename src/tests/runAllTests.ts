@@ -3,6 +3,7 @@ import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
 import { runMioLocalProviderTests } from './mioLocalProviderTests';
+import { runTrainingFoundationTests } from './trainingFoundationTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
 import { runContextContinuityTests } from './contextContinuityTests';
@@ -42,6 +43,7 @@ const runners = [
   runToolRouterTests,
   runModelRouterTests,
   runMioLocalProviderTests,
+  runTrainingFoundationTests,
   runAiProxyTests,
   runResearchProxyTests,
   runContextContinuityTests,
