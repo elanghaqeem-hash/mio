@@ -3,6 +3,8 @@ import { systemPreferences } from '../settings/SystemPreferences';
 import type { LocalInferenceBackendId, ModelRouterConfig } from '../types/models';
 import type { CandidateAdapterIntegrityEvidence } from './TrainingCandidateIntegrityService';
 import { TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
+import type { CandidateSignedProvenanceEvidence } from './SignedModelArtifactProvenance';
+import { ModelSignerTrustStore, TrainingCandidateProvenanceService } from './SignedModelArtifactProvenance';
 import type { MioModelManifest } from './ModelManifest';
 import { validateModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
@@ -26,6 +28,7 @@ export interface PromotedModelActivationResult {
   endpoint: string;
   readinessDetail: string;
   integrityEvidenceId?: string;
+  provenanceEvidenceId?: string;
 }
 
 export interface PromotedModelActivationOptions {
@@ -48,6 +51,7 @@ interface ActivationIntegrityDecision {
   allowed: boolean;
   reasons: string[];
   evidence?: CandidateAdapterIntegrityEvidence;
+  provenanceEvidence?: CandidateSignedProvenanceEvidence;
 }
 
 export class PromotedModelActivationService {
@@ -56,6 +60,8 @@ export class PromotedModelActivationService {
     private readonly preferences: ModelRouterPreferencePort = defaultPreferencePort,
     private readonly candidates: TrainingCandidateRegistry = new TrainingCandidateRegistry(),
     private readonly integrity: TrainingCandidateIntegrityService = new TrainingCandidateIntegrityService(),
+    private readonly provenance: TrainingCandidateProvenanceService = new TrainingCandidateProvenanceService(),
+    private readonly signers: ModelSignerTrustStore = new ModelSignerTrustStore(),
   ) {}
 
   public async listPromoted(limit = 100): Promise<MioModelManifest[]> {
@@ -86,7 +92,7 @@ export class PromotedModelActivationService {
         configuredModel: config.model,
         backend,
         endpoint: config.mioLocalEndpoint,
-        detail: `Active promoted-model integrity requires attention: ${integrityDecision.reasons.join('; ')}`,
+        detail: `Active promoted-model integrity/provenance requires attention: ${integrityDecision.reasons.join('; ')}`,
       };
     }
 
@@ -143,7 +149,7 @@ export class PromotedModelActivationService {
 
     const integrityDecision = await this.activationIntegrityDecision(manifest);
     if (!integrityDecision.allowed) {
-      throw new Error(`Promoted model activation blocked by adapter integrity: ${integrityDecision.reasons.join('; ')}`);
+      throw new Error(`Promoted model activation blocked by integrity/provenance: ${integrityDecision.reasons.join('; ')}`);
     }
 
     const current = this.preferences.getModelRouter();
@@ -188,6 +194,7 @@ export class PromotedModelActivationService {
       endpoint: runtime.endpoint,
       readinessDetail: readiness.detail,
       integrityEvidenceId: integrityDecision.evidence?.id,
+      provenanceEvidenceId: integrityDecision.provenanceEvidence?.id,
     };
   }
 
@@ -203,10 +210,13 @@ export class PromotedModelActivationService {
     }
     if (!manifest.promotion.integrityEvidenceId) reasons.push('Promotion provenance has no adapter-integrity evidence id');
 
-    const latest = await this.integrity.latest(candidate.id);
+    const [latest, latestProvenance] = await Promise.all([
+      this.integrity.latest(candidate.id),
+      this.provenance.latest(candidate.id),
+    ]);
     if (!latest) {
       reasons.push('No adapter-integrity evidence is available for activation');
-      return { allowed: false, reasons };
+      return { allowed: false, reasons, provenanceEvidence: latestProvenance };
     }
     if (latest.candidateId !== candidate.id || latest.manifestId !== manifest.id) reasons.push('Latest integrity evidence is not bound to this promoted candidate');
     if (latest.runtimeModel !== manifest.runtimeModel) reasons.push('Latest integrity runtime identity does not match the promoted model');
@@ -216,7 +226,31 @@ export class PromotedModelActivationService {
     if (latest.id === manifest.promotion.integrityEvidenceId) reasons.push('A new adapter integrity scan is required after promotion before activation');
     if (latest.scannedAt < manifest.promotion.promotedAt) reasons.push('Latest adapter integrity scan predates model promotion');
 
-    return { allowed: reasons.length === 0, reasons: [...new Set(reasons)], evidence: latest };
+    if (manifest.promotion.provenanceEvidenceId && !latestProvenance) {
+      reasons.push('Promotion provenance references signed evidence that is no longer available');
+    }
+    if (!manifest.promotion.provenanceEvidenceId && latestProvenance) {
+      reasons.push('Signed provenance exists but structured promotion provenance does not bind its evidence id');
+    }
+    if (latestProvenance) {
+      if (manifest.promotion.provenanceEvidenceId && latestProvenance.id !== manifest.promotion.provenanceEvidenceId) reasons.push('Latest signed provenance does not match the evidence bound at promotion');
+      if (latestProvenance.candidateId !== candidate.id || latestProvenance.manifestId !== manifest.id) reasons.push('Signed provenance evidence is not bound to this promoted candidate');
+      if (latestProvenance.runtimeModel !== manifest.runtimeModel) reasons.push('Signed provenance runtime identity does not match the promoted model');
+      if (latestProvenance.artifactUri !== candidate.artifactUri) reasons.push('Signed provenance artifact identity does not match the promoted candidate');
+      if (latestProvenance.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Signed provenance training-result SHA does not match the promoted candidate');
+      if (latestProvenance.artifactFingerprint !== latest.fingerprint) reasons.push('Signed provenance fingerprint does not match current post-promotion adapter integrity');
+      if (!/^[a-f0-9]{64}$/.test(latestProvenance.payloadSha256) || !/^[a-f0-9]{64}$/.test(latestProvenance.envelopeSha256)) reasons.push('Signed provenance verification evidence is malformed');
+      const signer = await this.signers.get(latestProvenance.signerKeyId);
+      if (!signer || signer.status !== 'TRUSTED') reasons.push('Signed provenance signer is no longer trusted');
+      if (signer && signer.keyId !== latestProvenance.signerKeyId) reasons.push('Signed provenance signer key identity is inconsistent');
+    }
+
+    return {
+      allowed: reasons.length === 0,
+      reasons: [...new Set(reasons)],
+      evidence: latest,
+      provenanceEvidence: latestProvenance,
+    };
   }
 }
 
