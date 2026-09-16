@@ -11,6 +11,15 @@ export interface MioWorkspaceDirectoryEntry {
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
 }
 
+export interface MioBrowserReadResult {
+  success: boolean;
+  title?: string;
+  url?: string;
+  text?: string;
+  truncated?: boolean;
+  error?: string;
+}
+
 export interface MioDesktopAPI {
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<boolean>;
@@ -35,6 +44,7 @@ export interface MioDesktopAPI {
   revokeWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
   readWorkspaceText: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; data?: string; bytes?: number; error?: string }>;
   listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: MioWorkspaceDirectoryEntry[]; error?: string }>;
+  browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
 
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
 }
@@ -56,6 +66,7 @@ const desktopAPI: MioDesktopAPI = {
   revokeWorkspace: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_REVOKE_WORKSPACE, workspaceId),
   readWorkspaceText: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, request),
   listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
+  browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),
 
   onEmergencyStopTriggered: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, reason: string) => callback(reason);

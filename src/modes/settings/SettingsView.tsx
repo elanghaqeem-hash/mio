@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server, RefreshCw, BrainCircuit, Search } from 'lucide-react';
 import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
-import { ModelProviderId, ProviderReadiness } from '../../types/models';
+import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+import { PromotedModelPanel } from './PromotedModelPanel';
 
 const CLOUD_PROVIDER_CONFIG = {
   openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
@@ -11,6 +12,12 @@ const CLOUD_PROVIDER_CONFIG = {
   gemini: { label: 'Google Gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', placeholder: 'e.g. gemini-2.5-flash' },
   claude: { label: 'Anthropic Claude', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL', placeholder: 'e.g. claude-sonnet-4-20250514' },
 } as const;
+
+const LOCAL_BACKEND_CONFIG: Record<LocalInferenceBackendId, { label: string; endpoint: string; detail: string }> = {
+  ollama: { label: 'Ollama', endpoint: 'http://127.0.0.1:11434', detail: 'Native Ollama /api/chat runtime' },
+  vllm: { label: 'vLLM', endpoint: 'http://127.0.0.1:8000', detail: 'OpenAI-compatible /v1/chat/completions runtime' },
+  llamacpp: { label: 'llama.cpp server', endpoint: 'http://127.0.0.1:8080', detail: 'OpenAI-compatible local GGUF server' },
+};
 
 export const SettingsView: React.FC = () => {
   const [preferences, setPreferences] = useState<MioSystemPreferences>(() => systemPreferences.getSnapshot());
@@ -21,7 +28,8 @@ export const SettingsView: React.FC = () => {
     provider,
     model = '',
     ollamaEndpoint = 'http://127.0.0.1:11434',
-    mioLocalEndpoint = 'http://127.0.0.1:11434',
+    mioLocalBackend = 'ollama',
+    mioLocalEndpoint = LOCAL_BACKEND_CONFIG[mioLocalBackend].endpoint,
     researchEndpoint = '/api/research',
     allowOfflineFallback,
     enableWebSearch,
@@ -41,6 +49,13 @@ export const SettingsView: React.FC = () => {
   const updateRouter = (patch: Parameters<typeof systemPreferences.setModelRouter>[0]) => {
     setReadiness(null);
     void systemPreferences.setModelRouter(patch);
+  };
+
+  const handleLocalBackendChange = (backend: LocalInferenceBackendId) => {
+    updateRouter({
+      mioLocalBackend: backend,
+      mioLocalEndpoint: LOCAL_BACKEND_CONFIG[backend].endpoint,
+    });
   };
 
   const checkProvider = async () => {
@@ -112,7 +127,7 @@ export const SettingsView: React.FC = () => {
         {provider === 'mio_local' && (
           <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-950/20 space-y-2">
             <div className="flex items-center gap-2 text-cyan-300 font-bold"><BrainCircuit size={14} /> MIO NATIVE LOCAL INTELLIGENCE</div>
-            <p className="text-gray-400 text-[10px] leading-relaxed">Inference stays on the configured local Ollama-compatible runtime. When live grounding is enabled, only bounded search queries are sent to the MIO research gateway; returned web content is treated as untrusted data and never as authorization.</p>
+            <p className="text-gray-400 text-[10px] leading-relaxed">Inference stays on a loopback-only local runtime. MIO Local can use Ollama, vLLM, or llama.cpp server. When live grounding is enabled, only bounded search queries are sent to the MIO research gateway; returned web content is treated as untrusted data and never as authorization.</p>
           </div>
         )}
 
@@ -130,7 +145,7 @@ export const SettingsView: React.FC = () => {
               type="text"
               value={model}
               onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })}
-              placeholder={cloudConfig?.placeholder ?? (provider === 'mio_local' ? 'e.g. qwen3:8b' : 'e.g. llama3.2')}
+              placeholder={cloudConfig?.placeholder ?? (provider === 'mio_local' ? 'e.g. qwen3:8b or configured server model alias' : 'e.g. llama3.2')}
               className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs"
             />
           </div>
@@ -139,8 +154,17 @@ export const SettingsView: React.FC = () => {
         {provider === 'mio_local' && (
           <div className="space-y-3 rounded-lg border border-gray-800 bg-[#111726] p-3">
             <div className="space-y-1">
-              <span className="text-gray-400 text-[10px] flex items-center gap-1"><Server size={11} /> MIO LOCAL INFERENCE ENDPOINT</span>
+              <span className="text-gray-400 text-[10px] block">LOCAL INFERENCE BACKEND</span>
+              <select value={mioLocalBackend} onChange={(e) => handleLocalBackendChange(e.target.value as LocalInferenceBackendId)} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
+                {(Object.keys(LOCAL_BACKEND_CONFIG) as LocalInferenceBackendId[]).map((backend) => (
+                  <option key={backend} value={backend}>{LOCAL_BACKEND_CONFIG[backend].label} — {LOCAL_BACKEND_CONFIG[backend].detail}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <span className="text-gray-400 text-[10px] flex items-center gap-1"><Server size={11} /> MIO LOCAL {LOCAL_BACKEND_CONFIG[mioLocalBackend].label.toUpperCase()} ENDPOINT</span>
               <input type="text" value={mioLocalEndpoint} onChange={(e) => updateRouter({ mioLocalEndpoint: e.target.value })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+              <p className="text-[10px] text-gray-500">Loopback endpoints only. Default: {LOCAL_BACKEND_CONFIG[mioLocalBackend].endpoint}</p>
             </div>
             <div className="space-y-1">
               <span className="text-gray-400 text-[10px] flex items-center gap-1"><Search size={11} /> MIO RESEARCH GATEWAY</span>
@@ -182,6 +206,8 @@ export const SettingsView: React.FC = () => {
           {readiness && <div className={`rounded border px-3 py-2 text-[10px] ${readiness.ready && readiness.status === 'READY' ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300' : readiness.status === 'LOCAL_ONLY' ? 'border-amber-500/40 bg-amber-950/20 text-amber-300' : 'border-red-500/40 bg-red-950/20 text-red-300'}`}><strong>{readiness.status}</strong> — {readiness.detail}</div>}
         </div>
       </div>
+
+      <PromotedModelPanel />
 
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
         <span className="text-gray-300 font-bold flex items-center gap-2"><Cpu size={14} className="text-cyan-400" /> RESOURCE LIMITS &amp; QUOTA GUARDS</span>

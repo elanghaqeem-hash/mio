@@ -75,6 +75,7 @@ export class CapabilityRegistry {
 
 export interface CapabilityRegistryOptions {
   desktopWorkspaceBridge?: boolean;
+  desktopBrowserBridge?: boolean;
 }
 
 export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptions = {}): CapabilityRegistry {
@@ -146,6 +147,22 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'PATH'],
     timeoutMs: 10000,
   });
+
+  const browserAvailability = options.desktopBrowserBridge ? 'AVAILABLE' : 'UNAVAILABLE';
+  registry.register({
+    id: 'service.desktop.browser.read-page',
+    kind: 'SERVICE',
+    description: 'Navigate an HTTPS page in the sandboxed desktop Chromium runtime and return bounded visible text as untrusted external data.',
+    ownerLayer: 'SERVICE',
+    modes: ['CHAT', 'RESEARCH'],
+    riskLevel: 'HIGH',
+    permissionLevel: 'L4_EXECUTE',
+    availability: browserAvailability,
+    networkAccess: true,
+    scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'NETWORK_ORIGIN'],
+    timeoutMs: 20000,
+  });
+
   registry.register({
     id: 'service.filesystem',
     kind: 'SERVICE',
@@ -176,7 +193,7 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
 }
 
 export function createDesktopCapabilityRegistry(): CapabilityRegistry {
-  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true });
+  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true, desktopBrowserBridge: true });
 }
 
 export const defaultCapabilityRegistry = createDefaultCapabilityRegistry();

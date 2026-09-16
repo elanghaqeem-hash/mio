@@ -2,7 +2,7 @@ import { ModelRouter } from '../agents/ModelRouter';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import { StorageProvider } from '../storage/StorageProvider';
 import { AutonomyLevel, NetworkState } from '../types/core';
-import { ModelProviderId, ModelRouterConfig } from '../types/models';
+import { LocalInferenceBackendId, ModelProviderId, ModelRouterConfig } from '../types/models';
 
 export interface MioSystemPreferences {
   autonomyLevel: AutonomyLevel;
@@ -14,6 +14,7 @@ const STORAGE_KEY = 'system-preferences-v1';
 const AUTONOMY_LEVELS: AutonomyLevel[] = ['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'];
 const NETWORK_STATES: NetworkState[] = ['ONLINE', 'OFFLINE'];
 const PROVIDERS: ModelProviderId[] = ['mio_local', 'local_heuristic', 'openrouter', 'openai', 'gemini', 'claude', 'ollama'];
+const LOCAL_BACKENDS: LocalInferenceBackendId[] = ['ollama', 'vllm', 'llamacpp'];
 
 const defaults = (): MioSystemPreferences => ({
   autonomyLevel: 'ASSISTIVE',
@@ -22,6 +23,7 @@ const defaults = (): MioSystemPreferences => ({
     provider: 'local_heuristic',
     proxyEndpoint: '/api/ai/generate',
     ollamaEndpoint: 'http://127.0.0.1:11434',
+    mioLocalBackend: 'ollama',
     mioLocalEndpoint: 'http://127.0.0.1:11434',
     researchEndpoint: '/api/research',
     allowOfflineFallback: false,
@@ -53,6 +55,9 @@ function normalize(value: unknown): MioSystemPreferences {
         : fallback.modelRouter.provider,
       proxyEndpoint: optionalText(router.proxyEndpoint) ?? fallback.modelRouter.proxyEndpoint,
       ollamaEndpoint: optionalText(router.ollamaEndpoint) ?? fallback.modelRouter.ollamaEndpoint,
+      mioLocalBackend: LOCAL_BACKENDS.includes(router.mioLocalBackend as LocalInferenceBackendId)
+        ? router.mioLocalBackend as LocalInferenceBackendId
+        : fallback.modelRouter.mioLocalBackend,
       mioLocalEndpoint: optionalText(router.mioLocalEndpoint) ?? fallback.modelRouter.mioLocalEndpoint,
       researchEndpoint: optionalText(router.researchEndpoint) ?? fallback.modelRouter.researchEndpoint,
       model: optionalText(router.model),

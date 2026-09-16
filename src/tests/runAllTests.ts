@@ -3,8 +3,10 @@ import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
 import { runMioLocalProviderTests } from './mioLocalProviderTests';
+import { runLocalInferenceBackendTests } from './localInferenceBackendTests';
 import { runTrainingFoundationTests } from './trainingFoundationTests';
 import { runModelPromotionTests } from './modelPromotionTests';
+import { runPromotedModelActivationTests } from './promotedModelActivationTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
 import { runContextContinuityTests } from './contextContinuityTests';
@@ -16,6 +18,7 @@ import { runResourceGovernanceTests } from './resourceGovernanceTests';
 import { runScopedAuthorizationTests } from './scopedAuthorizationTests';
 import { runCapabilityGatewayTests } from './capabilityGatewayTests';
 import { runDesktopWorkspaceBridgeTests } from './desktopWorkspaceBridgeTests';
+import { runDesktopBrowserBridgeTests } from './desktopBrowserBridgeTests';
 import { runKnowledgeIngestionTests } from './knowledgeIngestionTests';
 import { runProjectKnowledgeIndexTests } from './projectKnowledgeIndexTests';
 import { runKnowledgeGovernanceWorkflowTests } from './knowledgeGovernanceWorkflowTests';
@@ -37,6 +40,7 @@ import { runCreativePhotoWorkspaceTests } from './creativePhotoWorkspaceTests';
 import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTests';
 import { runCreativeAudioWorkspaceTests } from './creativeAudioWorkspaceTests';
 import { runCreativeWorkspaceIntegrationTests } from './creativeWorkspaceIntegrationTests';
+import { runCreativeEngine18Tests } from './creativeEngine18Tests';
 
 const runners = [
   runMioTestSuite,
@@ -44,8 +48,10 @@ const runners = [
   runToolRouterTests,
   runModelRouterTests,
   runMioLocalProviderTests,
+  runLocalInferenceBackendTests,
   runTrainingFoundationTests,
   runModelPromotionTests,
+  runPromotedModelActivationTests,
   runAiProxyTests,
   runResearchProxyTests,
   runContextContinuityTests,
@@ -57,6 +63,7 @@ const runners = [
   runScopedAuthorizationTests,
   runCapabilityGatewayTests,
   runDesktopWorkspaceBridgeTests,
+  runDesktopBrowserBridgeTests,
   runKnowledgeIngestionTests,
   runProjectKnowledgeIndexTests,
   runKnowledgeGovernanceWorkflowTests,
@@ -78,6 +85,7 @@ const runners = [
   runCreativeMotion2DWorkspaceTests,
   runCreativeAudioWorkspaceTests,
   runCreativeWorkspaceIntegrationTests,
+  runCreativeEngine18Tests,
 ];
 
 async function main(): Promise<void> {
