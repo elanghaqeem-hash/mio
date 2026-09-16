@@ -1,0 +1,40 @@
+name: MIO Training Runner Contract
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate-training-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile governed training runners
+        run: |
+          python -m py_compile training/train_mio_lora.py training/sft_lora.py
+
+      - name: Run standard-library training runner self-test
+        run: python training/train_mio_lora.py --self-test
+
+      - name: Confirm training dependencies stay isolated
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          package = Path('package.json').read_text(encoding='utf-8')
+          forbidden = ['torch==', 'transformers==', 'bitsandbytes==', 'peft==', 'trl==']
+          if any(item in package for item in forbidden):
+              raise SystemExit('ML training dependency leaked into package.json')
+          print('Training dependencies remain isolated from the Mio JS runtime.')
+          PY
