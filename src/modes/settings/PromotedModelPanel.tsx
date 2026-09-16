@@ -37,7 +37,11 @@ export const PromotedModelPanel: React.FC = () => {
         backend: current.mioLocalBackend ?? 'ollama',
         endpoint: current.mioLocalEndpoint,
       });
-      setMessage(`Activated ${result.manifest.displayName} through ${result.backend}: ${result.readinessDetail}${result.integrityEvidenceId ? ` Integrity evidence: ${result.integrityEvidenceId}.` : ''}`);
+      const evidence = [
+        result.integrityEvidenceId ? `Integrity evidence: ${result.integrityEvidenceId}.` : '',
+        result.provenanceEvidenceId ? `Signed provenance: ${result.provenanceEvidenceId}.` : '',
+      ].filter(Boolean).join(' ');
+      setMessage(`Activated ${result.manifest.displayName} through ${result.backend}: ${result.readinessDetail}${evidence ? ` ${evidence}` : ''}`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Promoted model activation failed');
@@ -68,7 +72,7 @@ export const PromotedModelPanel: React.FC = () => {
         </div>
 
         <p className="text-gray-500 text-[10px] leading-relaxed">
-          Only PROMOTED model manifests can be activated. Governed adapter candidates require a fresh post-promotion byte-integrity MATCH plus local runtime readiness before MIO changes the active local model. Promotion and activation remain separate explicit actions.
+          Only PROMOTED model manifests can be activated. Governed adapter candidates require a fresh post-promotion byte-integrity MATCH plus local runtime readiness. If signed provenance was bound at promotion, its exact evidence and current signer trust are also revalidated before MIO changes the active local model. Promotion and activation remain separate explicit actions.
         </p>
 
         <div className={`rounded-lg border px-3 py-2 text-[10px] ${stateClass}`}>
@@ -96,7 +100,12 @@ export const PromotedModelPanel: React.FC = () => {
                     <div className="font-bold text-gray-200 truncate">{manifest.displayName}</div>
                     <div className="text-[10px] text-gray-500 mt-1 truncate">{manifest.runtimeModel} · base {manifest.baseModel} · {manifest.trainingMethod}</div>
                     <div className="text-[10px] text-gray-600 mt-1">Dataset {manifest.dataset.id} · {manifest.dataset.exampleCount} examples</div>
-                    {manifest.promotion && <div className="text-[9px] text-gray-600 mt-1">Promoted by {manifest.promotion.promoter} · benchmark {manifest.promotion.benchmarkReportId}</div>}
+                    {manifest.promotion && (
+                      <div className="text-[9px] text-gray-600 mt-1">
+                        Promoted by {manifest.promotion.promoter} · benchmark {manifest.promotion.benchmarkReportId}
+                        {manifest.promotion.provenanceEvidenceId ? ` · signed provenance ${manifest.promotion.provenanceEvidenceId}` : ''}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => void activate(manifest)}
