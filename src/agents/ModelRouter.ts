@@ -1,5 +1,6 @@
 import { eventBus } from '../core/EventBus';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
+import { MioLocalProvider } from '../intelligence/model/MioLocalProvider';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
 import { taskRuntime } from '../orchestrator/TaskRuntime';
@@ -16,6 +17,8 @@ export class ModelRouter {
     provider: 'local_heuristic',
     proxyEndpoint: '/api/ai/generate',
     ollamaEndpoint: 'http://127.0.0.1:11434',
+    mioLocalEndpoint: 'http://127.0.0.1:11434',
+    researchEndpoint: '/api/research',
     allowOfflineFallback: true,
     enableWebSearch: false,
   };
@@ -32,6 +35,8 @@ export class ModelRouter {
       || next.model !== this.config.model
       || next.proxyEndpoint !== this.config.proxyEndpoint
       || next.ollamaEndpoint !== this.config.ollamaEndpoint
+      || next.mioLocalEndpoint !== this.config.mioLocalEndpoint
+      || next.researchEndpoint !== this.config.researchEndpoint
       || next.enableWebSearch !== this.config.enableWebSearch;
     if (authorizationBoundaryChanged) PermissionEngine.revokeSessionGrants('Model routing authorization boundary changed');
     if (authorizationBoundaryChanged) this.readinessCache = undefined;
@@ -49,16 +54,23 @@ export class ModelRouter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      if (provider === 'ollama') {
-        const endpoint = (this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
+      if (provider === 'ollama' || provider === 'mio_local') {
+        const endpoint = (provider === 'mio_local'
+          ? this.config.mioLocalEndpoint ?? 'http://127.0.0.1:11434'
+          : this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
         const response = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
-        if (!response.ok) throw new Error(`Ollama readiness returned HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} readiness returned HTTP ${response.status}`);
         const payload = await response.json().catch(() => ({})) as { models?: Array<{ name?: string }> };
-        const model = this.config.model ?? 'llama3.2';
+        const model = this.config.model ?? (provider === 'mio_local' ? 'qwen3:8b' : 'llama3.2');
         const installed = payload.models?.some((item) => item.name === model || item.name?.startsWith(`${model}:`)) === true;
+        const webDetail = provider === 'mio_local' && this.config.enableWebSearch
+          ? this.networkState === 'ONLINE'
+            ? ' Governed web grounding is enabled through the MIO research gateway.'
+            : ' Web grounding is configured but suspended while network mode is OFFLINE.'
+          : '';
         return installed
-          ? { provider, ready: true, status: 'READY', detail: `Ollama endpoint is reachable and model '${model}' is installed.` }
-          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `Ollama is reachable, but model '${model}' is not installed. Pull it in Ollama or select an installed model.` };
+          ? { provider, ready: true, status: 'READY', detail: `${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} endpoint is reachable and model '${model}' is installed.${webDetail}` }
+          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} is reachable, but model '${model}' is not installed. Pull it in the local runtime or select an installed model.` };
       }
 
       if (this.networkState !== 'ONLINE') {
@@ -143,7 +155,9 @@ export class ModelRouter {
       return this.executeProvider(new LocalHeuristicProvider(), preparedRequest, timeoutMs);
     }
 
-    const remoteAccess = provider.requiresNetwork || provider.requiresProxy;
+    const localWebAccess = provider.id === 'mio_local' && this.config.enableWebSearch && this.networkState === 'ONLINE';
+    const remoteModelAccess = provider.requiresNetwork || provider.requiresProxy;
+    const remoteAccess = remoteModelAccess || localWebAccess;
     if (taskId && remoteAccess) {
       const networkPreflight = resourceGovernor.authorize(taskId, 'NETWORK_CALL', mode);
       if (!networkPreflight.allowed) throw new Error(networkPreflight.reason ?? 'Resource budget blocked remote model access');
@@ -157,20 +171,28 @@ export class ModelRouter {
 
       const networkOrigin = this.resolveProviderOrigin(provider);
       const sourceCount = request.applicationContext?.sources.length ?? 0;
+      const target = localWebAccess ? 'MIO Local Web Grounding' : 'MIO AI Inference';
+      const resourceId = localWebAccess ? 'research-provider:mio_local' : `model-provider:${provider.id}`;
+      const changes = localWebAccess
+        ? ['Allow the local MIO model to submit bounded search queries to the configured MIO research gateway. Local inference remains on-device.']
+        : [sourceCount > 0
+          ? `Send the current AI request plus ${sourceCount} selected project knowledge source(s) to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`
+          : `Send the current AI request to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`];
+      const risks = localWebAccess
+        ? ['Search terms leave the local runtime; returned web content is untrusted external data and may be malicious or inaccurate']
+        : [sourceCount > 0
+          ? 'Prompt and selected project context leave the local runtime and are processed by an external AI provider'
+          : 'Prompt content leaves the local browser and is processed by an external AI provider'];
       remoteGrant = await PermissionEngine.requestScopedPermission({
         action: `MODEL_PROVIDER:${provider.id}`,
-        target: 'MIO AI Inference',
+        target,
         level: 'L4_EXECUTE',
-        changes: [sourceCount > 0
-          ? `Send the current AI request plus ${sourceCount} selected project knowledge source(s) to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`
-          : `Send the current AI request to the configured remote model provider through the MIO secure proxy${this.config.enableWebSearch ? ' with live web search enabled' : ''}`],
-        risks: [sourceCount > 0
-          ? 'Prompt and selected project context leave the local runtime and are processed by an external AI provider'
-          : 'Prompt content leaves the local browser and is processed by an external AI provider'],
-        expectedResult: `Generate a response using ${provider.displayName}`,
+        changes,
+        risks,
+        expectedResult: localWebAccess ? 'Ground the local MIO response with live research evidence' : `Generate a response using ${provider.displayName}`,
         taskId,
         projectId,
-        resourceId: `model-provider:${provider.id}`,
+        resourceId,
         networkAccess: true,
         networkOrigin,
         ttlMs: Math.max(15_000, Math.min(timeoutMs + 10_000, 120_000)),
@@ -187,8 +209,8 @@ export class ModelRouter {
         taskId: taskId ?? remoteGrant.scope.taskId,
         projectId,
         action: `MODEL_PROVIDER:${provider.id}`,
-        target: 'MIO AI Inference',
-        resourceId: `model-provider:${provider.id}`,
+        target,
+        resourceId,
         networkOrigin,
         networkAllowed: true,
       };
@@ -252,6 +274,10 @@ export class ModelRouter {
     if (provider.id === 'ollama') {
       try { return new URL(this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').origin; } catch { return 'http://127.0.0.1:11434'; }
     }
+    if (provider.id === 'mio_local') {
+      try { return new URL(this.config.researchEndpoint ?? '/api/research', typeof window !== 'undefined' ? window.location.origin : 'http://localhost').origin; }
+      catch { return 'same-origin-research'; }
+    }
     try { return new URL(this.config.proxyEndpoint ?? '/api/ai/generate', typeof window !== 'undefined' ? window.location.origin : 'http://localhost').origin; }
     catch { return 'same-origin-proxy'; }
   }
@@ -259,6 +285,12 @@ export class ModelRouter {
   private static createProvider(): ModelProvider {
     const config = this.config;
     if (config.provider === 'local_heuristic') return new LocalHeuristicProvider();
+    if (config.provider === 'mio_local') return new MioLocalProvider({
+      endpoint: config.mioLocalEndpoint,
+      model: config.model,
+      enableWebSearch: config.enableWebSearch && this.networkState === 'ONLINE',
+      researchEndpoint: config.researchEndpoint,
+    });
     if (config.provider === 'ollama') return new OllamaProvider(config.ollamaEndpoint, config.model);
     return new SecureProxyModelProvider({ provider: config.provider, endpoint: config.proxyEndpoint ?? '/api/ai/generate', model: config.model, enableWebSearch: config.enableWebSearch });
   }

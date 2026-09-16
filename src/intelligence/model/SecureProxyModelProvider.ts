@@ -1,7 +1,9 @@
 import { ModelProvider, ModelProviderId, ModelRequest, ModelResponse } from '../../types/models';
 
+type CloudModelProviderId = Exclude<ModelProviderId, 'mio_local' | 'local_heuristic' | 'ollama'>;
+
 interface ProxyProviderOptions {
-  provider: Exclude<ModelProviderId, 'local_heuristic' | 'ollama'>;
+  provider: CloudModelProviderId;
   endpoint: string;
   model?: string;
   enableWebSearch?: boolean;
@@ -10,7 +12,7 @@ interface ProxyProviderOptions {
 export class SecureProxyModelProvider implements ModelProvider {
   public readonly requiresNetwork = true;
   public readonly requiresProxy = true;
-  public readonly id: Exclude<ModelProviderId, 'local_heuristic' | 'ollama'>;
+  public readonly id: CloudModelProviderId;
   public readonly displayName: string;
   private readonly endpoint: string;
   private readonly model?: string;

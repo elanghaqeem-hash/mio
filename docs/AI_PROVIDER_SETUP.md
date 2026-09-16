@@ -9,18 +9,26 @@ MIO Browser -> ModelRouter -> L4 Permission Gate -> same-origin /api/ai/generate
             -> server environment secret -> selected provider -> normalized ModelResponse
 ```
 
+MIO Local uses a different boundary: inference stays on the configured local Ollama-compatible runtime. Optional live research is a separate, governed network capability:
+
+```text
+MIO -> ModelRouter -> MIO Local Intelligence -> local /api/chat
+                    -> optional L4 gate -> /api/research -> external search sources
+```
+
 ## Supported providers
 
 Configure provider variables in the Cloudflare Pages environment, never in source code and never with a `VITE_` prefix.
 
 | Provider | Required secret | Optional server model | Native internet tool |
 | --- | --- | --- | --- |
+| MIO Local Intelligence | None | Local model name, default `qwen3:8b` | Governed MIO Research Proxy |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (defaults to `openrouter/free`) | Model-agnostic `web` plugin |
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` (defaults to `gpt-5.6-luna`) | Responses API `web_search` |
 | Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` (defaults to `gemini-3.6-flash`) | Google Search grounding |
 | Anthropic Claude | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (defaults to `claude-sonnet-5`) | Claude server-side web search |
 
-Each provider has a cost-conscious server default. The optional model variable or MIO Settings model field overrides that default. Secrets are never returned by the readiness endpoint.
+Each cloud provider has a cost-conscious server default. The optional model variable or MIO Settings model field overrides that default. Secrets are never returned by the readiness endpoint.
 
 OpenRouter requests use an ordered provider-side model list. MIO tries the selected `OPENROUTER_MODEL` first and automatically falls back to `openrouter/free` when that model is restricted, unavailable, rate-limited, or otherwise rejected. The normalized response reports the model OpenRouter actually used.
 
@@ -44,21 +52,44 @@ A successful provider readiness result is cached only in the current runtime whi
 
 The browser persists autonomy, network, provider, model, fallback, and web-search preferences in the controlled `settings` storage namespace. It never persists provider secrets.
 
+## MIO Local Intelligence
+
+Select `MIO Local Intelligence — native local model + governed tools` to use the native MIO local-provider layer. The first implementation uses an Ollama-compatible inference API so it can run today without coupling MIO permanently to Ollama internals.
+
+Default values:
+
+- Local inference endpoint: `http://127.0.0.1:11434`
+- Model: `qwen3:8b`
+- Research gateway: `/api/research`
+- Live web grounding: disabled until explicitly enabled
+
+Install or expose the selected model in the local runtime, then use `CHECK CONNECTION`. Readiness validates that the endpoint responds to `/api/tags` and that the selected model is installed.
+
+MIO Local remains usable in `OFFLINE MODE`. If web grounding is enabled in Settings but the network mode is OFFLINE, MIO suppresses the research capability and continues with local inference only. In `ONLINE MODE`, a model can request a bounded `web.search` tool call. MIO then obtains L4 authorization, sends only the bounded search query to the configured research gateway, labels returned evidence as `UNTRUSTED`, and returns the evidence to the local model for a grounded final answer.
+
+The local model never receives unrestricted network access. Search results are data, not instructions or permission. The initial agent loop permits at most two search rounds per model request before forcing a final answer.
+
+The current `/api/research` gateway supports Brave Search when `BRAVE_SEARCH_API_KEY` is configured and otherwise falls back to public Wikipedia Indonesia and Crossref sources. A future MIO Search/SearXNG adapter can use the same provider boundary without changing the local-model contract.
+
 ## Local Ollama
 
-Select `Ollama — local endpoint`, provide the endpoint and an installed model name (the default is `llama3.2`). `CHECK CONNECTION` validates both the endpoint and selected model. Ollama remains usable while MIO is in OFFLINE mode because the endpoint is local. Browser connectivity still depends on the local Ollama/CORS configuration.
+Select `Ollama — raw local endpoint`, provide the endpoint and an installed model name (the default is `llama3.2`). `CHECK CONNECTION` validates both the endpoint and selected model. Ollama remains usable while MIO is in OFFLINE mode because the endpoint is local. Browser connectivity still depends on the local Ollama/CORS configuration.
+
+Use raw Ollama when direct local inference is desired without the MIO-native bounded tool loop. Use MIO Local Intelligence when local inference should participate in MIO governance, web grounding, citations, and later native memory/tool extensions.
 
 ## Failure behavior
 
 - Missing secret: readiness and generation return an explicit, provider-specific configuration error. Every cloud provider has a default model, while invalid overrides remain visible as upstream errors.
 - Unsupported provider: the proxy rejects it before any upstream request.
 - Provider HTTP error: MIO identifies the failing provider and shows a bounded upstream detail. OpenRouter first attempts its compatible `openrouter/free` fallback before returning an error.
+- MIO Local endpoint/model unavailable: readiness reports the missing local model or unreachable endpoint; generation can use the local heuristic only when fallback is explicitly enabled.
+- MIO Local research failure: local inference continues, but the model is told not to claim that current facts were verified.
 - Malformed or empty response: MIO rejects it instead of presenting a fabricated answer.
 - Provider timeout: the request fails or uses the local heuristic only when the user explicitly enabled fallback.
-- Web search is reported as `USED` only when provider response metadata confirms execution.
+- Web search is reported as `USED` only when the relevant provider or MIO Local agent cycle actually attempts live grounding.
 - Provider citation metadata is normalized and rendered as clickable `WEB SOURCES` below the response.
 
-The local heuristic is orchestration intelligence, not a cloud language model. It remains clearly labelled whenever explicitly selected or used as fallback.
+The local heuristic is orchestration intelligence, not a language model. It remains clearly labelled whenever explicitly selected or used as fallback.
 
 ## Preview versus production
 
