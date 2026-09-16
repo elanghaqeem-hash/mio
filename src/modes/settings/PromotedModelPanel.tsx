@@ -37,7 +37,7 @@ export const PromotedModelPanel: React.FC = () => {
         backend: current.mioLocalBackend ?? 'ollama',
         endpoint: current.mioLocalEndpoint,
       });
-      setMessage(`Activated ${result.manifest.displayName} through ${result.backend}: ${result.readinessDetail}`);
+      setMessage(`Activated ${result.manifest.displayName} through ${result.backend}: ${result.readinessDetail}${result.integrityEvidenceId ? ` Integrity evidence: ${result.integrityEvidenceId}.` : ''}`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Promoted model activation failed');
@@ -48,9 +48,11 @@ export const PromotedModelPanel: React.FC = () => {
 
   const stateClass = status?.state === 'ACTIVE'
     ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300'
-    : status?.state === 'CONFIGURATION_DRIFT'
-      ? 'border-amber-500/40 bg-amber-950/20 text-amber-300'
-      : 'border-gray-700 bg-[#111726] text-gray-300';
+    : status?.state === 'INTEGRITY_BLOCKED'
+      ? 'border-red-500/40 bg-red-950/20 text-red-300'
+      : status?.state === 'CONFIGURATION_DRIFT'
+        ? 'border-amber-500/40 bg-amber-950/20 text-amber-300'
+        : 'border-gray-700 bg-[#111726] text-gray-300';
 
   return (
     <>
@@ -66,12 +68,12 @@ export const PromotedModelPanel: React.FC = () => {
         </div>
 
         <p className="text-gray-500 text-[10px] leading-relaxed">
-          Only model manifests already promoted through MIO governance and benchmark gates can be activated here. Activation verifies that the selected local backend is actually serving the promoted runtime model before changing MIO Local settings.
+          Only PROMOTED model manifests can be activated. Governed adapter candidates require a fresh post-promotion byte-integrity MATCH plus local runtime readiness before MIO changes the active local model. Promotion and activation remain separate explicit actions.
         </p>
 
         <div className={`rounded-lg border px-3 py-2 text-[10px] ${stateClass}`}>
           <div className="flex items-center gap-2 font-bold">
-            {status?.state === 'ACTIVE' ? <BadgeCheck size={13} /> : status?.state === 'CONFIGURATION_DRIFT' ? <AlertTriangle size={13} /> : <BrainCircuit size={13} />}
+            {status?.state === 'ACTIVE' ? <BadgeCheck size={13} /> : status?.state === 'CONFIGURATION_DRIFT' || status?.state === 'INTEGRITY_BLOCKED' ? <AlertTriangle size={13} /> : <BrainCircuit size={13} />}
             {status?.state ?? 'LOADING'}
           </div>
           <div className="mt-1 opacity-90">{status?.detail ?? 'Reading promoted model registry...'}</div>
@@ -94,6 +96,7 @@ export const PromotedModelPanel: React.FC = () => {
                     <div className="font-bold text-gray-200 truncate">{manifest.displayName}</div>
                     <div className="text-[10px] text-gray-500 mt-1 truncate">{manifest.runtimeModel} · base {manifest.baseModel} · {manifest.trainingMethod}</div>
                     <div className="text-[10px] text-gray-600 mt-1">Dataset {manifest.dataset.id} · {manifest.dataset.exampleCount} examples</div>
+                    {manifest.promotion && <div className="text-[9px] text-gray-600 mt-1">Promoted by {manifest.promotion.promoter} · benchmark {manifest.promotion.benchmarkReportId}</div>}
                   </div>
                   <button
                     onClick={() => void activate(manifest)}
