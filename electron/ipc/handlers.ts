@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'el
 import * as os from 'os';
 import { BrowserReadSandbox } from './browserReadSandbox';
 import { TrainingHandoffPackager, type PackageTrainingHandoffRequest } from './trainingHandoffPackager';
+import { TrainingHandoffReader, type ReadTrainingHandoffRequest } from './trainingHandoffReader';
 import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
 
@@ -26,6 +27,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
+  const trainingHandoffReader = new TrainingHandoffReader(workspaceSandbox, trainingJobManager, trainingHandoffPackager);
 
   const validateWorkspaceId = (workspaceId: unknown): workspaceId is string => {
     return typeof workspaceId === 'string' && workspaceId.length > 0 && workspaceId.length <= MAX_WORKSPACE_ID && /^ws_[a-zA-Z0-9-]+$/.test(workspaceId);
@@ -70,6 +72,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       && validPath(value.bundleRelativePath)
       && validPath(value.resultFileRelativePath)
       && validPath(value.handoffRelativePath);
+  };
+
+  const validateTrainingHandoffReadRequest = (request: unknown): request is ReadTrainingHandoffRequest => {
+    if (!request || typeof request !== 'object') return false;
+    const value = request as Partial<ReadTrainingHandoffRequest>;
+    return validateTrainingJobId(value.jobId) && validateWorkspaceId(value.workspaceId);
   };
 
   return {
@@ -233,6 +241,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       if (!validateTrainingJobId(jobId)) return { success: false, error: 'Invalid governed training job id' };
       const receipt = trainingHandoffPackager.getReceipt(jobId);
       return receipt ? { success: true, receipt } : { success: false, error: 'No TP-0.63 handoff packaging receipt exists for this job' };
+    },
+
+    handleReadTrainingHandoff: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateTrainingHandoffReadRequest(request)) return { success: false, error: 'Invalid governed training handoff read request' };
+      try {
+        return { success: true, result: await trainingHandoffReader.read(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
     },
 
     cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
