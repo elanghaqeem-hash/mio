@@ -14,8 +14,8 @@ The required governed flow is:
 4. Score factuality, instruction-following, safety, and tool-use where applicable.
 5. Set `trainingApproved` only after controlled review.
 6. Export a governed TP-0.46 bundle with `npm run training:export`.
-7. Verify the bundle with `training/train_mio_lora.py --dry-run`.
-8. Train LoRA/QLoRA in a dedicated Python/GPU environment.
+7. Verify the bundle with `training/train_mio_lora.py --dry-run` or TP-0.62 desktop `DRY_RUN`.
+8. Train LoRA/QLoRA in a dedicated Python/GPU environment, optionally through the TP-0.62 governed desktop runner.
 9. Package the verified bundle + runner result as a TP-0.58 `mio-training-handoff.json`.
 10. Import the handoff into Mio as an `EXPERIMENTAL` / `REGISTERED_UNEVALUATED` candidate.
 11. Fingerprint the explicitly authorized local adapter directory with TP-0.50.
@@ -103,6 +103,40 @@ nextRequiredGate: MioBench + ModelPromotionGate
 ```
 
 Training completion is therefore not a promotion signal.
+
+## Run TP-0.62 from Mio Desktop
+
+Mio Desktop can invoke the same TP-0.46 runner through **Settings → Governed Local Training Runner**. This is a fixed-entrypoint execution capability, not a terminal or generic process launcher.
+
+The desktop flow is:
+
+1. Authorize one local workspace directory through the native directory picker.
+2. Enter the governed bundle path relative to that workspace.
+3. Run `DRY_RUN` first to verify the bundle.
+4. For real training, create an empty output directory inside the authorized workspace but outside the bundle directory.
+5. Select only one of the whitelisted launchers: `python`, `python3`, or Windows `py -3`.
+6. Choose **START L4 TRAINING** and approve the scoped execution request.
+7. Monitor bounded stdout/stderr tails; the Settings panel can recover an active job after navigation/remount.
+8. Use **CANCEL** or global **STOP MIO** at any time; cancellation is intentionally available without another execution grant.
+9. After success, use the reported `mio-training-result.json` relative path as the result input for TP-0.58 packaging.
+
+Security boundaries:
+
+- the renderer cannot provide a shell string, executable path, script path, arbitrary CLI flag, or arbitrary environment variables;
+- Electron chooses the bundled `training/train_mio_lora.py` itself;
+- subprocess execution uses `shell: false`;
+- the runner receives a minimized environment plus `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, and `HF_DATASETS_OFFLINE=1`;
+- the capability declares `networkAccess: false`;
+- output must already exist and be empty; `--overwrite` is never exposed;
+- output may not be inside the governed bundle directory;
+- only one governed training job can run at a time;
+- workspace revocation requests cancel an active job first instead of creating a false impression that a running process has lost filesystem authority.
+
+These controls provide application-level offline minimization. They are not an operating-system firewall. For high-assurance isolated training, also isolate the workstation/container at the OS/network layer.
+
+The Electron package carries the fixed runner as an `extraResource`; the Training Runner Contract CI verifies this packaging boundary plus the no-shell/offline markers.
+
+TP-0.62 never creates a candidate or advances a lifecycle. A successful `TRAIN` still ends at `TRAINED_NOT_EVALUATED` and must continue through TP-0.58 handoff, TP-0.50/0.59 integrity binding, MioBench, review, promotion, post-promotion integrity, and activation.
 
 ## Package a TP-0.58 training-run handoff
 

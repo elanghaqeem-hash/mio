@@ -6,6 +6,7 @@ import { setupIpcHandlers } from './ipc/handlers';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let cancelActiveTrainingJobs: (() => void) | null = null;
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -60,6 +61,7 @@ function createWindow(): BrowserWindow {
   });
 
   const handlers = setupIpcHandlers(mainWindow);
+  cancelActiveTrainingJobs = handlers.cancelAllTrainingJobs;
   const assertTrustedSender = (event: IpcMainInvokeEvent) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
       throw new Error('Rejected IPC invocation from untrusted renderer frame');
@@ -93,6 +95,10 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE, (event, args) => handlers.handleListWorkspace(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, (event, args) => handlers.handleHashWorkspaceTree(event, args[0]));
   secureHandle(IPC_CHANNELS.BROWSER_READ_PAGE, (event, args) => handlers.handleBrowserReadPage(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_START_JOB, (event, args) => handlers.handleStartTrainingJob(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_GET_JOB, (event, args) => handlers.handleGetTrainingJob(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_LIST_JOBS, () => handlers.handleListTrainingJobs());
+  secureHandle(IPC_CHANNELS.TRAINING_CANCEL_JOB, (event, args) => handlers.handleCancelTrainingJob(event, args[0]));
 
   const distHtmlPath = path.join(__dirname, '../dist/index.html');
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
@@ -119,6 +125,7 @@ function createWindow(): BrowserWindow {
 
   mainWindow.on('closed', () => {
     handlers.revokeAllWorkspaceAuthority();
+    cancelActiveTrainingJobs = null;
     mainWindow = null;
   });
 
@@ -143,6 +150,7 @@ function createTray() {
     {
       label: 'STOP MIO (Emergency Interrupt)',
       click: () => {
+        cancelActiveTrainingJobs?.();
         if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', 'Triggered from System Tray');
       },
     },
@@ -189,6 +197,8 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+app.on('before-quit', () => cancelActiveTrainingJobs?.());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

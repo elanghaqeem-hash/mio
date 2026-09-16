@@ -55,6 +55,13 @@
     "productName": "Mio V2",
     "directories": { "output": "release" },
     "files": ["dist/**/*", "dist-electron/**/*"],
+    "extraResources": [
+      {
+        "from": "training",
+        "to": "training",
+        "filter": ["train_mio_lora.py", "sft_lora.py", "requirements.txt", "configs/**/*"]
+      }
+    ],
     "win": { "target": ["nsis", "portable"] },
     "nsis": {
       "oneClick": false,

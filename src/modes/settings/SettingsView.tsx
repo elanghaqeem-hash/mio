@@ -4,6 +4,7 @@ import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+import { GovernedTrainingRunnerPanel } from './GovernedTrainingRunnerPanel';
 import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
 import { ModelProvenancePanel } from './ModelProvenancePanel';
 import { SignerAuditChainStatusPanel } from './SignerAuditChainStatusPanel';
@@ -192,6 +193,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      <GovernedTrainingRunnerPanel />
       <TrainingRunHandoffPanel />
       <TrainingArtifactBindingPanel />
       <TrainingCandidateEvidencePackagePanel />

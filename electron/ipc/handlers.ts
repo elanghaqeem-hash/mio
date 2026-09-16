@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'electron';
 import * as os from 'os';
 import { BrowserReadSandbox } from './browserReadSandbox';
+import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
 
 export interface WorkspacePathRequest {
@@ -16,10 +17,12 @@ const MAX_NOTIFICATION_TEXT = 2000;
 const MAX_STOP_REASON = 500;
 const MAX_WORKSPACE_ID = 128;
 const MAX_BROWSER_URL = 2048;
+const MAX_TRAINING_JOB_ID = 256;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
   const browserReadSandbox = new BrowserReadSandbox();
+  const trainingJobManager = new TrainingJobManager(workspaceSandbox);
 
   const validateWorkspaceId = (workspaceId: unknown): workspaceId is string => {
     return typeof workspaceId === 'string' && workspaceId.length > 0 && workspaceId.length <= MAX_WORKSPACE_ID && /^ws_[a-zA-Z0-9-]+$/.test(workspaceId);
@@ -35,6 +38,24 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     if (!request || typeof request !== 'object') return false;
     const value = request as Partial<BrowserReadPageRequest>;
     return typeof value.url === 'string' && value.url.trim().length > 0 && value.url.length <= MAX_BROWSER_URL;
+  };
+
+  const validateTrainingStartRequest = (request: unknown): request is StartTrainingJobRequest => {
+    if (!request || typeof request !== 'object') return false;
+    const value = request as Partial<StartTrainingJobRequest>;
+    return validateWorkspaceId(value.workspaceId)
+      && typeof value.bundleRelativePath === 'string'
+      && value.bundleRelativePath.length > 0
+      && value.bundleRelativePath.length <= 4096
+      && (value.outputRelativePath === undefined || (typeof value.outputRelativePath === 'string' && value.outputRelativePath.length > 0 && value.outputRelativePath.length <= 4096))
+      && (value.pythonRuntime === 'python' || value.pythonRuntime === 'python3' || value.pythonRuntime === 'py')
+      && (value.mode === 'DRY_RUN' || value.mode === 'TRAIN')
+      && (value.mode !== 'DRY_RUN' || value.outputRelativePath === undefined)
+      && (value.mode !== 'TRAIN' || typeof value.outputRelativePath === 'string');
+  };
+
+  const validateTrainingJobId = (jobId: unknown): jobId is string => {
+    return typeof jobId === 'string' && jobId.length > 0 && jobId.length <= MAX_TRAINING_JOB_ID && /^training-job:[0-9]+:[a-f0-9-]+$/i.test(jobId);
   };
 
   return {
@@ -79,6 +100,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     handleEmergencyStop: (_event: IpcMainInvokeEvent, reason: unknown) => {
       const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
       console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
+      trainingJobManager.cancelAll();
       if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', safeReason);
       return { success: true };
     },
@@ -99,6 +121,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     handleRevokeWorkspace: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
       if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace authority id' };
+      if (trainingJobManager.hasRunningForWorkspace(workspaceId)) {
+        trainingJobManager.cancelWorkspace(workspaceId);
+        return { success: false, error: 'Active governed training used this workspace. Cancellation was requested; retry revocation after the job reaches a terminal state.' };
+      }
       return { success: workspaceSandbox.revoke(workspaceId) };
     },
 
@@ -154,6 +180,37 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
-    revokeAllWorkspaceAuthority: () => workspaceSandbox.revokeAll(),
+    handleStartTrainingJob: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateTrainingStartRequest(request)) return { success: false, error: 'Invalid governed training job request' };
+      try {
+        return { success: true, job: await trainingJobManager.start(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
+    handleGetTrainingJob: (_event: IpcMainInvokeEvent, jobId: unknown) => {
+      if (!validateTrainingJobId(jobId)) return { success: false, error: 'Invalid governed training job id' };
+      const job = trainingJobManager.get(jobId);
+      return job ? { success: true, job } : { success: false, error: 'Governed training job was not found' };
+    },
+
+    handleListTrainingJobs: () => ({ success: true, jobs: trainingJobManager.list(20) }),
+
+    handleCancelTrainingJob: (_event: IpcMainInvokeEvent, jobId: unknown) => {
+      if (!validateTrainingJobId(jobId)) return { success: false, error: 'Invalid governed training job id' };
+      try {
+        return { success: true, job: trainingJobManager.cancel(jobId) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
+    cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
+
+    revokeAllWorkspaceAuthority: () => {
+      trainingJobManager.forceStopAll();
+      workspaceSandbox.revokeAll();
+    },
   };
 }

@@ -77,6 +77,7 @@ export interface CapabilityRegistryOptions {
   desktopWorkspaceBridge?: boolean;
   desktopBrowserBridge?: boolean;
   desktopAdapterIntegrityBridge?: boolean;
+  desktopTrainingBridge?: boolean;
 }
 
 export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptions = {}): CapabilityRegistry {
@@ -164,6 +165,21 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     timeoutMs: 120000,
   });
 
+  const trainingAvailability = options.desktopTrainingBridge ? 'AVAILABLE' : 'UNAVAILABLE';
+  registry.register({
+    id: 'service.desktop.training.start',
+    kind: 'SERVICE',
+    description: 'Start the fixed bundled TP-0.46 local training runner against a governed bundle inside an explicitly authorized desktop workspace. The runner is launched without a shell and does not grant arbitrary command execution.',
+    ownerLayer: 'SERVICE',
+    modes: ['SETTINGS'],
+    riskLevel: 'HIGH',
+    permissionLevel: 'L4_EXECUTE',
+    availability: trainingAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'RESOURCE', 'PATH'],
+    timeoutMs: 15000,
+  });
+
   const browserAvailability = options.desktopBrowserBridge ? 'AVAILABLE' : 'UNAVAILABLE';
   registry.register({
     id: 'service.desktop.browser.read-page',
@@ -209,7 +225,12 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
 }
 
 export function createDesktopCapabilityRegistry(): CapabilityRegistry {
-  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true, desktopBrowserBridge: true, desktopAdapterIntegrityBridge: true });
+  return createDefaultCapabilityRegistry({
+    desktopWorkspaceBridge: true,
+    desktopBrowserBridge: true,
+    desktopAdapterIntegrityBridge: true,
+    desktopTrainingBridge: true,
+  });
 }
 
 export const defaultCapabilityRegistry = createDefaultCapabilityRegistry();
