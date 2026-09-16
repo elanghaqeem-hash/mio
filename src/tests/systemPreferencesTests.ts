@@ -27,6 +27,7 @@ export async function runSystemPreferencesTests(): Promise<{ passed: number; tot
     mioLocalEndpoint: 'http://127.0.0.1:8000',
     allowOfflineFallback: false,
     enableWebSearch: true,
+    enableBrowserRead: true,
   });
 
   systemPreferences.setStorageProvider(storage);
@@ -38,7 +39,12 @@ export async function runSystemPreferencesTests(): Promise<{ passed: number; tot
   assert(restored.modelRouter.mioLocalBackend === 'vllm' && restored.modelRouter.mioLocalEndpoint === 'http://127.0.0.1:8000', 'MIO Local backend and endpoint survive runtime reinitialization');
   assert(restored.modelRouter.allowOfflineFallback === false, 'Online provider does not silently opt into local fallback');
   assert(restored.modelRouter.enableWebSearch === true, 'Live web-search preference is restored');
-  assert(ModelRouter.getNetworkState() === 'ONLINE' && ModelRouter.getConfig().provider === 'mio_local' && ModelRouter.getConfig().mioLocalBackend === 'vllm', 'Restored preferences are applied to ModelRouter before use');
+  assert(restored.modelRouter.enableBrowserRead === true, 'Governed desktop browser-read preference is restored');
+  assert(ModelRouter.getNetworkState() === 'ONLINE'
+    && ModelRouter.getConfig().provider === 'mio_local'
+    && ModelRouter.getConfig().mioLocalBackend === 'vllm'
+    && ModelRouter.getConfig().enableBrowserRead === true,
+  'Restored preferences including browser capability are applied to ModelRouter before use');
 
   return { passed, total };
 }
