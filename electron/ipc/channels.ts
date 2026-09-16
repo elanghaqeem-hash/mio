@@ -30,6 +30,7 @@ export const IPC_CHANNELS = {
   // Governed fixed-entrypoint local training job bridge.
   TRAINING_START_JOB: 'mio:training:startJob',
   TRAINING_GET_JOB: 'mio:training:getJob',
+  TRAINING_LIST_JOBS: 'mio:training:listJobs',
   TRAINING_CANCEL_JOB: 'mio:training:cancelJob',
 } as const;
 
