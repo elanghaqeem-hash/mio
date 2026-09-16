@@ -1,6 +1,7 @@
 import { ResultValidator } from '../security/ResultValidator';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { eventBus } from '../core/EventBus';
+import type { MioSystemMode } from '../types/core';
 
 export class ExportManager {
   /**
@@ -83,7 +84,7 @@ export class ExportManager {
   /**
    * Export Canvas Graphic as PNG
    */
-  public static async exportCanvasAsPNG(canvas: HTMLCanvasElement, filename: string = 'graphic_composition.png'): Promise<boolean> {
+  public static async exportCanvasAsPNG(canvas: HTMLCanvasElement, filename: string = 'graphic_composition.png', mode: MioSystemMode = 'GRAPHIC'): Promise<boolean> {
     const authorized = await PermissionEngine.requestPermission({
       action: 'EXPORT_GRAPHIC_IMAGE',
       target: filename,
@@ -101,7 +102,7 @@ export class ExportManager {
         eventBus.emit('ACTIVITY_LOG', {
           timestamp: Date.now(),
           message: `Exported graphic design as ${filename}`,
-          mode: 'GRAPHIC',
+          mode,
         });
       }
     }, 'image/png');
