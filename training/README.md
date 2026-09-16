@@ -23,6 +23,7 @@ The required governed flow is:
 13. Run MioBench and security/tool-boundary regressions.
 14. Re-bind if a newer adapter scan is performed before release review or promotion.
 15. Complete explicit release review, promotion, post-promotion integrity scan, and activation gates.
+16. Export a TP-0.60 portable candidate evidence package whenever an audit/review snapshot is needed. Export is informational only and never changes lifecycle state.
 
 User feedback is opt-in and never becomes trainable merely because it was stored. `FeedbackCollector.toTrainingCandidate()` deliberately creates an unapproved candidate requiring further review.
 
@@ -141,6 +142,39 @@ At promotion, Mio records the binding evidence ID as historical promotion proven
 
 TP-0.59 does not replace signed model provenance and does not itself prove origin authenticity, model quality, safety, promotion readiness, or activation safety.
 
+## Export a TP-0.60 portable candidate evidence package
+
+Use **Settings → Portable Candidate Evidence Package** to export a point-in-time audit snapshot for a registered training candidate. Export is allowed at any lifecycle stage so that blocked/experimental candidates can be audited without first making them eligible.
+
+The package contains bounded governance metadata such as:
+
+- candidate + model manifest identity;
+- TP-0.58 handoff receipt metadata when present;
+- sanitized benchmark summary and SHA-256 of the complete stored benchmark report;
+- latest TP-0.50 adapter-integrity evidence;
+- latest TP-0.59 handoff↔adapter binding;
+- signed provenance evidence + signer trust summary when present;
+- exact evidence referenced by structured promotion provenance when applicable;
+- release/promotion gate snapshot and blocking reasons;
+- deterministic `packageSha256`.
+
+The package deliberately excludes training JSONL, training message content, raw benchmark model output, model weights, adapter bytes, private keys, credentials, authorization/permission grants, and tool secrets. Unknown schema fields and known sensitive field names are rejected even if a package digest is recomputed.
+
+Verify a package independently with Node only:
+
+```bash
+node scripts/training/verify-candidate-evidence-package.mjs \
+  --input /path/to/mio-candidate-evidence-candidate-id.json
+```
+
+Verifier contract self-test:
+
+```bash
+node scripts/training/verify-candidate-evidence-package.mjs --self-test
+```
+
+A `valid: true` result proves only that the portable package is internally consistent with its packaged evidence and digest contract. It is **not** a quality/safety certification, signer authenticity re-verification against an external root of trust, promotion approval, activation authorization, deployment authorization, or proof that referenced model/adapter bytes are still present locally.
+
 ## Compatibility entrypoint
 
 `training/sft_lora.py` remains only as a compatibility shim and delegates to the governed bundle runner. The former raw `--dataset` path is intentionally no longer accepted because it could bypass bundle fingerprints and governance metadata.
@@ -153,4 +187,4 @@ TP-0.59 does not replace signed model provenance and does not itself prove origi
 - `Mio-Local-8B-v1-rc`: candidate that passes MioBench/security review.
 - `Mio-Local-8B-v1`: explicitly promoted model/adapter after documented review.
 
-Model weights, checkpoints, large datasets, training handoff files containing dataset content, and user data must not be committed to this repository.
+Model weights, checkpoints, large datasets, training handoff files containing dataset content, candidate evidence packages containing governance metadata, and user data must not be committed to this repository.
