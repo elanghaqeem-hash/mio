@@ -3,12 +3,13 @@ import { Check, Redo2, Save, Sparkles, Undo2 } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
 import { CREATIVE_STUDIOS, adjacentCreativeStudio, createCreativeCopilotDraft, creativeStudioForDocumentKind, resolveCreativeShortcut, type CreativeStudioMode } from '../../creative/CreativeWorkspaceIntegration';
 import type { CreativeStudioWorkspace } from '../../creative/useCreativeStudioDocument';
+import { CreativeAssetLibrary } from './CreativeAssetLibrary';
 
-interface Props {
-  workspace: Pick<CreativeStudioWorkspace<unknown>, 'document' | 'status' | 'error' | 'canUndo' | 'canRedo' | 'undo' | 'redo' | 'save'>;
+interface Props<T> {
+  workspace: Pick<CreativeStudioWorkspace<T>, 'document' | 'state' | 'setState' | 'status' | 'error' | 'canUndo' | 'canRedo' | 'undo' | 'redo' | 'save'>;
 }
 
-export const CreativeWorkspaceToolbar: React.FC<Props> = ({ workspace }) => {
+export const CreativeWorkspaceToolbar = <T,>({ workspace }: Props<T>) => {
   const currentStudio = creativeStudioForDocumentKind(workspace.document.kind);
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export const CreativeWorkspaceToolbar: React.FC<Props> = ({ workspace }) => {
       <button disabled={!workspace.canUndo} onClick={workspace.undo} className="rounded p-1 text-gray-300 outline-none hover:bg-cyan-950 focus-visible:ring-1 focus-visible:ring-cyan-400 disabled:opacity-30" title="Undo · Ctrl/Cmd+Z" aria-label="Undo creative edit"><Undo2 size={13} /></button>
       <button disabled={!workspace.canRedo} onClick={workspace.redo} className="rounded p-1 text-gray-300 outline-none hover:bg-cyan-950 focus-visible:ring-1 focus-visible:ring-cyan-400 disabled:opacity-30" title="Redo · Ctrl/Cmd+Shift+Z or Ctrl+Y" aria-label="Redo creative edit"><Redo2 size={13} /></button>
       <button onClick={() => void workspace.save()} className="flex items-center gap-1 rounded bg-cyan-500 px-2 py-1 font-bold text-black outline-none hover:bg-cyan-400 focus-visible:ring-2 focus-visible:ring-cyan-200" title="Save · Ctrl/Cmd+S" aria-label="Save creative document"><Save size={12} /><span className="hidden sm:inline">SAVE</span></button>
+      <CreativeAssetLibrary workspace={workspace} />
       <button onClick={openCopilot} className="flex items-center gap-1 rounded border border-violet-500/40 bg-violet-950/30 px-2 py-1 font-bold text-violet-200 outline-none hover:bg-violet-900/50 focus-visible:ring-1 focus-visible:ring-violet-300" title="Ask Mio Copilot · proposal first" aria-label="Open Mio Creative Copilot with current document context"><Sparkles size={12} /><span className="hidden md:inline">COPILOT</span></button>
       <span className={workspace.status === 'ERROR' ? 'text-red-400' : workspace.status === 'DIRTY' ? 'text-amber-300' : 'text-emerald-300'} title={workspace.error ?? workspace.status} aria-live="polite">
         {workspace.status === 'SAVED' ? <Check size={12} aria-label="Saved" /> : workspace.status}
