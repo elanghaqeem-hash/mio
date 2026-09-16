@@ -7,7 +7,11 @@ import {
 
 const pct = (value: number): string => `${(value * 100).toFixed(1)}%`;
 
-export const ModelPromotionPanel: React.FC = () => {
+interface ModelPromotionPanelProps {
+  onPromoted?: () => void | Promise<void>;
+}
+
+export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onPromoted }) => {
   const [candidates, setCandidates] = useState<ModelPromotionSnapshot[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [promoter, setPromoter] = useState('');
@@ -56,6 +60,7 @@ export const ModelPromotionPanel: React.FC = () => {
       setPromoter('');
       setFinalAttestation(false);
       await refresh();
+      await onPromoted?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Final model promotion failed');
     } finally {
