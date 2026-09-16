@@ -91,6 +91,7 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.FS_REVOKE_WORKSPACE, (event, args) => handlers.handleRevokeWorkspace(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, (event, args) => handlers.handleReadWorkspaceText(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE, (event, args) => handlers.handleListWorkspace(event, args[0]));
+  secureHandle(IPC_CHANNELS.BROWSER_READ_PAGE, (event, args) => handlers.handleBrowserReadPage(event, args[0]));
 
   const distHtmlPath = path.join(__dirname, '../dist/index.html');
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
