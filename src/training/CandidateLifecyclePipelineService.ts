@@ -103,21 +103,18 @@ export class CandidateLifecyclePipelineService {
     const config = this.routerConfigProvider();
     const output: CandidateLifecyclePipelineSnapshot[] = [];
     for (const candidate of candidates) {
-      const snapshot = await this.inspect(candidate.id, activePromoted?.id, config);
+      const snapshot = await this.assembleSnapshot(candidate.id, activePromoted?.id, config);
       if (snapshot) output.push(snapshot);
     }
     return output;
   }
 
   public async inspect(candidateId: string): Promise<CandidateLifecyclePipelineSnapshot | undefined> {
-    const [activePromoted, config] = await Promise.all([
-      this.manifests.getActivePromoted(),
-      Promise.resolve(this.routerConfigProvider()),
-    ]);
-    return this.inspect(candidateId, activePromoted?.id, config);
+    const activePromoted = await this.manifests.getActivePromoted();
+    return this.assembleSnapshot(candidateId, activePromoted?.id, this.routerConfigProvider());
   }
 
-  private async inspect(
+  private async assembleSnapshot(
     candidateId: string,
     activePromotedManifestId: string | undefined,
     config: ModelRouterConfig,
