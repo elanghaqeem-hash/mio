@@ -42,7 +42,7 @@ It reads from existing authorities:
 - `TrainingCandidateReviewService`
 - `ModelPromotionService`
 - `ModelManifestRepository`
-- current `SystemPreferences` model-router configuration
+- `PromotedModelActivationService.status()` for current active-model health
 
 It does not expose methods to:
 
@@ -57,19 +57,28 @@ It does not expose methods to:
 
 Release-review blockers and final-promotion blockers are surfaced from their existing services rather than reimplemented as a competing policy.
 
+## Promotion evidence semantics
+
+Before promotion, a TP-0.58 candidate needs a current valid TP-0.59 handoff ↔ adapter binding for release review/promotion as required by the existing gates.
+
+After promotion, the pipeline does **not** incorrectly require that same current-review binding to remain current forever. Promotion stores the exact historical TP-0.59 evidence ID in structured promotion provenance. A later post-promotion adapter scan can make the current review binding stale while the historical promotion-time binding remains the evidence that activation revalidates.
+
+Signed provenance follows the same identity discipline after promotion: if promotion bound a `provenanceEvidenceId`, the pipeline requires the current available provenance record to match that promotion-bound evidence and its signer to remain trusted. A newly introduced provenance record is not silently substituted for promotion provenance.
+
 ## Activation interpretation
 
-TP-0.65 intentionally does not perform live runtime readiness checks during dashboard refresh.
+TP-0.65 intentionally does not perform live runtime readiness requests during dashboard refresh.
 
 For a PROMOTED model:
 
 - a fresh post-promotion TP-0.50 `MATCH` is required before activation is shown as actionable;
 - the actual existing activation gate remains responsible for revalidating promotion-time binding/provenance, signer trust, post-promotion integrity, and live local-runtime readiness before ModelRouter can change;
-- a model is displayed as `ACTIVE` only when the active-promoted manifest pointer and current `mio_local` router model both match the candidate runtime identity.
+- `ACTIVE` is accepted only when the existing `PromotedModelActivationService.status()` reports `ACTIVE` for that same manifest;
+- `INTEGRITY_BLOCKED`, configuration drift, signer revocation, or other activation-health problems are therefore not hidden merely because an old active pointer/router configuration still exists.
 
 ## Signed provenance
 
-Signed provenance remains optional only while no provenance evidence has been introduced for the candidate under the current policy. Once signed provenance exists, invalid binding or untrusted signer state is surfaced as a blocker by the existing review/promotion authorities.
+Signed provenance remains optional only while no provenance evidence has been introduced for the candidate under the current policy. Once signed provenance exists, invalid binding or untrusted signer state is surfaced as a blocker by the existing review/promotion/activation authorities.
 
 ## UI
 
@@ -96,6 +105,7 @@ The panel contains no lifecycle mutation button.
 - missing integrity/MioBench are surfaced without being executed;
 - refresh does not mutate candidate or manifest storage;
 - refresh does not set an active promoted pointer;
+- activation health is read through the existing activation-status authority rather than inferred from router configuration;
 - a MioBench pass is reflected without changing lifecycle;
 - an explicit existing release-review transition is reflected correctly;
 - a RELEASE_CANDIDATE without required promotion-time integrity remains blocked by the existing `ModelPromotionService` blocker;
@@ -112,6 +122,6 @@ TP-0.65 does not:
 - perform review attestations;
 - promote a model;
 - activate a model;
-- call a model runtime;
+- perform live model generation/readiness requests during refresh;
 - use network access;
 - change the active model router.
