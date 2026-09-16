@@ -38,6 +38,7 @@ import { runScopedAuthorizationTests } from './scopedAuthorizationTests';
 import { runCapabilityGatewayTests } from './capabilityGatewayTests';
 import { runDesktopWorkspaceBridgeTests } from './desktopWorkspaceBridgeTests';
 import { runDesktopBrowserBridgeTests } from './desktopBrowserBridgeTests';
+import { runDesktopTrainingGatewayTests } from './desktopTrainingGatewayTests';
 import { runKnowledgeIngestionTests } from './knowledgeIngestionTests';
 import { runProjectKnowledgeIndexTests } from './projectKnowledgeIndexTests';
 import { runKnowledgeGovernanceWorkflowTests } from './knowledgeGovernanceWorkflowTests';
@@ -102,6 +103,7 @@ const runners = [
   runCapabilityGatewayTests,
   runDesktopWorkspaceBridgeTests,
   runDesktopBrowserBridgeTests,
+  runDesktopTrainingGatewayTests,
   runKnowledgeIngestionTests,
   runProjectKnowledgeIndexTests,
   runKnowledgeGovernanceWorkflowTests,
