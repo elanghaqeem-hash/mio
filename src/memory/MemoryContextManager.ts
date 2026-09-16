@@ -67,13 +67,14 @@ export class MemoryContextManager {
     projectId: string,
     content: string,
     source: string,
-    trust: Extract<ContextMemoryTrust, 'USER_AUTHORED' | 'SYSTEM_DERIVED'> = 'USER_AUTHORED',
+    trust?: Extract<ContextMemoryTrust, 'USER_AUTHORED' | 'SYSTEM_DERIVED'>,
   ): ContextMemoryItem | null {
     const normalized = content.trim(); if (!sessionId || !projectId || !normalized) return null;
     const now = Date.now();
+    const resolvedTrust = trust ?? (source.startsWith('chat:mio') ? 'SYSTEM_DERIVED' : 'USER_AUTHORED');
     const item: ContextMemoryItem = {
       id: `conversation_${now}_${Math.random().toString(36).slice(2, 7)}`, layer: 'CONVERSATION', content: normalized,
-      source, trust, sessionId, projectId, createdAt: now, updatedAt: now,
+      source, trust: resolvedTrust, sessionId, projectId, createdAt: now, updatedAt: now,
     };
     this.conversations.set(sessionId, [...(this.conversations.get(sessionId) ?? []), item].slice(-50)); return { ...item };
   }
