@@ -23,9 +23,13 @@ export async function runContextContinuityTests(): Promise<{ passed: number; tot
     content: `context-message-${index + 1}`,
   }));
 
-  const response = await AgentOrchestrator.processPrompt('continue this discussion', history);
+  const response = await AgentOrchestrator.processPrompt('continue this discussion', history, {
+    memoryEnabled: false,
+    projectKnowledgeEnabled: false,
+  });
   assert(response.validationStatus === 'MODEL_RESPONSE_VALIDATED', 'Chat context path produces a validated model response');
-  assert(response.executionSummary.includes('12 prior context message(s)'), 'AgentOrchestrator bounds model conversation context to the latest 12 messages');
+  assert(response.executionSummary.includes('12 direct prior message(s)'), 'AgentOrchestrator bounds direct model conversation context to the latest 12 messages');
+  assert(response.memoryContextEnabled === false && response.projectContextEnabled === false, 'Direct-context baseline can disable memory and project RAG independently');
   assert(response.modelSource === 'LOCAL', 'Context continuity test remains local and does not trigger remote inference');
 
   return { passed, total };
