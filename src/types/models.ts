@@ -1,4 +1,5 @@
 export type ModelProviderId = 'mio_local' | 'local_heuristic' | 'openrouter' | 'openai' | 'gemini' | 'claude' | 'ollama';
+export type LocalInferenceBackendId = 'ollama' | 'vllm' | 'llamacpp';
 
 export interface ModelMessage {
   role: 'system' | 'user' | 'assistant';
@@ -75,6 +76,7 @@ export interface ModelRouterConfig {
   model?: string;
   proxyEndpoint?: string;
   ollamaEndpoint?: string;
+  mioLocalBackend?: LocalInferenceBackendId;
   mioLocalEndpoint?: string;
   researchEndpoint?: string;
   allowOfflineFallback: boolean;
