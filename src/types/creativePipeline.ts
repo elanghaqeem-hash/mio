@@ -1,6 +1,6 @@
 import type { MioSystemMode } from './core';
 
-export type CreativePipelineMode = '3D' | 'ANIMATION' | 'SFX' | 'MUSIC' | 'GRAPHIC';
+export type CreativePipelineMode = '3D' | 'ANIMATION' | 'MOTION_2D' | 'DRAWING' | 'PHOTO' | 'SFX' | 'MUSIC' | 'GRAPHIC';
 export type CreativePipelineStatus = 'PLANNED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 export type CreativePipelineStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'BLOCKED';
 
@@ -50,6 +50,9 @@ export interface CreativePipelineAssetLink {
 export const CREATIVE_MODE_TO_SYSTEM_MODE: Record<CreativePipelineMode, MioSystemMode> = {
   '3D': '3D',
   ANIMATION: 'ANIMATION',
+  MOTION_2D: 'MOTION_2D',
+  DRAWING: 'DRAWING',
+  PHOTO: 'PHOTO',
   SFX: 'SFX',
   MUSIC: 'MUSIC',
   GRAPHIC: 'GRAPHIC',
