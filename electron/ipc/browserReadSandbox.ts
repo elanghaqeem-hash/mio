@@ -1,5 +1,6 @@
 import { BrowserWindow, session } from 'electron';
 import { promises as dns } from 'dns';
+import { randomUUID } from 'crypto';
 import { isIP } from 'net';
 
 export interface BrowserReadRequest {
@@ -17,7 +18,6 @@ const MAX_URL_LENGTH = 2048;
 const MAX_TEXT_CHARS = 60_000;
 const MAX_TITLE_CHARS = 512;
 const LOAD_TIMEOUT_MS = 15_000;
-const PARTITION = 'mio-browser-read-sandbox';
 
 function isPrivateIpv4(address: string): boolean {
   const parts = address.split('.').map(Number);
@@ -95,18 +95,29 @@ export class BrowserReadSandbox {
 
   private async readInternal(request: BrowserReadRequest): Promise<BrowserReadResult> {
     const target = await assertPublicTarget(request.url);
-    const browserSession = session.fromPartition(PARTITION, { cache: false });
-    await browserSession.clearStorageData();
-    await browserSession.clearCache().catch(() => undefined);
+    const partition = `mio-browser-read-${randomUUID()}`;
+    const browserSession = session.fromPartition(partition, { cache: false });
     browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     browserSession.setPermissionCheckHandler(() => false);
+    browserSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
+      let protocol = '';
+      try { protocol = new URL(details.url).protocol; } catch { callback({ cancel: true }); return; }
+      if (details.resourceType !== 'mainFrame' && (protocol === 'data:' || protocol === 'blob:')) {
+        callback({ cancel: false });
+        return;
+      }
+      void assertPublicTarget(details.url).then(
+        () => callback({ cancel: false }),
+        () => callback({ cancel: true }),
+      );
+    });
 
     const window = new BrowserWindow({
       show: false,
       width: 1024,
       height: 768,
       webPreferences: {
-        partition: PARTITION,
+        partition,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -115,17 +126,7 @@ export class BrowserReadSandbox {
       },
     });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    window.webContents.session.on('will-download', (event) => event.preventDefault());
-
-    const assertNavigationTarget = async (event: Electron.Event, rawUrl: string) => {
-      try {
-        await assertPublicTarget(rawUrl);
-      } catch {
-        event.preventDefault();
-      }
-    };
-    window.webContents.on('will-navigate', (event, rawUrl) => { void assertNavigationTarget(event, rawUrl); });
-    window.webContents.on('will-redirect', (event, rawUrl) => { void assertNavigationTarget(event, rawUrl); });
+    browserSession.on('will-download', (event) => event.preventDefault());
 
     const timer = setTimeout(() => {
       if (!window.isDestroyed()) window.webContents.stop();
