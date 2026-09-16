@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -37,7 +37,7 @@ export interface TrainingJobSnapshot {
 }
 
 interface TrainingJobRecord extends TrainingJobSnapshot {
-  process?: ChildProcessWithoutNullStreams;
+  process?: ChildProcess;
   cancelRequested?: boolean;
 }
 
@@ -129,10 +129,10 @@ export class TrainingJobManager {
     this.order.unshift(id);
     this.trimHistory();
 
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => { record.stdoutTail = tail(record.stdoutTail + chunk); });
-    child.stderr.on('data', (chunk: string) => { record.stderrTail = tail(record.stderrTail + chunk); });
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string | Buffer) => { record.stdoutTail = tail(record.stdoutTail + chunk.toString()); });
+    child.stderr?.on('data', (chunk: string | Buffer) => { record.stderrTail = tail(record.stderrTail + chunk.toString()); });
     child.once('error', (error) => {
       if (record.state !== 'RUNNING') return;
       record.stderrTail = tail(`${record.stderrTail}\nPROCESS ERROR: ${error.message}`);
@@ -166,9 +166,15 @@ export class TrainingJobManager {
     record.process.kill('SIGTERM');
     const processRef = record.process;
     setTimeout(() => {
-      if (record.state === 'RUNNING' && processRef && !processRef.killed) processRef.kill('SIGKILL');
+      if (record.state === 'RUNNING') processRef.kill('SIGKILL');
     }, 3000).unref();
     return this.snapshot(record);
+  }
+
+  public cancelWorkspace(workspaceId: string): void {
+    for (const record of this.jobs.values()) {
+      if (record.workspaceId === workspaceId && record.state === 'RUNNING' && record.process) this.cancel(record.id);
+    }
   }
 
   public cancelAll(): void {
