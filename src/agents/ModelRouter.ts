@@ -1,4 +1,5 @@
 import { eventBus } from '../core/EventBus';
+import { createLocalInferenceBackend } from '../intelligence/model/LocalInferenceBackend';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
 import { MioLocalProvider } from '../intelligence/model/MioLocalProvider';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
@@ -17,6 +18,7 @@ export class ModelRouter {
     provider: 'local_heuristic',
     proxyEndpoint: '/api/ai/generate',
     ollamaEndpoint: 'http://127.0.0.1:11434',
+    mioLocalBackend: 'ollama',
     mioLocalEndpoint: 'http://127.0.0.1:11434',
     researchEndpoint: '/api/research',
     allowOfflineFallback: true,
@@ -35,6 +37,7 @@ export class ModelRouter {
       || next.model !== this.config.model
       || next.proxyEndpoint !== this.config.proxyEndpoint
       || next.ollamaEndpoint !== this.config.ollamaEndpoint
+      || next.mioLocalBackend !== this.config.mioLocalBackend
       || next.mioLocalEndpoint !== this.config.mioLocalEndpoint
       || next.researchEndpoint !== this.config.researchEndpoint
       || next.enableWebSearch !== this.config.enableWebSearch;
@@ -54,23 +57,31 @@ export class ModelRouter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      if (provider === 'ollama' || provider === 'mio_local') {
-        const endpoint = (provider === 'mio_local'
-          ? this.config.mioLocalEndpoint ?? 'http://127.0.0.1:11434'
-          : this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
-        const response = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
-        if (!response.ok) throw new Error(`${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} readiness returned HTTP ${response.status}`);
-        const payload = await response.json().catch(() => ({})) as { models?: Array<{ name?: string }> };
-        const model = this.config.model ?? (provider === 'mio_local' ? 'qwen3:8b' : 'llama3.2');
-        const installed = payload.models?.some((item) => item.name === model || item.name?.startsWith(`${model}:`)) === true;
-        const webDetail = provider === 'mio_local' && this.config.enableWebSearch
+      if (provider === 'mio_local') {
+        const backendId = this.config.mioLocalBackend ?? 'ollama';
+        const model = this.config.model ?? 'qwen3:8b';
+        const backend = createLocalInferenceBackend(backendId, this.config.mioLocalEndpoint, model);
+        const readiness = await backend.checkReadiness(controller.signal);
+        const webDetail = this.config.enableWebSearch
           ? this.networkState === 'ONLINE'
             ? ' Governed web grounding is enabled through the MIO research gateway.'
             : ' Web grounding is configured but suspended while network mode is OFFLINE.'
           : '';
+        return readiness.ready
+          ? { provider, ready: true, status: 'READY', detail: `MIO Local ${backend.displayName}: ${readiness.detail}${webDetail}` }
+          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `MIO Local ${backend.displayName}: ${readiness.detail}` };
+      }
+
+      if (provider === 'ollama') {
+        const endpoint = (this.config.ollamaEndpoint ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
+        const response = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Ollama readiness returned HTTP ${response.status}`);
+        const payload = await response.json().catch(() => ({})) as { models?: Array<{ name?: string }> };
+        const model = this.config.model ?? 'llama3.2';
+        const installed = payload.models?.some((item) => item.name === model || item.name?.startsWith(`${model}:`)) === true;
         return installed
-          ? { provider, ready: true, status: 'READY', detail: `${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} endpoint is reachable and model '${model}' is installed.${webDetail}` }
-          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `${provider === 'mio_local' ? 'MIO Local' : 'Ollama'} is reachable, but model '${model}' is not installed. Pull it in the local runtime or select an installed model.` };
+          ? { provider, ready: true, status: 'READY', detail: `Ollama endpoint is reachable and model '${model}' is installed.` }
+          : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `Ollama is reachable, but model '${model}' is not installed. Pull it in Ollama or select an installed model.` };
       }
 
       if (this.networkState !== 'ONLINE') {
@@ -286,6 +297,7 @@ export class ModelRouter {
     const config = this.config;
     if (config.provider === 'local_heuristic') return new LocalHeuristicProvider();
     if (config.provider === 'mio_local') return new MioLocalProvider({
+      backend: config.mioLocalBackend ?? 'ollama',
       endpoint: config.mioLocalEndpoint,
       model: config.model,
       enableWebSearch: config.enableWebSearch && this.networkState === 'ONLINE',
