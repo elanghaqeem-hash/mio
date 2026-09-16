@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server, RefreshCw } from 'lucide-react';
+import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server, RefreshCw, BrainCircuit, Search } from 'lucide-react';
 import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { ModelProviderId, ProviderReadiness } from '../../types/models';
@@ -17,8 +17,17 @@ export const SettingsView: React.FC = () => {
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [checkingProvider, setCheckingProvider] = useState(false);
   const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
-  const { provider, model = '', ollamaEndpoint = 'http://127.0.0.1:11434', allowOfflineFallback, enableWebSearch } = modelRouter;
+  const {
+    provider,
+    model = '',
+    ollamaEndpoint = 'http://127.0.0.1:11434',
+    mioLocalEndpoint = 'http://127.0.0.1:11434',
+    researchEndpoint = '/api/research',
+    allowOfflineFallback,
+    enableWebSearch,
+  } = modelRouter;
   const cloudConfig = provider === 'openrouter' || provider === 'openai' || provider === 'gemini' || provider === 'claude' ? CLOUD_PROVIDER_CONFIG[provider] : null;
+  const localModelProvider = provider === 'mio_local' || provider === 'ollama';
 
   useEffect(() => {
     return systemPreferences.subscribe(setPreferences);
@@ -90,14 +99,22 @@ export const SettingsView: React.FC = () => {
         <div className="space-y-2 pt-2 border-t border-gray-800">
           <span className="text-gray-400 text-[10px] block">AI INFERENCE PROVIDER</span>
           <select value={provider} onChange={(e) => updateRouter({ provider: e.target.value as ModelProviderId, model: undefined })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs">
+            <option value="mio_local">MIO Local Intelligence — native local model + governed tools</option>
             <option value="local_heuristic">MIO Local Heuristic — offline fallback / orchestration intelligence</option>
             <option value="openrouter">OpenRouter — multi-provider AI gateway</option>
             <option value="openai">OpenAI — server-side MIO Secure Proxy</option>
             <option value="gemini">Google Gemini — server-side MIO Secure Proxy</option>
             <option value="claude">Anthropic Claude — server-side MIO Secure Proxy</option>
-            <option value="ollama">Ollama — local endpoint</option>
+            <option value="ollama">Ollama — raw local endpoint</option>
           </select>
         </div>
+
+        {provider === 'mio_local' && (
+          <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-950/20 space-y-2">
+            <div className="flex items-center gap-2 text-cyan-300 font-bold"><BrainCircuit size={14} /> MIO NATIVE LOCAL INTELLIGENCE</div>
+            <p className="text-gray-400 text-[10px] leading-relaxed">Inference stays on the configured local Ollama-compatible runtime. When live grounding is enabled, only bounded search queries are sent to the MIO research gateway; returned web content is treated as untrusted data and never as authorization.</p>
+          </div>
+        )}
 
         {cloudConfig && (
           <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 space-y-2">
@@ -106,10 +123,29 @@ export const SettingsView: React.FC = () => {
           </div>
         )}
 
-        {(cloudConfig || provider === 'ollama') && (
+        {(cloudConfig || localModelProvider) && (
           <div className="space-y-1">
             <span className="text-gray-400 text-[10px] block">MODEL {cloudConfig ? `(optional when ${cloudConfig.model} is configured server-side)` : ''}</span>
-            <input type="text" value={model} onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })} placeholder={cloudConfig?.placeholder ?? 'e.g. llama3.2'} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => updateRouter({ model: e.target.value.trim() || undefined })}
+              placeholder={cloudConfig?.placeholder ?? (provider === 'mio_local' ? 'e.g. qwen3:8b' : 'e.g. llama3.2')}
+              className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs"
+            />
+          </div>
+        )}
+
+        {provider === 'mio_local' && (
+          <div className="space-y-3 rounded-lg border border-gray-800 bg-[#111726] p-3">
+            <div className="space-y-1">
+              <span className="text-gray-400 text-[10px] flex items-center gap-1"><Server size={11} /> MIO LOCAL INFERENCE ENDPOINT</span>
+              <input type="text" value={mioLocalEndpoint} onChange={(e) => updateRouter({ mioLocalEndpoint: e.target.value })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            </div>
+            <div className="space-y-1">
+              <span className="text-gray-400 text-[10px] flex items-center gap-1"><Search size={11} /> MIO RESEARCH GATEWAY</span>
+              <input type="text" value={researchEndpoint} onChange={(e) => updateRouter({ researchEndpoint: e.target.value })} className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            </div>
           </div>
         )}
 
@@ -120,10 +156,14 @@ export const SettingsView: React.FC = () => {
           </div>
         )}
 
-        {cloudConfig && (
+        {(cloudConfig || provider === 'mio_local') && (
           <label className="flex items-center gap-3 p-3 bg-[#111726] rounded-lg border border-gray-800 cursor-pointer">
             <input type="checkbox" checked={enableWebSearch} onChange={(e) => updateRouter({ enableWebSearch: e.target.checked })} className="accent-cyan-400" />
-            <span className="text-gray-300">Enable {cloudConfig.label} live web search / grounding (may require provider credits; internet access remains L4 permission-gated)</span>
+            <span className="text-gray-300">
+              {provider === 'mio_local'
+                ? 'Enable governed live web grounding through MIO Research Proxy (active only in ONLINE mode; local inference still works offline)'
+                : `Enable ${cloudConfig?.label ?? 'provider'} live web search / grounding (may require provider credits; internet access remains L4 permission-gated)`}
+            </span>
           </label>
         )}
 

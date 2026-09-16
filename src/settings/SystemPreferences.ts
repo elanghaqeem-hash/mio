@@ -13,7 +13,7 @@ export interface MioSystemPreferences {
 const STORAGE_KEY = 'system-preferences-v1';
 const AUTONOMY_LEVELS: AutonomyLevel[] = ['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'];
 const NETWORK_STATES: NetworkState[] = ['ONLINE', 'OFFLINE'];
-const PROVIDERS: ModelProviderId[] = ['local_heuristic', 'openrouter', 'openai', 'gemini', 'claude', 'ollama'];
+const PROVIDERS: ModelProviderId[] = ['mio_local', 'local_heuristic', 'openrouter', 'openai', 'gemini', 'claude', 'ollama'];
 
 const defaults = (): MioSystemPreferences => ({
   autonomyLevel: 'ASSISTIVE',
@@ -22,6 +22,8 @@ const defaults = (): MioSystemPreferences => ({
     provider: 'local_heuristic',
     proxyEndpoint: '/api/ai/generate',
     ollamaEndpoint: 'http://127.0.0.1:11434',
+    mioLocalEndpoint: 'http://127.0.0.1:11434',
+    researchEndpoint: '/api/research',
     allowOfflineFallback: false,
     enableWebSearch: false,
   },
@@ -51,6 +53,8 @@ function normalize(value: unknown): MioSystemPreferences {
         : fallback.modelRouter.provider,
       proxyEndpoint: optionalText(router.proxyEndpoint) ?? fallback.modelRouter.proxyEndpoint,
       ollamaEndpoint: optionalText(router.ollamaEndpoint) ?? fallback.modelRouter.ollamaEndpoint,
+      mioLocalEndpoint: optionalText(router.mioLocalEndpoint) ?? fallback.modelRouter.mioLocalEndpoint,
+      researchEndpoint: optionalText(router.researchEndpoint) ?? fallback.modelRouter.researchEndpoint,
       model: optionalText(router.model),
       allowOfflineFallback: router.allowOfflineFallback === true,
       enableWebSearch: router.enableWebSearch === true,

@@ -2,6 +2,7 @@ import { runMioTestSuite } from './systemTests';
 import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
+import { runMioLocalProviderTests } from './mioLocalProviderTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
 import { runContextContinuityTests } from './contextContinuityTests';
@@ -40,6 +41,7 @@ const runners = [
   async () => runResearchConflictTests(),
   runToolRouterTests,
   runModelRouterTests,
+  runMioLocalProviderTests,
   runAiProxyTests,
   runResearchProxyTests,
   runContextContinuityTests,
