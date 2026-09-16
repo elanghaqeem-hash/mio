@@ -93,6 +93,19 @@ export interface MioTrainingHandoffPackageReceipt {
   disclosure: string;
 }
 
+export interface MioTrainingHandoffReadResult {
+  schemaVersion: 1;
+  kind: 'MIO_TRAINING_HANDOFF_READ_RESULT_V1';
+  trainingJobId: string;
+  readWorkspaceId: string;
+  handoffRelativePath: string;
+  handoffSha256: string;
+  bytes: number;
+  handoffJson: string;
+  receipt: MioTrainingHandoffPackageReceipt;
+  disclosure: string;
+}
+
 export interface MioDesktopAPI {
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<boolean>;
@@ -126,6 +139,7 @@ export interface MioDesktopAPI {
   cancelTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
   packageTrainingHandoff: (request: MioTrainingHandoffPackageRequest) => Promise<{ success: boolean; receipt?: MioTrainingHandoffPackageReceipt; error?: string }>;
   getTrainingHandoffReceipt: (jobId: string) => Promise<{ success: boolean; receipt?: MioTrainingHandoffPackageReceipt; error?: string }>;
+  readTrainingHandoff: (request: { jobId: string; workspaceId: string }) => Promise<{ success: boolean; result?: MioTrainingHandoffReadResult; error?: string }>;
 
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
 }
@@ -156,6 +170,7 @@ const desktopAPI: MioDesktopAPI = {
   cancelTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_CANCEL_JOB, jobId),
   packageTrainingHandoff: (request) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_PACKAGE_HANDOFF, request),
   getTrainingHandoffReceipt: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_GET_HANDOFF_RECEIPT, jobId),
+  readTrainingHandoff: (request) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_READ_HANDOFF, request),
 
   onEmergencyStopTriggered: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, reason: string) => callback(reason);
