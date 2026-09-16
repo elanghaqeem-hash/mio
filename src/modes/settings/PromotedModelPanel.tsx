@@ -6,6 +6,7 @@ import {
   PromotedModelRuntimeStatus,
   promotedModelActivationService,
 } from '../../training/PromotedModelActivationService';
+import { CandidateLifecyclePipelinePanel } from './CandidateLifecyclePipelinePanel';
 import { ModelPromotionPanel } from './ModelPromotionPanel';
 
 export const PromotedModelPanel: React.FC = () => {
@@ -60,6 +61,7 @@ export const PromotedModelPanel: React.FC = () => {
 
   return (
     <>
+      <CandidateLifecyclePipelinePanel />
       <ModelPromotionPanel onPromoted={refresh} />
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
         <div className="flex items-center justify-between gap-3">

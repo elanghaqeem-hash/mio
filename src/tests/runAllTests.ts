@@ -14,6 +14,7 @@ import { runSignedCandidateEvidencePackageTests } from './signedCandidateEvidenc
 import { runTrainingCandidateRegistryTests } from './trainingCandidateRegistryTests';
 import { runTrainingCandidateReviewTests } from './trainingCandidateReviewTests';
 import { runTrainingCandidateLabTests } from './trainingCandidateLabTests';
+import { runCandidateLifecyclePipelineTests } from './candidateLifecyclePipelineTests';
 import { runAdapterIntegrityTests } from './adapterIntegrityTests';
 import { runAdapterIntegrityReviewGateTests } from './adapterIntegrityReviewGateTests';
 import { runSignedModelArtifactProvenanceTests } from './signedModelArtifactProvenanceTests';
@@ -80,6 +81,7 @@ const runners = [
   runTrainingCandidateRegistryTests,
   runTrainingCandidateReviewTests,
   runTrainingCandidateLabTests,
+  runCandidateLifecyclePipelineTests,
   runAdapterIntegrityTests,
   runAdapterIntegrityReviewGateTests,
   runSignedModelArtifactProvenanceTests,
