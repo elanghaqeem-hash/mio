@@ -17,6 +17,7 @@ import {
   type CandidateIntegrityDesktopPort,
   TrainingCandidateIntegrityService,
 } from '../training/TrainingCandidateIntegrityService';
+import { TrainingCandidateReviewService } from '../training/TrainingCandidateReviewService';
 
 interface SuiteResult { passed: number; total: number; }
 
@@ -195,8 +196,15 @@ export async function runAdapterIntegrityTests(): Promise<SuiteResult> {
   check(drift.evidence?.comparison === 'DRIFT' && drift.evidence.baselineFingerprint === baselineFingerprint, 'Changed adapter fingerprint is recorded explicitly as DRIFT against the original baseline');
   const persistentDrift = await integrity.scanCandidate(registration.candidate.id, fakePort);
   check(persistentDrift.evidence?.comparison === 'DRIFT' && persistentDrift.evidence.baselineFingerprint === baselineFingerprint, 'Persistent drift never becomes a false MATCH by moving the baseline forward');
+
+  const driftReview = await new TrainingCandidateReviewService(storage).inspect(registration.candidate.id);
+  check(driftReview?.blockingReasons.includes('Latest adapter byte-integrity evidence reports DRIFT') === true, 'Release-candidate review cannot ignore recorded adapter byte-integrity drift');
+
   const restored = await integrity.scanCandidate(registration.candidate.id, fakePort);
   check(restored.evidence?.comparison === 'MATCH' && restored.evidence.fingerprint === baselineFingerprint, 'Returning to the original byte fingerprint restores MATCH without rewriting baseline evidence');
+  const restoredReview = await new TrainingCandidateReviewService(storage).inspect(registration.candidate.id);
+  check(restoredReview?.blockingReasons.includes('Latest adapter byte-integrity evidence reports DRIFT') === false, 'Release-candidate review clears the integrity-drift blocker only after bytes match the immutable baseline again');
+
   check(revoked === 5, 'Workspace authority is revoked after every completed adapter integrity scan');
   const history = await integrity.list(registration.candidate.id, 10);
   check(history.length === 5 && history[0].comparison === 'MATCH' && history.at(-1)?.comparison === 'BASELINE_CAPTURED', 'Adapter integrity evidence persists newest-first while preserving the original baseline');
