@@ -28,6 +28,7 @@ const defaults = (): MioSystemPreferences => ({
     researchEndpoint: '/api/research',
     allowOfflineFallback: false,
     enableWebSearch: false,
+    enableBrowserRead: false,
   },
 });
 
@@ -63,6 +64,7 @@ function normalize(value: unknown): MioSystemPreferences {
       model: optionalText(router.model),
       allowOfflineFallback: router.allowOfflineFallback === true,
       enableWebSearch: router.enableWebSearch === true,
+      enableBrowserRead: router.enableBrowserRead === true,
     },
   };
 }
