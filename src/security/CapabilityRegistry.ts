@@ -192,6 +192,19 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     scopeFields: ['TASK', 'RESOURCE', 'PATH'],
     timeoutMs: 65000,
   });
+  registry.register({
+    id: 'service.desktop.training.read-handoff',
+    kind: 'SERVICE',
+    description: 'Read only the fixed TP-0.63 handoff path associated with a governed training receipt from an explicitly re-authorized desktop workspace so the existing TP-0.58 verifier can validate it before registration.',
+    ownerLayer: 'SERVICE',
+    modes: ['SETTINGS'],
+    riskLevel: 'HIGH',
+    permissionLevel: 'L0_OBSERVE',
+    availability: trainingAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'RESOURCE', 'PATH'],
+    timeoutMs: 15000,
+  });
 
   const browserAvailability = options.desktopBrowserBridge ? 'AVAILABLE' : 'UNAVAILABLE';
   registry.register({
