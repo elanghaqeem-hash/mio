@@ -38,6 +38,11 @@ jobs:
           node --check scripts/training/create-training-run-handoff.mjs
           node scripts/training/create-training-run-handoff.mjs --self-test
 
+      - name: Validate portable candidate evidence verifier
+        run: |
+          node --check scripts/training/verify-candidate-evidence-package.mjs
+          node scripts/training/verify-candidate-evidence-package.mjs --self-test
+
       - name: Validate signed artifact provenance utility
         run: |
           node --check scripts/training/sign-model-artifact-provenance.mjs
