@@ -2,6 +2,13 @@ import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
 import { BenchmarkReportRepository, type StoredBenchmarkReport } from './BenchmarkReportRepository';
 import { type CandidateAdapterIntegrityEvidence, TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
+import {
+  type CandidateSignedProvenanceEvidence,
+  ModelSignerTrustStore,
+  TrainingCandidateProvenanceService,
+  type ModelSignerTrustStatus,
+  type TrustedModelSigner,
+} from './SignedModelArtifactProvenance';
 import type { MioModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
 import { evaluateModelPromotion, promoteManifest } from './ModelPromotionGate';
@@ -12,6 +19,8 @@ export interface ModelPromotionSnapshot {
   manifest: MioModelManifest;
   latestBenchmark?: StoredBenchmarkReport;
   latestIntegrity?: CandidateAdapterIntegrityEvidence;
+  latestProvenance?: CandidateSignedProvenanceEvidence;
+  provenanceSignerStatus?: ModelSignerTrustStatus;
   promotionEligible: boolean;
   blockingReasons: string[];
 }
@@ -27,6 +36,7 @@ export interface PromoteModelResult {
   benchmarkReportId: string;
   promotedAt: number;
   integrityEvidenceId?: string;
+  provenanceEvidenceId?: string;
 }
 
 export class ModelPromotionService {
@@ -34,12 +44,16 @@ export class ModelPromotionService {
   private readonly benchmarks: BenchmarkReportRepository;
   private readonly candidates: TrainingCandidateRegistry;
   private readonly integrity: TrainingCandidateIntegrityService;
+  private readonly provenance: TrainingCandidateProvenanceService;
+  private readonly signers: ModelSignerTrustStore;
 
   constructor(private readonly storage: StorageProvider = defaultStorageProvider) {
     this.manifests = new ModelManifestRepository(storage);
     this.benchmarks = new BenchmarkReportRepository(storage);
     this.candidates = new TrainingCandidateRegistry(storage);
     this.integrity = new TrainingCandidateIntegrityService(storage);
+    this.provenance = new TrainingCandidateProvenanceService(storage);
+    this.signers = new ModelSignerTrustStore(storage);
   }
 
   public async listReleaseCandidates(limit = 100): Promise<ModelPromotionSnapshot[]> {
@@ -56,16 +70,20 @@ export class ModelPromotionService {
     const manifest = await this.manifests.get(manifestId);
     if (!manifest) return undefined;
     const candidate = await this.candidates.get(manifestId);
-    const [latestBenchmark, latestIntegrity] = await Promise.all([
+    const [latestBenchmark, latestIntegrity, latestProvenance] = await Promise.all([
       this.benchmarks.latestForManifest(manifest.id),
       candidate ? this.integrity.latest(candidate.id) : Promise.resolve(undefined),
+      candidate ? this.provenance.latest(candidate.id) : Promise.resolve(undefined),
     ]);
-    const blockingReasons = this.blockingReasons(manifest, candidate, latestBenchmark, latestIntegrity);
+    const provenanceSigner = latestProvenance ? await this.signers.get(latestProvenance.signerKeyId) : undefined;
+    const blockingReasons = this.blockingReasons(manifest, candidate, latestBenchmark, latestIntegrity, latestProvenance, provenanceSigner);
     return {
       candidate,
       manifest,
       latestBenchmark,
       latestIntegrity,
+      latestProvenance,
+      provenanceSignerStatus: provenanceSigner?.status,
       promotionEligible: blockingReasons.length === 0,
       blockingReasons,
     };
@@ -91,6 +109,7 @@ export class ModelPromotionService {
         snapshot.manifest.notes,
         `Promoted after explicit final attestation by ${promoter} using benchmark report ${snapshot.latestBenchmark.id}. Runtime activation remains a separate action.`,
         snapshot.latestIntegrity ? `Adapter byte-integrity evidence at promotion: ${snapshot.latestIntegrity.id} (${snapshot.latestIntegrity.comparison}, fingerprint ${snapshot.latestIntegrity.fingerprint}).` : undefined,
+        snapshot.latestProvenance ? `Signed artifact provenance at promotion: ${snapshot.latestProvenance.id} (signer ${snapshot.latestProvenance.signerKeyId}, trust ${snapshot.provenanceSignerStatus ?? 'UNKNOWN'}).` : undefined,
       ].filter(Boolean).join(' '),
     };
     await this.manifests.save(promoted);
@@ -99,6 +118,7 @@ export class ModelPromotionService {
       benchmarkReportId: snapshot.latestBenchmark.id,
       promotedAt,
       integrityEvidenceId: snapshot.latestIntegrity?.id,
+      provenanceEvidenceId: snapshot.latestProvenance?.id,
     };
   }
 
@@ -107,6 +127,8 @@ export class ModelPromotionService {
     candidate?: TrainingCandidateRecord,
     latestBenchmark?: StoredBenchmarkReport,
     latestIntegrity?: CandidateAdapterIntegrityEvidence,
+    latestProvenance?: CandidateSignedProvenanceEvidence,
+    provenanceSigner?: TrustedModelSigner,
   ): string[] {
     const reasons: string[] = [];
     if (manifest.lifecycle !== 'RELEASE_CANDIDATE') reasons.push(`Model lifecycle is ${manifest.lifecycle}, not RELEASE_CANDIDATE`);
@@ -131,6 +153,18 @@ export class ModelPromotionService {
         if (latestIntegrity.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Adapter integrity training-result SHA does not match the training candidate');
         if (!/^[a-f0-9]{64}$/.test(latestIntegrity.fingerprint) || !/^[a-f0-9]{64}$/.test(latestIntegrity.baselineFingerprint)) reasons.push('Adapter integrity fingerprint contract is invalid');
         if (latestIntegrity.comparison === 'DRIFT') reasons.push('Latest adapter byte-integrity evidence reports DRIFT from the immutable baseline');
+      }
+
+      if (latestProvenance) {
+        if (latestProvenance.candidateId !== candidate.id || latestProvenance.manifestId !== manifest.id) reasons.push('Signed provenance evidence is not bound to the current candidate manifest');
+        if (latestProvenance.runtimeModel !== manifest.runtimeModel) reasons.push('Signed provenance runtime identity does not match the model manifest');
+        if (latestProvenance.artifactUri !== candidate.artifactUri) reasons.push('Signed provenance artifact identity does not match the training candidate');
+        if (latestProvenance.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Signed provenance training-result SHA does not match the training candidate');
+        if (!latestIntegrity) reasons.push('Signed provenance exists but current adapter integrity evidence is unavailable');
+        if (latestIntegrity && latestProvenance.artifactFingerprint !== latestIntegrity.fingerprint) reasons.push('Signed provenance artifact fingerprint does not match current adapter integrity evidence');
+        if (!provenanceSigner || provenanceSigner.status !== 'TRUSTED') reasons.push('Signed provenance signer is no longer trusted');
+        if (provenanceSigner && provenanceSigner.keyId !== latestProvenance.signerKeyId) reasons.push('Signed provenance signer key identity is inconsistent');
+        if (!/^[a-f0-9]{64}$/.test(latestProvenance.payloadSha256) || !/^[a-f0-9]{64}$/.test(latestProvenance.envelopeSha256)) reasons.push('Signed provenance verification evidence is malformed');
       }
     }
 
