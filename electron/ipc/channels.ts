@@ -26,6 +26,11 @@ export const IPC_CHANNELS = {
 
   // Governed read-only browser bridge.
   BROWSER_READ_PAGE: 'mio:browser:readPage',
+
+  // Governed fixed-entrypoint local training job bridge.
+  TRAINING_START_JOB: 'mio:training:startJob',
+  TRAINING_GET_JOB: 'mio:training:getJob',
+  TRAINING_CANCEL_JOB: 'mio:training:cancelJob',
 } as const;
 
 export type IpcChannelKey = keyof typeof IPC_CHANNELS;
