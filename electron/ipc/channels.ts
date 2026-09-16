@@ -22,6 +22,9 @@ export const IPC_CHANNELS = {
   FS_REVOKE_WORKSPACE: 'mio:fs:revokeWorkspace',
   FS_READ_WORKSPACE_TEXT: 'mio:fs:readWorkspaceText',
   FS_LIST_WORKSPACE: 'mio:fs:listWorkspace',
+
+  // Governed read-only browser bridge.
+  BROWSER_READ_PAGE: 'mio:browser:readPage',
 } as const;
 
 export type IpcChannelKey = keyof typeof IPC_CHANNELS;
