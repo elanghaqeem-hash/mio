@@ -71,7 +71,7 @@ export interface CandidateBenchmarkEvaluation {
   };
 }
 
-function resultErrors(bundle: MioTrainingBundleManifest, result: MioTrainingResultArtifact): string[] {
+export function validateTrainingResultArtifact(bundle: MioTrainingBundleManifest, result: MioTrainingResultArtifact): string[] {
   const errors: string[] = [];
   if (result.schemaVersion !== 1) errors.push('Unsupported training result schema');
   if (result.status !== 'TRAINED_NOT_EVALUATED') errors.push('Training result must be TRAINED_NOT_EVALUATED');
@@ -131,7 +131,7 @@ export class TrainingCandidateRegistry {
   }
 
   public async register(input: RegisterTrainingCandidateInput): Promise<{ candidate: TrainingCandidateRecord; manifest: MioModelManifest }> {
-    const errors = resultErrors(input.bundle, input.result);
+    const errors = validateTrainingResultArtifact(input.bundle, input.result);
     if (errors.length) throw new Error(`Training candidate registration blocked: ${errors.join('; ')}`);
     const runtimeModel = input.runtimeModel.trim();
     const artifactUri = input.artifactUri.trim();

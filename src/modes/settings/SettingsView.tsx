@@ -9,6 +9,7 @@ import { ModelProvenancePanel } from './ModelProvenancePanel';
 import { SignerAuditChainStatusPanel } from './SignerAuditChainStatusPanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
+import { TrainingRunHandoffPanel } from './TrainingRunHandoffPanel';
 
 const CLOUD_PROVIDER_CONFIG = {
   openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
@@ -188,6 +189,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      <TrainingRunHandoffPanel />
       <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <ModelProvenancePanel />
       <SignerAuditChainStatusPanel />
