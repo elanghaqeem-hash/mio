@@ -186,7 +186,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      <ModelCandidateLabPanel />
+      <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <TrainingCandidatePanel />
       <PromotedModelPanel />
 
