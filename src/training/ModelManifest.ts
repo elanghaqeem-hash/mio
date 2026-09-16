@@ -3,6 +3,13 @@ import { MioBenchDomain } from './MioBench';
 export type MioModelTrainingMethod = 'BASE' | 'LORA' | 'QLORA' | 'MERGED_ADAPTER';
 export type MioModelLifecycle = 'EXPERIMENTAL' | 'RELEASE_CANDIDATE' | 'PROMOTED' | 'RETIRED';
 
+export interface MioModelPromotionProvenance {
+  promoter: string;
+  promotedAt: number;
+  benchmarkReportId: string;
+  integrityEvidenceId?: string;
+}
+
 export interface MioModelManifest {
   schemaVersion: 1;
   id: string;
@@ -29,6 +36,7 @@ export interface MioModelManifest {
     reviewer?: string;
     reviewedAt?: number;
   };
+  promotion?: MioModelPromotionProvenance;
   lifecycle: MioModelLifecycle;
   notes?: string;
 }
@@ -56,6 +64,13 @@ export function validateModelManifest(manifest: MioModelManifest): ModelManifest
   if (manifest.benchmarkPolicy.minScoreRatio < 0 || manifest.benchmarkPolicy.minScoreRatio > 1) errors.push('minScoreRatio must be between 0 and 1');
   if (manifest.benchmarkPolicy.requiredDomains.length === 0) errors.push('At least one required benchmark domain is required');
   if (manifest.benchmarkPolicy.maxAverageLatencyMs !== undefined && manifest.benchmarkPolicy.maxAverageLatencyMs <= 0) errors.push('maxAverageLatencyMs must be positive');
+  if (manifest.promotion) {
+    if (manifest.lifecycle !== 'PROMOTED') errors.push('Promotion provenance is only valid for PROMOTED model manifests');
+    if (!manifest.promotion.promoter.trim() || manifest.promotion.promoter.length > 200) errors.push('Promotion provenance requires a bounded promoter identity');
+    if (!Number.isFinite(manifest.promotion.promotedAt) || manifest.promotion.promotedAt <= 0) errors.push('Promotion provenance promotedAt is invalid');
+    if (!manifest.promotion.benchmarkReportId.trim()) errors.push('Promotion provenance benchmarkReportId is required');
+    if (manifest.promotion.integrityEvidenceId !== undefined && !manifest.promotion.integrityEvidenceId.trim()) errors.push('Promotion provenance integrityEvidenceId is invalid');
+  }
   if (manifest.lifecycle === 'PROMOTED' && (!manifest.review.dataGovernanceReviewed || !manifest.review.securityReviewed)) {
     errors.push('Promoted models require data-governance and security review');
   }

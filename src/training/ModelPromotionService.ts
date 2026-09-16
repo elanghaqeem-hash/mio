@@ -87,6 +87,12 @@ export class ModelPromotionService {
     const gated = promoteManifest(snapshot.manifest, snapshot.latestBenchmark.report, promoter);
     const promoted: MioModelManifest = {
       ...gated,
+      promotion: {
+        promoter,
+        promotedAt,
+        benchmarkReportId: snapshot.latestBenchmark.id,
+        ...(snapshot.latestIntegrity ? { integrityEvidenceId: snapshot.latestIntegrity.id } : {}),
+      },
       notes: [
         snapshot.manifest.notes,
         `Promoted after explicit final attestation by ${promoter} using benchmark report ${snapshot.latestBenchmark.id}. Runtime activation remains a separate action.`,
