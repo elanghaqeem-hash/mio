@@ -9,6 +9,7 @@ import { ModelProvenancePanel } from './ModelProvenancePanel';
 import { SignerAuditChainStatusPanel } from './SignerAuditChainStatusPanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingArtifactBindingPanel } from './TrainingArtifactBindingPanel';
+import { TrainingCandidateEvidencePackagePanel } from './TrainingCandidateEvidencePackagePanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 import { TrainingRunHandoffPanel } from './TrainingRunHandoffPanel';
 
@@ -192,6 +193,7 @@ export const SettingsView: React.FC = () => {
 
       <TrainingRunHandoffPanel />
       <TrainingArtifactBindingPanel />
+      <TrainingCandidateEvidencePackagePanel />
       <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <ModelProvenancePanel />
       <SignerAuditChainStatusPanel />
