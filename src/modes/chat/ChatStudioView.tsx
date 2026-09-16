@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BookOpen, CircleOff, Download, Mic, MicOff, RefreshCw, Send, ShieldCheck, Volume2, WifiOff, X } from 'lucide-react';
+import { BookOpen, CircleOff, Database, Download, Mic, MicOff, RefreshCw, Send, ShieldCheck, Volume2, WifiOff, X } from 'lucide-react';
 import { AgentOrchestrator, StructuredAgentResponse } from '../../agents/AgentOrchestrator';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { eventBus } from '../../core/EventBus';
@@ -38,17 +38,19 @@ function downloadEvidencePackage(pkg: MioEvidencePackage): void {
 }
 
 export const ChatStudioView: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([{ id: 'msg_init', sender: 'mio', text: 'MIO Web Lab is active. Local-first intelligence, controlled research, project context, secure tools, and model routing are available according to the current Technology Preview configuration.', timestamp: INITIAL_MESSAGE_TIME }]);
+  const [messages, setMessages] = useState<Message[]>([{ id: 'msg_init', sender: 'mio', text: 'MIO Web Lab is active. Local-first intelligence, governed memory, controlled research, project context, secure tools, and model routing are available according to the current Technology Preview configuration.', timestamp: INITIAL_MESSAGE_TIME }]);
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [coreState, setCoreState] = useState<MioCoreState>('IDLE');
   const [projectKnowledgeEnabled, setProjectKnowledgeEnabled] = useState(true);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [excludedAssetIds, setExcludedAssetIds] = useState<string[]>(persistentExclusions);
   const [providerReadiness, setProviderReadiness] = useState<ProviderReadiness | null>(null);
   const [checkingProvider, setCheckingProvider] = useState(true);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const sessionIdRef = useRef(`chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -93,10 +95,18 @@ export const ChatStudioView: React.FC = () => {
     const conversation = buildConversationContext();
     const exclusionsAtRequest = [...excludedAssetIds];
     const projectKnowledgeAtRequest = projectKnowledgeEnabled;
+    const memoryAtRequest = memoryEnabled;
     setInput('');
     setMessages((prev) => [...prev, { id: `msg_user_${Date.now()}`, sender: 'user', text: userText, timestamp: Date.now() }]);
 
-    const structured = await AgentOrchestrator.processPrompt(userText, conversation, { projectKnowledgeEnabled: projectKnowledgeAtRequest, excludedAssetIds: exclusionsAtRequest, contextBudgetChars: 4800 });
+    const structured = await AgentOrchestrator.processPrompt(userText, conversation, {
+      projectKnowledgeEnabled: projectKnowledgeAtRequest,
+      memoryEnabled: memoryAtRequest,
+      excludedAssetIds: exclusionsAtRequest,
+      contextBudgetChars: 4800,
+      memoryContextBudgetChars: 3600,
+      sessionId: sessionIdRef.current,
+    });
     const project = ProjectManager.getProject();
     const snapshotContext = projectKnowledgeAtRequest
       ? ProjectKnowledgeIndex.retrieve(project, userText, { excludedAssetIds: exclusionsAtRequest, contextBudgetChars: 4800 })
@@ -128,7 +138,10 @@ export const ChatStudioView: React.FC = () => {
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#07090e] font-mono text-xs">
       <div className="flex shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-gray-800 bg-[#0b1018] px-3 py-2 text-[10px] sm:px-4">
         <div className="flex min-w-0 items-center gap-2 text-gray-500 sm:gap-3">
-          <span className="hidden whitespace-nowrap md:inline">CONVERSATION CONTEXT // LAST 12 MESSAGES MAX</span>
+          <span className="hidden whitespace-nowrap md:inline">DIRECT CONTEXT // LAST 12 MESSAGES MAX</span>
+          <button type="button" onClick={() => setMemoryEnabled((current) => !current)} className={`flex min-h-9 shrink-0 items-center gap-1 rounded border px-2 py-1 touch-manipulation ${memoryEnabled ? 'border-violet-500/40 bg-violet-950/30 text-violet-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`} title="Governed memory is session/project scoped, bounded, and always treated as contextual data rather than instruction authority.">
+            {memoryEnabled ? <Database size={11} /> : <CircleOff size={11} />} MEMORY {memoryEnabled ? 'ON' : 'OFF'}
+          </button>
           <button type="button" onClick={() => setProjectKnowledgeEnabled((current) => !current)} className={`flex min-h-9 shrink-0 items-center gap-1 rounded border px-2 py-1 touch-manipulation ${projectKnowledgeEnabled ? 'border-cyan-500/40 bg-cyan-950/30 text-cyan-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`} title="Project knowledge is retrieved only when relevant and remains application data, not instruction authority.">
             {projectKnowledgeEnabled ? <BookOpen size={11} /> : <CircleOff size={11} />} PROJECT KNOWLEDGE {projectKnowledgeEnabled ? 'ON' : 'OFF'}
           </button>
@@ -153,7 +166,10 @@ export const ChatStudioView: React.FC = () => {
 
                   {msg.structured.citations && msg.structured.citations.length > 0 && <div className="rounded border border-emerald-500/20 bg-emerald-950/10 p-2"><div className="mb-1 font-bold text-emerald-300">WEB SOURCES</div><div className="space-y-1">{msg.structured.citations.map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer" className="block truncate text-[9px] text-cyan-300 underline decoration-cyan-500/40 hover:text-cyan-200">{citation.title || citation.url}</a>)}</div></div>}
 
-                  {msg.structured.projectContextEnabled !== undefined && <div className="flex flex-wrap items-center gap-2 text-[9px]"><span className={`rounded border px-2 py-0.5 ${msg.structured.projectContextEnabled ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`}>PROJECT CONTEXT: {msg.structured.projectContextEnabled ? 'ENABLED' : 'DISABLED'}</span><span className="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-400">SOURCES USED: {msg.structured.projectContextSources ?? 0}</span></div>}
+                  {(msg.structured.memoryContextEnabled !== undefined || msg.structured.projectContextEnabled !== undefined) && <div className="flex flex-wrap items-center gap-2 text-[9px]">
+                    {msg.structured.memoryContextEnabled !== undefined && <><span className={`rounded border px-2 py-0.5 ${msg.structured.memoryContextEnabled ? 'border-violet-500/30 bg-violet-950/20 text-violet-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`}>MEMORY: {msg.structured.memoryContextEnabled ? 'ENABLED' : 'DISABLED'}</span><span className="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-400">MEMORY SOURCES: {msg.structured.memoryContextSources ?? 0}</span></>}
+                    {msg.structured.projectContextEnabled !== undefined && <><span className={`rounded border px-2 py-0.5 ${msg.structured.projectContextEnabled ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300' : 'border-gray-700 bg-gray-900 text-gray-500'}`}>PROJECT CONTEXT: {msg.structured.projectContextEnabled ? 'ENABLED' : 'DISABLED'}</span><span className="rounded border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-400">PROJECT SOURCES: {msg.structured.projectContextSources ?? 0}</span></>}
+                  </div>}
 
                   {msg.structured.evidenceAudit && <EvidenceInspector audit={msg.structured.evidenceAudit} messageId={msg.id} />}
 
@@ -200,7 +216,7 @@ export const ChatStudioView: React.FC = () => {
           </div>
         )}
         {providerReady && providerReadiness && <div className="mb-2 flex items-center gap-1.5 text-[9px] text-emerald-400"><RefreshCw size={10} /> PROVIDER READY: {providerReadiness.provider.toUpperCase()}</div>}
-        <div className="mb-2 hidden items-center justify-between text-[9px] text-gray-600 sm:flex"><span>Project sources are governed, relevance-selected, and data-only. Quarantined/stale sources retain lower confidence.</span><span>{excludedAssetIds.length ? `${excludedAssetIds.length} project source asset(s) excluded` : 'No source exclusions'}</span></div>
+        <div className="mb-2 hidden items-center justify-between text-[9px] text-gray-600 sm:flex"><span>Memory and project sources are bounded, scoped, governed, and data-only; neither can grant authorization.</span><span>{excludedAssetIds.length ? `${excludedAssetIds.length} project source asset(s) excluded` : 'No project source exclusions'}</span></div>
         <div className="flex items-end gap-1.5 rounded-xl border border-gray-700 bg-[#07090e] p-1.5 transition focus-within:border-cyan-400 sm:gap-2 sm:p-2">
           <button type="button" onClick={toggleSpeechRecognition} className={`inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg touch-manipulation ${isListening ? 'animate-pulse bg-red-500 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-cyan-300'}`}>{isListening ? <Mic size={18} /> : <MicOff size={18} />}</button>
           <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && providerReady) { e.preventDefault(); void handleSend(); } }} placeholder={providerReady ? 'Ask MIO, research, inspect a project, or route a creative task...' : 'Configure and verify an AI provider in System Settings first'} className="max-h-28 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-2.5 font-mono text-base leading-5 text-white outline-none placeholder:text-gray-600 sm:py-2 sm:text-xs" />
