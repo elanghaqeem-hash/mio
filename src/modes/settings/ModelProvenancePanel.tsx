@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Ban, BadgeCheck, Download, FileSignature, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Ban, BadgeCheck, Download, FileSignature, History, KeyRound, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import {
   modelSignerTrustStore,
   trainingCandidateProvenanceService,
+  type ModelSignerTrustEvent,
   type TrustedModelSigner,
 } from '../../training/SignedModelArtifactProvenance';
 import {
@@ -29,20 +30,34 @@ function downloadJson(name: string, value: unknown): void {
 
 export const ModelProvenancePanel: React.FC = () => {
   const [signers, setSigners] = useState<TrustedModelSigner[]>([]);
+  const [auditEvents, setAuditEvents] = useState<ModelSignerTrustEvent[]>([]);
   const [candidates, setCandidates] = useState<TrainingCandidateReviewSnapshot[]>([]);
+  const [actor, setActor] = useState('');
+  const [reason, setReason] = useState('');
   const [signerLabel, setSignerLabel] = useState('');
   const [publicKey, setPublicKey] = useState('');
+  const [rotationCurrentKeyId, setRotationCurrentKeyId] = useState('');
+  const [replacementLabel, setReplacementLabel] = useState('');
+  const [replacementPublicKey, setReplacementPublicKey] = useState('');
   const [issuerByCandidate, setIssuerByCandidate] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const trustedSigners = useMemo(() => signers.filter((signer) => signer.status === 'TRUSTED'), [signers]);
+
   const refresh = useCallback(async () => {
-    const [nextSigners, nextCandidates] = await Promise.all([
+    const [nextSigners, nextCandidates, nextAudit] = await Promise.all([
       modelSignerTrustStore.list(),
       trainingCandidateReviewService.list(),
+      modelSignerTrustStore.history(undefined, 50),
     ]);
     setSigners(nextSigners);
     setCandidates(nextCandidates);
+    setAuditEvents(nextAudit);
+    setRotationCurrentKeyId((current) => {
+      if (nextSigners.some((signer) => signer.keyId === current && signer.status === 'TRUSTED')) return current;
+      return nextSigners.find((signer) => signer.status === 'TRUSTED')?.keyId ?? '';
+    });
     setIssuerByCandidate((current) => {
       const next = { ...current };
       for (const snapshot of nextCandidates) next[snapshot.candidate.id] ??= 'MIO Model Release';
@@ -58,10 +73,11 @@ export const ModelProvenancePanel: React.FC = () => {
     setBusy('trust');
     setMessage(null);
     try {
-      const signer = await modelSignerTrustStore.trust(signerLabel, publicKey);
+      const signer = await modelSignerTrustStore.trust(signerLabel, publicKey, actor, reason);
       setSignerLabel('');
       setPublicKey('');
-      setMessage(`Trusted signer ${signer.label} as ${signer.keyId}. Only the public key is stored by Mio.`);
+      setReason('');
+      setMessage(`Trusted signer ${signer.label} as ${signer.keyId}. The mutation was recorded in the immutable trust audit; only the public key is stored by Mio.`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signer trust import failed');
@@ -74,11 +90,35 @@ export const ModelProvenancePanel: React.FC = () => {
     setBusy(`revoke:${keyId}`);
     setMessage(null);
     try {
-      const signer = await modelSignerTrustStore.revoke(keyId);
-      setMessage(`Signer ${signer.label} is REVOKED. Existing signatures remain audit evidence but no longer satisfy release-review trust.`);
+      const signer = await modelSignerTrustStore.revoke(keyId, actor, reason);
+      setReason('');
+      setMessage(`Signer ${signer.label} is REVOKED and the action is audit-recorded. Existing signatures remain evidence but no longer satisfy release, promotion, or activation trust.`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signer revocation failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rotateSigner = async () => {
+    setBusy('rotate');
+    setMessage(null);
+    try {
+      const result = await modelSignerTrustStore.rotate({
+        currentKeyId: rotationCurrentKeyId,
+        replacementLabel,
+        replacementPublicKey,
+        actor,
+        reason,
+      });
+      setReplacementLabel('');
+      setReplacementPublicKey('');
+      setReason('');
+      setMessage(`Signer rotation ${result.rotationId} completed. ${result.previous.keyId} is REVOKED and ${result.replacement.keyId} is TRUSTED. Existing provenance signed by the old key remains historical evidence and will fail current-trust gates.`);
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Signer rotation failed');
     } finally {
       setBusy(null);
     }
@@ -94,7 +134,7 @@ export const ModelProvenancePanel: React.FC = () => {
         issuerByCandidate[candidateId] ?? 'MIO Model Release',
       );
       downloadJson(`mio-provenance-payload-${safeFileName(snapshot.manifest.runtimeModel)}.json`, payload);
-      setMessage('Signing payload prepared from the current candidate + adapter fingerprint. Sign it outside Mio with the TP-0.51 offline signing utility, then import the signed envelope below.');
+      setMessage('Signing payload prepared from the current candidate + adapter fingerprint. Sign it outside Mio with the TP-0.53 offline signing utility, then import the signed envelope below.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signing payload preparation failed');
     } finally {
@@ -126,15 +166,24 @@ export const ModelProvenancePanel: React.FC = () => {
       </div>
 
       <p className="text-[10px] leading-relaxed text-gray-500">
-        Signature validity and signer trust are separate. Mio stores only explicitly trusted P-256 public keys. Private signing keys stay outside Mio. A valid trusted signature binds the exact candidate/training identity to the adapter fingerprint observed by TP-0.50; it never promotes or activates a model.
+        Signature validity and signer trust are separate. Mio stores only explicitly trusted P-256 public keys. Private signing keys stay outside Mio. Trust changes are auditable and key rotation is explicit; neither action promotes or activates a model.
       </p>
+
+      <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-3 space-y-2">
+        <div className="font-bold text-amber-300">TRUST MUTATION IDENTITY</div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <input value={actor} onChange={(event) => setActor(event.target.value)} maxLength={200} placeholder="Actor / operator identity (required)" className="rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-xs text-white" />
+          <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Reason / ticket / change reference (optional)" className="rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-xs text-white" />
+        </div>
+        <div className="text-[9px] text-gray-500">Every trust, re-trust, revoke, and rotation action is recorded with actor, timestamp, prior/resulting state, and optional reason. Audit capacity is bounded; mutations fail closed if audit persistence cannot be completed.</div>
+      </div>
 
       <div className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-3">
         <div className="font-bold text-gray-200 flex items-center gap-2"><KeyRound size={13} className="text-amber-400" /> TRUSTED MODEL SIGNERS</div>
         <div className="grid gap-2 md:grid-cols-[220px_1fr_auto]">
           <input value={signerLabel} onChange={(event) => setSignerLabel(event.target.value)} maxLength={200} placeholder="Signer label / owner" className="rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-xs text-white" />
           <textarea value={publicKey} onChange={(event) => setPublicKey(event.target.value)} placeholder="P-256 public key — PEM SubjectPublicKeyInfo or base64 SPKI" rows={3} className="resize-y rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-[10px] text-white" />
-          <button onClick={() => void trustSigner()} disabled={busy !== null || !signerLabel.trim() || !publicKey.trim()} className="rounded border border-amber-500/40 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-950/20 disabled:border-gray-700 disabled:text-gray-600">{busy === 'trust' ? 'VALIDATING…' : 'TRUST PUBLIC KEY'}</button>
+          <button onClick={() => void trustSigner()} disabled={busy !== null || !actor.trim() || !signerLabel.trim() || !publicKey.trim()} className="rounded border border-amber-500/40 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-950/20 disabled:border-gray-700 disabled:text-gray-600">{busy === 'trust' ? 'VALIDATING…' : 'TRUST PUBLIC KEY'}</button>
         </div>
         {signers.length === 0 ? (
           <div className="text-[9px] text-gray-600">No trusted model-signing public keys.</div>
@@ -148,8 +197,44 @@ export const ModelProvenancePanel: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`rounded border px-2 py-1 text-[9px] font-bold ${signer.status === 'TRUSTED' ? 'border-emerald-500/30 text-emerald-300' : 'border-red-500/30 text-red-300'}`}>{signer.status}</span>
-                  {signer.status === 'TRUSTED' && <button onClick={() => void revokeSigner(signer.keyId)} disabled={busy !== null} className="rounded border border-red-500/30 px-2 py-1 text-[9px] font-bold text-red-300 hover:bg-red-950/20 disabled:opacity-50"><Ban size={10} className="inline mr-1" />REVOKE</button>}
+                  {signer.status === 'TRUSTED' && <button onClick={() => void revokeSigner(signer.keyId)} disabled={busy !== null || !actor.trim()} className="rounded border border-red-500/30 px-2 py-1 text-[9px] font-bold text-red-300 hover:bg-red-950/20 disabled:opacity-50"><Ban size={10} className="inline mr-1" />REVOKE</button>}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3 space-y-3">
+        <div className="font-bold text-cyan-300 flex items-center gap-2"><RotateCcw size={13} /> EXPLICIT SIGNER KEY ROTATION</div>
+        <p className="text-[9px] text-gray-500">Rotation first validates/trusts the replacement public key, then revokes the selected current signer under one rotation ID. If current-key revocation fails, Mio attempts to revoke a newly introduced replacement as a safe rollback.</p>
+        <select value={rotationCurrentKeyId} onChange={(event) => setRotationCurrentKeyId(event.target.value)} className="w-full rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-xs text-white">
+          <option value="">Select current TRUSTED signer</option>
+          {trustedSigners.map((signer) => <option key={signer.keyId} value={signer.keyId}>{signer.label} — {signer.keyId}</option>)}
+        </select>
+        <div className="grid gap-2 md:grid-cols-[220px_1fr_auto]">
+          <input value={replacementLabel} onChange={(event) => setReplacementLabel(event.target.value)} maxLength={200} placeholder="Replacement signer label" className="rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-xs text-white" />
+          <textarea value={replacementPublicKey} onChange={(event) => setReplacementPublicKey(event.target.value)} rows={3} placeholder="Replacement P-256 public key — PEM or base64 SPKI" className="resize-y rounded border border-gray-700 bg-[#0a0f18] px-2.5 py-2 text-[10px] text-white" />
+          <button onClick={() => void rotateSigner()} disabled={busy !== null || !actor.trim() || !rotationCurrentKeyId || !replacementLabel.trim() || !replacementPublicKey.trim()} className="rounded border border-cyan-500/40 px-3 py-2 text-[10px] font-bold text-cyan-300 hover:bg-cyan-950/20 disabled:border-gray-700 disabled:text-gray-600">{busy === 'rotate' ? 'ROTATING…' : 'ROTATE SIGNER'}</button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-2">
+        <div className="font-bold text-gray-200 flex items-center gap-2"><History size={13} className="text-violet-400" /> SIGNER TRUST AUDIT</div>
+        {auditEvents.length === 0 ? (
+          <div className="text-[9px] text-gray-600">No signer trust audit events yet. Signers created before TP-0.54 remain readable; their first subsequent trust mutation starts the append-only audit trail.</div>
+        ) : (
+          <div className="max-h-64 space-y-1.5 overflow-y-auto">
+            {auditEvents.map((event) => (
+              <div key={event.id} className="rounded border border-gray-800 bg-[#0a0f18] p-2 text-[9px] text-gray-400">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`font-bold ${event.resultingStatus === 'TRUSTED' ? 'text-emerald-300' : 'text-red-300'}`}>#{event.sequence} {event.action}</span>
+                  <span>{new Date(event.occurredAt).toLocaleString()}</span>
+                  <span>actor <strong className="text-gray-200">{event.actor}</strong></span>
+                </div>
+                <div className="mt-1 truncate">{event.label} · <code>{event.keyId}</code></div>
+                <div className="mt-1">{event.previousStatus ?? 'NONE'} → <strong>{event.resultingStatus}</strong>{event.rotationId ? ` · ${event.rotationId}` : ''}</div>
+                {event.reason && <div className="mt-1 text-gray-500">Reason: {event.reason}</div>}
               </div>
             ))}
           </div>
