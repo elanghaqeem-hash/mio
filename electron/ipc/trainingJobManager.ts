@@ -9,6 +9,12 @@ export type TrainingPythonRuntime = 'python' | 'python3' | 'py';
 export type TrainingJobMode = 'DRY_RUN' | 'TRAIN';
 export type TrainingJobState = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
+export interface TrainingBundleIdentity {
+  bundleId: string;
+  datasetSha256: string;
+  configSha256: string;
+}
+
 export interface StartTrainingJobRequest {
   workspaceId: string;
   bundleRelativePath: string;
@@ -26,6 +32,7 @@ export interface TrainingJobSnapshot {
   workspaceId: string;
   bundleRelativePath: string;
   outputRelativePath?: string;
+  trainingIdentity: TrainingBundleIdentity;
   startedAt: number;
   finishedAt?: number;
   exitCode?: number;
@@ -42,9 +49,11 @@ interface TrainingJobRecord extends TrainingJobSnapshot {
 }
 
 const MAX_LOG_CHARS = 64 * 1024;
+const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_JOBS = 50;
 const SAFE_RUNTIME = new Set<TrainingPythonRuntime>(['python', 'python3', 'py']);
 const SAFE_RELATIVE_PATH = /^[^\u0000]{1,4096}$/;
+const SHA256 = /^[a-f0-9]{64}$/;
 
 function tail(value: string): string {
   return value.length <= MAX_LOG_CHARS ? value : value.slice(value.length - MAX_LOG_CHARS);
@@ -83,6 +92,7 @@ export class TrainingJobManager {
     const bundlePath = await this.workspaceSandbox.resolveExisting(request.workspaceId, request.bundleRelativePath);
     const bundleStat = await fs.promises.stat(bundlePath);
     if (!bundleStat.isDirectory()) throw new Error('Training bundle path must resolve to a directory');
+    const trainingIdentity = await this.captureBundleIdentity(bundlePath);
 
     let outputPath: string | undefined;
     if (request.mode === 'TRAIN') {
@@ -113,11 +123,12 @@ export class TrainingJobManager {
       workspaceId: request.workspaceId,
       bundleRelativePath: request.bundleRelativePath,
       ...(request.outputRelativePath ? { outputRelativePath: request.outputRelativePath } : {}),
+      trainingIdentity,
       startedAt: Date.now(),
       stdoutTail: '',
       stderrTail: '',
       ...(request.mode === 'TRAIN' && request.outputRelativePath ? { resultFileRelativePath: `${request.outputRelativePath.replace(/[\\/]+$/g, '')}/mio-training-result.json` } : {}),
-      disclosure: 'Governed local TP-0.46 runner execution. The fixed bundled runner is launched without a shell, with a bounded environment and Hugging Face/Transformers/Datasets offline flags. Completion remains TRAINED_NOT_EVALUATED and never promotes, activates, uploads, or deploys a model.',
+      disclosure: 'Governed local TP-0.46 runner execution. The fixed bundled runner is launched without a shell, with a bounded environment and Hugging Face/Transformers/Datasets offline flags. The pre-run bundle identity is retained for later TP-0.63 handoff binding. Completion remains TRAINED_NOT_EVALUATED and never promotes, activates, uploads, or deploys a model.',
     };
 
     const child = spawn(command, args, {
@@ -221,6 +232,30 @@ export class TrainingJobManager {
     if (!SAFE_RUNTIME.has(request.pythonRuntime)) throw new Error('Python runtime is not in the governed runtime whitelist');
     if (request.mode !== 'DRY_RUN' && request.mode !== 'TRAIN') throw new Error('Unsupported governed training job mode');
     if (request.mode === 'DRY_RUN' && request.outputRelativePath !== undefined) throw new Error('Dry-run mode must not declare an output path');
+  }
+
+  private async captureBundleIdentity(bundlePath: string): Promise<TrainingBundleIdentity> {
+    const manifestPath = path.join(bundlePath, 'manifest.json');
+    const stat = await fs.promises.lstat(manifestPath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Governed training manifest must be a regular file');
+    if (stat.size > MAX_MANIFEST_BYTES) throw new Error('Governed training manifest exceeds the 2 MiB identity-capture limit');
+    let manifest: unknown;
+    try { manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')); }
+    catch { throw new Error('Governed training manifest is invalid JSON'); }
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('Governed training manifest must be a JSON object');
+    const value = manifest as {
+      bundleId?: unknown;
+      dataset?: { sha256?: unknown };
+      reproducibility?: { configSha256?: unknown };
+    };
+    if (typeof value.bundleId !== 'string' || !/^mio-train-[a-f0-9]{12}-[a-f0-9]{12}$/.test(value.bundleId)) throw new Error('Governed training manifest bundleId is invalid');
+    if (typeof value.dataset?.sha256 !== 'string' || !SHA256.test(value.dataset.sha256)) throw new Error('Governed training manifest dataset SHA-256 is invalid');
+    if (typeof value.reproducibility?.configSha256 !== 'string' || !SHA256.test(value.reproducibility.configSha256)) throw new Error('Governed training manifest config SHA-256 is invalid');
+    return {
+      bundleId: value.bundleId,
+      datasetSha256: value.dataset.sha256,
+      configSha256: value.reproducibility.configSha256,
+    };
   }
 
   private async resolveRunnerPath(): Promise<string> {
