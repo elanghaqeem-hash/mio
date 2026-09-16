@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'electron';
 import * as os from 'os';
 import { BrowserReadSandbox } from './browserReadSandbox';
+import { TrainingHandoffPackager, type PackageTrainingHandoffRequest } from './trainingHandoffPackager';
 import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
 
@@ -18,11 +19,13 @@ const MAX_STOP_REASON = 500;
 const MAX_WORKSPACE_ID = 128;
 const MAX_BROWSER_URL = 2048;
 const MAX_TRAINING_JOB_ID = 256;
+const MAX_TRAINING_PATH = 4096;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
+  const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
 
   const validateWorkspaceId = (workspaceId: unknown): workspaceId is string => {
     return typeof workspaceId === 'string' && workspaceId.length > 0 && workspaceId.length <= MAX_WORKSPACE_ID && /^ws_[a-zA-Z0-9-]+$/.test(workspaceId);
@@ -31,7 +34,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const validateWorkspacePathRequest = (request: unknown): request is WorkspacePathRequest => {
     if (!request || typeof request !== 'object') return false;
     const value = request as Partial<WorkspacePathRequest>;
-    return validateWorkspaceId(value.workspaceId) && typeof value.relativePath === 'string' && value.relativePath.length <= 4096;
+    return validateWorkspaceId(value.workspaceId) && typeof value.relativePath === 'string' && value.relativePath.length <= MAX_TRAINING_PATH;
   };
 
   const validateBrowserReadRequest = (request: unknown): request is BrowserReadPageRequest => {
@@ -46,8 +49,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     return validateWorkspaceId(value.workspaceId)
       && typeof value.bundleRelativePath === 'string'
       && value.bundleRelativePath.length > 0
-      && value.bundleRelativePath.length <= 4096
-      && (value.outputRelativePath === undefined || (typeof value.outputRelativePath === 'string' && value.outputRelativePath.length > 0 && value.outputRelativePath.length <= 4096))
+      && value.bundleRelativePath.length <= MAX_TRAINING_PATH
+      && (value.outputRelativePath === undefined || (typeof value.outputRelativePath === 'string' && value.outputRelativePath.length > 0 && value.outputRelativePath.length <= MAX_TRAINING_PATH))
       && (value.pythonRuntime === 'python' || value.pythonRuntime === 'python3' || value.pythonRuntime === 'py')
       && (value.mode === 'DRY_RUN' || value.mode === 'TRAIN')
       && (value.mode !== 'DRY_RUN' || value.outputRelativePath === undefined)
@@ -56,6 +59,17 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   const validateTrainingJobId = (jobId: unknown): jobId is string => {
     return typeof jobId === 'string' && jobId.length > 0 && jobId.length <= MAX_TRAINING_JOB_ID && /^training-job:[0-9]+:[a-f0-9-]+$/i.test(jobId);
+  };
+
+  const validateTrainingHandoffRequest = (request: unknown): request is PackageTrainingHandoffRequest => {
+    if (!request || typeof request !== 'object') return false;
+    const value = request as Partial<PackageTrainingHandoffRequest>;
+    const validPath = (candidate: unknown): candidate is string => typeof candidate === 'string' && candidate.length > 0 && candidate.length <= MAX_TRAINING_PATH && !candidate.includes('\u0000');
+    return validateTrainingJobId(value.jobId)
+      && validateWorkspaceId(value.workspaceId)
+      && validPath(value.bundleRelativePath)
+      && validPath(value.resultFileRelativePath)
+      && validPath(value.handoffRelativePath);
   };
 
   return {
@@ -204,6 +218,21 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
+    },
+
+    handlePackageTrainingHandoff: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateTrainingHandoffRequest(request)) return { success: false, error: 'Invalid governed training handoff packaging request' };
+      try {
+        return { success: true, receipt: await trainingHandoffPackager.packageJob(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
+    handleGetTrainingHandoffReceipt: (_event: IpcMainInvokeEvent, jobId: unknown) => {
+      if (!validateTrainingJobId(jobId)) return { success: false, error: 'Invalid governed training job id' };
+      const receipt = trainingHandoffPackager.getReceipt(jobId);
+      return receipt ? { success: true, receipt } : { success: false, error: 'No TP-0.63 handoff packaging receipt exists for this job' };
     },
 
     cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
