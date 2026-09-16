@@ -2,6 +2,7 @@ import { InMemoryStorageProvider } from '../storage/InMemoryStorageProvider';
 import { BenchmarkReportRepository } from '../training/BenchmarkReportRepository';
 import { MioBenchReport } from '../training/MioBench';
 import { MioModelManifest, validateModelManifest } from '../training/ModelManifest';
+import { ModelManifestRepository } from '../training/ModelManifestRepository';
 import { evaluateModelPromotion, promoteManifest } from '../training/ModelPromotionGate';
 
 export async function runModelPromotionTests(): Promise<{ passed: number; total: number }> {
@@ -55,9 +56,9 @@ export async function runModelPromotionTests(): Promise<{ passed: number; total:
   };
 
   const storage = new InMemoryStorageProvider();
-  const repository = new BenchmarkReportRepository(storage);
-  const stored = await repository.save(manifest.id, report);
-  const latest = await repository.latestForManifest(manifest.id);
+  const benchmarkRepository = new BenchmarkReportRepository(storage);
+  const stored = await benchmarkRepository.save(manifest.id, report);
+  const latest = await benchmarkRepository.latestForManifest(manifest.id);
   assert(latest?.id === stored.id && latest?.report.model === report.model, 'Benchmark reports persist in isolated training storage');
 
   const decision = evaluateModelPromotion(manifest, report);
@@ -66,6 +67,19 @@ export async function runModelPromotionTests(): Promise<{ passed: number; total:
   const promoted = promoteManifest(manifest, report, 'reviewer');
   assert(promoted.lifecycle === 'PROMOTED' && promoted.review.reviewer === 'reviewer', 'Promotion creates an explicitly promoted manifest');
   assert(validateModelManifest(promoted).valid, 'Promoted manifest remains valid');
+
+  const manifestRepository = new ModelManifestRepository(storage);
+  await manifestRepository.setActivePromoted(promoted);
+  const active = await manifestRepository.getActivePromoted();
+  assert(active?.id === promoted.id && active.lifecycle === 'PROMOTED', 'Only an explicitly promoted manifest becomes the active model pointer');
+
+  let rejectedUnpromoted = false;
+  try {
+    await manifestRepository.setActivePromoted(manifest);
+  } catch {
+    rejectedUnpromoted = true;
+  }
+  assert(rejectedUnpromoted, 'Release candidate cannot become active without passing promotion');
 
   const missingReview = evaluateModelPromotion({
     ...manifest,
