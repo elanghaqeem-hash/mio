@@ -16,6 +16,7 @@ import { runResourceGovernanceTests } from './resourceGovernanceTests';
 import { runScopedAuthorizationTests } from './scopedAuthorizationTests';
 import { runCapabilityGatewayTests } from './capabilityGatewayTests';
 import { runDesktopWorkspaceBridgeTests } from './desktopWorkspaceBridgeTests';
+import { runDesktopBrowserBridgeTests } from './desktopBrowserBridgeTests';
 import { runKnowledgeIngestionTests } from './knowledgeIngestionTests';
 import { runProjectKnowledgeIndexTests } from './projectKnowledgeIndexTests';
 import { runKnowledgeGovernanceWorkflowTests } from './knowledgeGovernanceWorkflowTests';
@@ -58,6 +59,7 @@ const runners = [
   runScopedAuthorizationTests,
   runCapabilityGatewayTests,
   runDesktopWorkspaceBridgeTests,
+  runDesktopBrowserBridgeTests,
   runKnowledgeIngestionTests,
   runProjectKnowledgeIndexTests,
   runKnowledgeGovernanceWorkflowTests,
