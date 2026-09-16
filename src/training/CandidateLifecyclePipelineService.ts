@@ -1,9 +1,11 @@
-import { systemPreferences } from '../settings/SystemPreferences';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
-import type { ModelRouterConfig } from '../types/models';
 import { ModelManifestRepository } from './ModelManifestRepository';
 import { ModelPromotionService } from './ModelPromotionService';
+import {
+  promotedModelActivationService,
+  type PromotedModelRuntimeStatus,
+} from './PromotedModelActivationService';
 import { TrainingCandidateRegistry } from './TrainingCandidateRegistry';
 import { TrainingCandidateReviewService, type TrainingCandidateReviewSnapshot } from './TrainingCandidateReviewService';
 
@@ -54,7 +56,7 @@ export interface CandidateLifecyclePipelineSnapshot {
 }
 
 export interface CandidateLifecyclePipelineOptions {
-  routerConfigProvider?: () => ModelRouterConfig;
+  activationStatusProvider?: () => Promise<PromotedModelRuntimeStatus>;
 }
 
 function stage(
@@ -84,7 +86,7 @@ export class CandidateLifecyclePipelineService {
   private readonly reviews: TrainingCandidateReviewService;
   private readonly promotions: ModelPromotionService;
   private readonly manifests: ModelManifestRepository;
-  private readonly routerConfigProvider: () => ModelRouterConfig;
+  private readonly activationStatusProvider: () => Promise<PromotedModelRuntimeStatus>;
 
   constructor(
     private readonly storage: StorageProvider = defaultStorageProvider,
@@ -94,30 +96,35 @@ export class CandidateLifecyclePipelineService {
     this.reviews = new TrainingCandidateReviewService(storage);
     this.promotions = new ModelPromotionService(storage);
     this.manifests = new ModelManifestRepository(storage);
-    this.routerConfigProvider = options.routerConfigProvider ?? (() => systemPreferences.getSnapshot().modelRouter);
+    this.activationStatusProvider = options.activationStatusProvider ?? (() => promotedModelActivationService.status());
   }
 
   public async list(limit = 100): Promise<CandidateLifecyclePipelineSnapshot[]> {
-    const candidates = await this.candidates.list(limit);
-    const activePromoted = await this.manifests.getActivePromoted();
-    const config = this.routerConfigProvider();
+    const [candidates, activePromoted, activationStatus] = await Promise.all([
+      this.candidates.list(limit),
+      this.manifests.getActivePromoted(),
+      this.activationStatusProvider(),
+    ]);
     const output: CandidateLifecyclePipelineSnapshot[] = [];
     for (const candidate of candidates) {
-      const snapshot = await this.assembleSnapshot(candidate.id, activePromoted?.id, config);
+      const snapshot = await this.assembleSnapshot(candidate.id, activePromoted?.id, activationStatus);
       if (snapshot) output.push(snapshot);
     }
     return output;
   }
 
   public async inspect(candidateId: string): Promise<CandidateLifecyclePipelineSnapshot | undefined> {
-    const activePromoted = await this.manifests.getActivePromoted();
-    return this.assembleSnapshot(candidateId, activePromoted?.id, this.routerConfigProvider());
+    const [activePromoted, activationStatus] = await Promise.all([
+      this.manifests.getActivePromoted(),
+      this.activationStatusProvider(),
+    ]);
+    return this.assembleSnapshot(candidateId, activePromoted?.id, activationStatus);
   }
 
   private async assembleSnapshot(
     candidateId: string,
     activePromotedManifestId: string | undefined,
-    config: ModelRouterConfig,
+    activationStatus: PromotedModelRuntimeStatus,
   ): Promise<CandidateLifecyclePipelineSnapshot | undefined> {
     const review = await this.reviews.inspect(candidateId);
     if (!review) return undefined;
@@ -160,8 +167,26 @@ export class CandidateLifecyclePipelineService {
       ));
     }
 
+    const promotedLike = manifest.lifecycle === 'PROMOTED' || manifest.lifecycle === 'RETIRED';
     if (!review.handoffReceipt) {
       stages.push(stage('ARTIFACT_BINDING', 'Handoff ↔ adapter binding', 'NOT_APPLICABLE', 'TP-0.59 binding is required only for candidates with a TP-0.58 handoff receipt.'));
+    } else if (promotedLike) {
+      if (manifest.promotion?.artifactBindingEvidenceId) {
+        stages.push(stage(
+          'ARTIFACT_BINDING',
+          'Handoff ↔ adapter binding',
+          'COMPLETE',
+          `Promotion provenance preserves historical TP-0.59 binding ${manifest.promotion.artifactBindingEvidenceId}. A later post-promotion scan may make the current review binding stale without invalidating this historical promotion evidence.`,
+        ));
+      } else {
+        stages.push(stage(
+          'ARTIFACT_BINDING',
+          'Handoff ↔ adapter binding',
+          'BLOCKED',
+          'Promoted TP-0.58 candidate has no historical TP-0.59 binding evidence in structured promotion provenance.',
+          { blockers: ['Promotion provenance is missing artifactBindingEvidenceId'] },
+        ));
+      }
     } else if (review.artifactBindingValid && review.latestArtifactBinding) {
       stages.push(stage('ARTIFACT_BINDING', 'Handoff ↔ adapter binding', 'COMPLETE', `Current TP-0.59 binding ${review.latestArtifactBinding.id} is valid.`));
     } else {
@@ -196,7 +221,7 @@ export class CandidateLifecyclePipelineService {
       ));
     }
 
-    if (manifest.lifecycle === 'RELEASE_CANDIDATE' || manifest.lifecycle === 'PROMOTED' || manifest.lifecycle === 'RETIRED') {
+    if (manifest.lifecycle === 'RELEASE_CANDIDATE' || promotedLike) {
       stages.push(stage('RELEASE_REVIEW', 'Release-candidate review', 'COMPLETE', `Lifecycle has advanced beyond EXPERIMENTAL to ${manifest.lifecycle}.`));
     } else if (review.releaseCandidateEligible) {
       stages.push(stage(
@@ -216,7 +241,51 @@ export class CandidateLifecyclePipelineService {
       ));
     }
 
-    if (!review.latestProvenance) {
+    if (promotedLike) {
+      const boundProvenanceId = manifest.promotion?.provenanceEvidenceId;
+      if (!boundProvenanceId && !review.latestProvenance) {
+        stages.push(stage(
+          'SIGNED_PROVENANCE',
+          'Signed artifact provenance',
+          'OPTIONAL',
+          'No signed provenance was introduced at promotion. Current policy treats it as optional while absent.',
+        ));
+      } else if (!boundProvenanceId && review.latestProvenance) {
+        stages.push(stage(
+          'SIGNED_PROVENANCE',
+          'Signed artifact provenance',
+          'BLOCKED',
+          'Signed provenance exists now but structured promotion provenance did not bind a provenance evidence id.',
+          { blockers: ['Promotion provenance is missing provenanceEvidenceId'] },
+        ));
+      } else if (!review.latestProvenance) {
+        stages.push(stage(
+          'SIGNED_PROVENANCE',
+          'Signed artifact provenance',
+          'BLOCKED',
+          `Promotion references signed provenance ${boundProvenanceId}, but current provenance evidence is unavailable.`,
+          { blockers: ['Promotion-bound signed provenance is unavailable'] },
+        ));
+      } else if (review.latestProvenance.id !== boundProvenanceId) {
+        stages.push(stage(
+          'SIGNED_PROVENANCE',
+          'Signed artifact provenance',
+          'BLOCKED',
+          `Latest signed provenance ${review.latestProvenance.id} does not match promotion-bound evidence ${boundProvenanceId}.`,
+          { blockers: ['Latest signed provenance does not match promotion provenance'] },
+        ));
+      } else if (review.provenanceSignerStatus === 'TRUSTED') {
+        stages.push(stage('SIGNED_PROVENANCE', 'Signed artifact provenance', 'COMPLETE', `Promotion-bound signed provenance ${boundProvenanceId} uses signer ${review.latestProvenance.signerKeyId}, currently TRUSTED.`));
+      } else {
+        stages.push(stage(
+          'SIGNED_PROVENANCE',
+          'Signed artifact provenance',
+          'BLOCKED',
+          `Promotion-bound signer ${review.latestProvenance.signerKeyId} is ${review.provenanceSignerStatus ?? 'UNKNOWN'}, not TRUSTED.`,
+          { blockers: ['Promotion-bound signed provenance signer is not currently trusted'] },
+        ));
+      }
+    } else if (!review.latestProvenance) {
       stages.push(stage(
         'SIGNED_PROVENANCE',
         'Signed artifact provenance',
@@ -237,7 +306,7 @@ export class CandidateLifecyclePipelineService {
       ));
     }
 
-    if (manifest.lifecycle === 'PROMOTED' || manifest.lifecycle === 'RETIRED') {
+    if (promotedLike) {
       stages.push(stage('PROMOTION', 'Final model promotion', 'COMPLETE', `Lifecycle is ${manifest.lifecycle}; explicit promotion has already occurred.`));
     } else if (manifest.lifecycle === 'RELEASE_CANDIDATE') {
       const promotion = await this.promotions.inspect(manifest.id);
@@ -290,9 +359,25 @@ export class CandidateLifecyclePipelineService {
       stages.push(stage('ACTIVATION', 'MIO Local activation', 'PENDING', 'Activation is available only after explicit promotion.'));
     } else {
       const selected = activePromotedManifestId === manifest.id;
-      const configured = selected && config.provider === 'mio_local' && config.model === manifest.runtimeModel;
-      if (configured) {
-        stages.push(stage('ACTIVATION', 'MIO Local activation', 'COMPLETE', 'This promoted manifest is the active MIO Local model and the router configuration matches its runtime identity.'));
+      const statusForThisManifest = activationStatus.manifest?.id === manifest.id;
+      if (selected && statusForThisManifest && activationStatus.state === 'ACTIVE') {
+        stages.push(stage('ACTIVATION', 'MIO Local activation', 'COMPLETE', activationStatus.detail));
+      } else if (selected && statusForThisManifest && activationStatus.state === 'INTEGRITY_BLOCKED') {
+        stages.push(stage(
+          'ACTIVATION',
+          'MIO Local activation',
+          'BLOCKED',
+          activationStatus.detail,
+          { actionLabel: 'Resolve activation integrity/provenance blocker', actionSurface: 'Promoted Model Runtime', blockers: [activationStatus.detail] },
+        ));
+      } else if (selected && statusForThisManifest && (activationStatus.state === 'CONFIGURATION_DRIFT' || activationStatus.state === 'READY_TO_ACTIVATE')) {
+        stages.push(stage(
+          'ACTIVATION',
+          'MIO Local activation',
+          'ACTION_REQUIRED',
+          activationStatus.detail,
+          { actionLabel: 'Run promoted-model activation gate', actionSurface: 'Promoted Model Runtime' },
+        ));
       } else if (!postPromotionComplete) {
         stages.push(stage('ACTIVATION', 'MIO Local activation', 'PENDING', 'Activation waits for a fresh post-promotion MATCH scan. The final activation gate will also revalidate binding/provenance and runtime readiness.'));
       } else {
@@ -309,10 +394,10 @@ export class CandidateLifecyclePipelineService {
     const next = firstActionable(stages);
     const hasBlocked = stages.some((item) => item.state === 'BLOCKED');
     const active = stages.find((item) => item.id === 'ACTIVATION')?.state === 'COMPLETE';
-    const overallState: CandidateLifecyclePipelineSnapshot['overallState'] = active
-      ? 'ACTIVE'
-      : hasBlocked
-        ? 'BLOCKED'
+    const overallState: CandidateLifecyclePipelineSnapshot['overallState'] = hasBlocked
+      ? 'BLOCKED'
+      : active
+        ? 'ACTIVE'
         : manifest.lifecycle === 'PROMOTED'
           ? 'PROMOTED'
           : 'IN_PROGRESS';
@@ -329,7 +414,7 @@ export class CandidateLifecyclePipelineService {
       ...(next ? { nextStageId: next.id, nextAction: next.actionLabel ?? next.detail } : {}),
       overallState,
       refreshedAt: Date.now(),
-      disclosure: 'Read-only lifecycle projection assembled from existing MIO governance services. Refresh never changes candidate lifecycle, evidence, promotion state, active-model pointer, or ModelRouter. ACTION_REQUIRED means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass.',
+      disclosure: 'Read-only lifecycle projection assembled from existing MIO governance services. Refresh never changes candidate lifecycle, evidence, promotion state, active-model pointer, or ModelRouter. ACTIVE is accepted only from the existing promoted-model activation authority; ACTION_REQUIRED never pre-approves a later gate.',
     };
   }
 }
