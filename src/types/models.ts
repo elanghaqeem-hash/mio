@@ -33,9 +33,33 @@ export interface ApplicationContextEnvelope {
   sources: ApplicationContextSource[];
 }
 
+export type MemoryContextLayer = 'WORKING' | 'CONVERSATION' | 'PROJECT';
+export type MemoryContextTrust = 'USER_AUTHORED' | 'SYSTEM_DERIVED' | 'PROJECT_VERIFIED';
+
+export interface MemoryContextSource {
+  id: string;
+  layer: MemoryContextLayer;
+  trust: MemoryContextTrust;
+  source: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MemoryContextEnvelope {
+  kind: 'MIO_MEMORY';
+  policy: 'DATA_ONLY';
+  projectId: string;
+  sessionId?: string;
+  taskId?: string;
+  contextBudgetChars: number;
+  sources: MemoryContextSource[];
+}
+
 export interface ModelRequest {
   messages: ModelMessage[];
   applicationContext?: ApplicationContextEnvelope;
+  memoryContext?: MemoryContextEnvelope;
   temperature?: number;
   maxOutputTokens?: number;
   metadata?: Record<string, string | number | boolean>;
