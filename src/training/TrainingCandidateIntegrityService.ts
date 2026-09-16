@@ -1,5 +1,5 @@
+import type { AdapterIntegrityHashOutput } from '../platform/desktop/DesktopAdapterIntegrityGateway';
 import {
-  AdapterIntegrityHashOutput,
   createDesktopAdapterIntegrityGateway,
   getRequiredDesktopAdapterIntegrityBridge,
 } from '../platform/desktop/DesktopAdapterIntegrityGateway';
@@ -15,6 +15,7 @@ import { TrainingCandidateRegistry } from './TrainingCandidateRegistry';
 
 const NAMESPACE = 'training' as const;
 const INDEX_KEY = 'candidate-adapter-integrity-index-v1';
+const SHA256 = /^[a-f0-9]{64}$/;
 
 export type AdapterIntegrityComparison = 'BASELINE_CAPTURED' | 'MATCH' | 'DRIFT';
 
@@ -25,16 +26,16 @@ export interface CandidateAdapterIntegrityEvidence {
   manifestId: string;
   runtimeModel: string;
   artifactUri: string;
-  trainingResultFingerprint: string;
+  trainingResultSha256: string;
   algorithm: 'SHA-256';
   canonicalization: 'mio-adapter-tree-v1';
   fingerprint: string;
+  baselineFingerprint: string;
   fileCount: number;
   totalBytes: number;
   rootRelativePath: string;
   scannedAt: number;
   comparison: AdapterIntegrityComparison;
-  previousFingerprint?: string;
   limits: { maxFiles: number; maxBytes: number; maxDepth: number };
   disclosure: string;
 }
@@ -78,6 +79,20 @@ function defaultDesktopPort(): CandidateIntegrityDesktopPort {
   };
 }
 
+function validateHash(hash: AdapterIntegrityHashOutput, expectedPath: string): void {
+  if (hash.schemaVersion !== 1
+    || hash.algorithm !== 'SHA-256'
+    || hash.canonicalization !== 'mio-adapter-tree-v1'
+    || !SHA256.test(hash.fingerprint)
+    || !Number.isSafeInteger(hash.fileCount)
+    || hash.fileCount < 1
+    || !Number.isSafeInteger(hash.totalBytes)
+    || hash.totalBytes < 0
+    || hash.rootRelativePath !== expectedPath) {
+    throw new Error('Governed adapter-integrity result failed output-contract validation');
+  }
+}
+
 export class TrainingCandidateIntegrityService {
   private readonly candidates: TrainingCandidateRegistry;
   private readonly manifests: ModelManifestRepository;
@@ -98,34 +113,39 @@ export class TrainingCandidateIntegrityService {
     if (!workspace) return { cancelled: true };
 
     try {
+      const relativePath = '.';
       const taskId = `adapter_integrity_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const hash = await port.hashDirectory(workspace.id, '.', taskId);
-      const previous = await this.latest(candidateId);
-      const comparison: AdapterIntegrityComparison = !previous
+      const hash = await port.hashDirectory(workspace.id, relativePath, taskId);
+      validateHash(hash, relativePath);
+
+      const history = await this.list(candidateId, 500);
+      const baseline = history.at(-1);
+      const baselineFingerprint = baseline?.baselineFingerprint ?? baseline?.fingerprint ?? hash.fingerprint;
+      const comparison: AdapterIntegrityComparison = history.length === 0
         ? 'BASELINE_CAPTURED'
-        : previous.fingerprint === hash.fingerprint
+        : baselineFingerprint === hash.fingerprint
           ? 'MATCH'
           : 'DRIFT';
       const scannedAt = Date.now();
       const evidence: CandidateAdapterIntegrityEvidence = {
         schemaVersion: 1,
-        id: `adapter-integrity:${candidateId}:${scannedAt}`,
+        id: `adapter-integrity:${candidateId}:${scannedAt}:${hash.fingerprint.slice(0, 12)}`,
         candidateId,
         manifestId: candidate.manifestId,
         runtimeModel: manifest.runtimeModel,
         artifactUri: candidate.artifactUri,
-        trainingResultFingerprint: candidate.trainingResultFingerprint,
+        trainingResultSha256: candidate.trainingResultSha256,
         algorithm: hash.algorithm,
         canonicalization: hash.canonicalization,
         fingerprint: hash.fingerprint,
+        baselineFingerprint,
         fileCount: hash.fileCount,
         totalBytes: hash.totalBytes,
         rootRelativePath: hash.rootRelativePath,
         scannedAt,
         comparison,
-        ...(previous ? { previousFingerprint: previous.fingerprint } : {}),
         limits: { ...hash.limits },
-        disclosure: 'Byte-level SHA-256 evidence for the explicitly authorized local directory. This evidence does not prove model quality, does not identify remote artifacts, and does not promote or activate the candidate.',
+        disclosure: 'Byte-level SHA-256 evidence for the explicitly authorized local directory. Every re-scan is compared with the immutable first-scan baseline. This evidence does not prove model quality, origin authenticity, or promotion readiness, and it never promotes or activates the candidate.',
       };
       await this.save(evidence);
       return { cancelled: false, workspaceLabel: workspace.name, evidence };
@@ -145,7 +165,7 @@ export class TrainingCandidateIntegrityService {
     for (const id of index) {
       const item = await this.storage.get<CandidateAdapterIntegrityEvidence>(NAMESPACE, id);
       if (item?.candidateId === candidateId) output.push(structuredClone(item));
-      if (output.length >= Math.max(1, Math.min(limit, 100))) break;
+      if (output.length >= Math.max(1, Math.min(limit, 500))) break;
     }
     return output;
   }
