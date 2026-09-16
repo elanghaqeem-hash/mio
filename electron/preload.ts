@@ -11,6 +11,17 @@ export interface MioWorkspaceDirectoryEntry {
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
 }
 
+export interface MioWorkspaceTreeHashResult {
+  schemaVersion: 1;
+  algorithm: 'SHA-256';
+  canonicalization: 'mio-adapter-tree-v1';
+  rootRelativePath: string;
+  fingerprint: string;
+  fileCount: number;
+  totalBytes: number;
+  limits: { maxFiles: number; maxBytes: number; maxDepth: number };
+}
+
 export interface MioBrowserReadResult {
   success: boolean;
   title?: string;
@@ -44,6 +55,7 @@ export interface MioDesktopAPI {
   revokeWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
   readWorkspaceText: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; data?: string; bytes?: number; error?: string }>;
   listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: MioWorkspaceDirectoryEntry[]; error?: string }>;
+  hashWorkspaceTree: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; result?: MioWorkspaceTreeHashResult; error?: string }>;
   browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
 
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
@@ -66,6 +78,7 @@ const desktopAPI: MioDesktopAPI = {
   revokeWorkspace: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_REVOKE_WORKSPACE, workspaceId),
   readWorkspaceText: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, request),
   listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
+  hashWorkspaceTree: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, request),
   browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),
 
   onEmergencyStopTriggered: (callback) => {

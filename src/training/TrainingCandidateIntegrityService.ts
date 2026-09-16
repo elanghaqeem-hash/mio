@@ -1,0 +1,189 @@
+import type { AdapterIntegrityHashOutput } from '../platform/desktop/DesktopAdapterIntegrityGateway';
+import {
+  createDesktopAdapterIntegrityGateway,
+  getRequiredDesktopAdapterIntegrityBridge,
+} from '../platform/desktop/DesktopAdapterIntegrityGateway';
+import {
+  authorizeDesktopWorkspace,
+  getRequiredDesktopBridge,
+  revokeDesktopWorkspace,
+} from '../platform/desktop/DesktopWorkspaceGateway';
+import { defaultStorageProvider } from '../storage/StorageRuntime';
+import type { StorageProvider } from '../storage/StorageProvider';
+import { ModelManifestRepository } from './ModelManifestRepository';
+import { TrainingCandidateRegistry } from './TrainingCandidateRegistry';
+
+const NAMESPACE = 'training' as const;
+const INDEX_KEY = 'candidate-adapter-integrity-index-v1';
+const SHA256 = /^[a-f0-9]{64}$/;
+
+export type AdapterIntegrityComparison = 'BASELINE_CAPTURED' | 'MATCH' | 'DRIFT';
+
+export interface CandidateAdapterIntegrityEvidence {
+  schemaVersion: 1;
+  id: string;
+  candidateId: string;
+  manifestId: string;
+  runtimeModel: string;
+  artifactUri: string;
+  trainingResultSha256: string;
+  algorithm: 'SHA-256';
+  canonicalization: 'mio-adapter-tree-v1';
+  fingerprint: string;
+  baselineFingerprint: string;
+  fileCount: number;
+  totalBytes: number;
+  rootRelativePath: string;
+  scannedAt: number;
+  comparison: AdapterIntegrityComparison;
+  limits: { maxFiles: number; maxBytes: number; maxDepth: number };
+  disclosure: string;
+}
+
+export interface CandidateIntegrityScanResult {
+  cancelled: boolean;
+  workspaceLabel?: string;
+  evidence?: CandidateAdapterIntegrityEvidence;
+}
+
+export interface CandidateIntegrityDesktopPort {
+  authorizeDirectory(): Promise<{ id: string; name: string } | null>;
+  hashDirectory(workspaceId: string, relativePath: string, taskId: string): Promise<AdapterIntegrityHashOutput>;
+  revokeDirectory(workspaceId: string): Promise<void>;
+}
+
+function defaultDesktopPort(): CandidateIntegrityDesktopPort {
+  const workspaceBridge = getRequiredDesktopBridge();
+  const integrityBridge = getRequiredDesktopAdapterIntegrityBridge();
+  const gateway = createDesktopAdapterIntegrityGateway(integrityBridge);
+  return {
+    authorizeDirectory: () => authorizeDesktopWorkspace(workspaceBridge),
+    async hashDirectory(workspaceId, relativePath, taskId) {
+      const result = await gateway.execute<AdapterIntegrityHashOutput>(
+        'service.desktop.workspace.hash-tree',
+        { workspaceId, relativePath },
+        {
+          taskId,
+          mode: 'SETTINGS',
+          requestedBy: 'USER',
+          resourceId: workspaceId,
+          path: relativePath,
+        },
+      );
+      if (!result.success || !result.data) throw new Error(result.error ?? 'Governed adapter-integrity scan failed');
+      return result.data;
+    },
+    async revokeDirectory(workspaceId) {
+      const revoked = await revokeDesktopWorkspace(workspaceId, workspaceBridge);
+      if (!revoked) throw new Error('Desktop workspace authority could not be revoked');
+    },
+  };
+}
+
+function validateHash(hash: AdapterIntegrityHashOutput, expectedPath: string): void {
+  if (hash.schemaVersion !== 1
+    || hash.algorithm !== 'SHA-256'
+    || hash.canonicalization !== 'mio-adapter-tree-v1'
+    || !SHA256.test(hash.fingerprint)
+    || !Number.isSafeInteger(hash.fileCount)
+    || hash.fileCount < 1
+    || !Number.isSafeInteger(hash.totalBytes)
+    || hash.totalBytes < 0
+    || hash.rootRelativePath !== expectedPath) {
+    throw new Error('Governed adapter-integrity result failed output-contract validation');
+  }
+}
+
+export class TrainingCandidateIntegrityService {
+  private readonly candidates: TrainingCandidateRegistry;
+  private readonly manifests: ModelManifestRepository;
+
+  constructor(private readonly storage: StorageProvider = defaultStorageProvider) {
+    this.candidates = new TrainingCandidateRegistry(storage);
+    this.manifests = new ModelManifestRepository(storage);
+  }
+
+  public async scanCandidate(candidateId: string, desktopPort?: CandidateIntegrityDesktopPort): Promise<CandidateIntegrityScanResult> {
+    const candidate = await this.candidates.get(candidateId);
+    if (!candidate) throw new Error(`Training candidate '${candidateId}' is not registered`);
+    const manifest = await this.manifests.get(candidate.manifestId);
+    if (!manifest) throw new Error(`Model manifest '${candidate.manifestId}' is missing`);
+
+    const port = desktopPort ?? defaultDesktopPort();
+    const workspace = await port.authorizeDirectory();
+    if (!workspace) return { cancelled: true };
+
+    let revoked = false;
+    try {
+      const relativePath = '.';
+      const taskId = `adapter_integrity_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const hash = await port.hashDirectory(workspace.id, relativePath, taskId);
+      validateHash(hash, relativePath);
+
+      const latest = await this.latest(candidateId);
+      const baselineFingerprint = latest?.baselineFingerprint ?? hash.fingerprint;
+      const comparison: AdapterIntegrityComparison = !latest
+        ? 'BASELINE_CAPTURED'
+        : baselineFingerprint === hash.fingerprint
+          ? 'MATCH'
+          : 'DRIFT';
+      const scannedAt = Date.now();
+      const nonce = Math.random().toString(36).slice(2, 10);
+      const evidence: CandidateAdapterIntegrityEvidence = {
+        schemaVersion: 1,
+        id: `adapter-integrity:${candidateId}:${scannedAt}:${nonce}:${hash.fingerprint.slice(0, 12)}`,
+        candidateId,
+        manifestId: candidate.manifestId,
+        runtimeModel: manifest.runtimeModel,
+        artifactUri: candidate.artifactUri,
+        trainingResultSha256: candidate.trainingResultSha256,
+        algorithm: hash.algorithm,
+        canonicalization: hash.canonicalization,
+        fingerprint: hash.fingerprint,
+        baselineFingerprint,
+        fileCount: hash.fileCount,
+        totalBytes: hash.totalBytes,
+        rootRelativePath: hash.rootRelativePath,
+        scannedAt,
+        comparison,
+        limits: { ...hash.limits },
+        disclosure: 'Byte-level SHA-256 evidence for the explicitly authorized local directory. Every re-scan is compared with the immutable first-scan baseline. This evidence does not prove model quality, origin authenticity, or promotion readiness, and it never promotes or activates the candidate.',
+      };
+
+      // A one-shot desktop authority is part of the evidence contract. Do not persist
+      // successful-looking evidence until that authority has actually been revoked.
+      await port.revokeDirectory(workspace.id);
+      revoked = true;
+      await this.save(evidence);
+      return { cancelled: false, workspaceLabel: workspace.name, evidence };
+    } finally {
+      if (!revoked) {
+        try { await port.revokeDirectory(workspace.id); } catch { /* Best-effort fallback after the primary failure. */ }
+      }
+    }
+  }
+
+  public async latest(candidateId: string): Promise<CandidateAdapterIntegrityEvidence | undefined> {
+    const history = await this.list(candidateId, 1);
+    return history[0];
+  }
+
+  public async list(candidateId: string, limit = 20): Promise<CandidateAdapterIntegrityEvidence[]> {
+    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
+    const output: CandidateAdapterIntegrityEvidence[] = [];
+    for (const id of index) {
+      const item = await this.storage.get<CandidateAdapterIntegrityEvidence>(NAMESPACE, id);
+      if (item?.candidateId === candidateId) output.push(structuredClone(item));
+      if (output.length >= Math.max(1, Math.min(limit, 500))) break;
+    }
+    return output;
+  }
+
+  private async save(evidence: CandidateAdapterIntegrityEvidence): Promise<void> {
+    await this.storage.set(NAMESPACE, evidence.id, structuredClone(evidence));
+    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
+    await this.storage.set(NAMESPACE, INDEX_KEY, [evidence.id, ...index.filter((id) => id !== evidence.id)].slice(0, 2_000));
+  }
+}
+
+export const trainingCandidateIntegrityService = new TrainingCandidateIntegrityService();

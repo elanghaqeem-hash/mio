@@ -76,6 +76,7 @@ export class CapabilityRegistry {
 export interface CapabilityRegistryOptions {
   desktopWorkspaceBridge?: boolean;
   desktopBrowserBridge?: boolean;
+  desktopAdapterIntegrityBridge?: boolean;
 }
 
 export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptions = {}): CapabilityRegistry {
@@ -148,6 +149,21 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     timeoutMs: 10000,
   });
 
+  const adapterIntegrityAvailability = options.desktopAdapterIntegrityBridge ? 'AVAILABLE' : 'UNAVAILABLE';
+  registry.register({
+    id: 'service.desktop.workspace.hash-tree',
+    kind: 'SERVICE',
+    description: 'Compute a bounded SHA-256 manifest and aggregate fingerprint for regular files inside an explicitly user-authorized local adapter directory without returning file contents or absolute paths.',
+    ownerLayer: 'SERVICE',
+    modes: ['SETTINGS'],
+    riskLevel: 'HIGH',
+    permissionLevel: 'L4_EXECUTE',
+    availability: adapterIntegrityAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'RESOURCE', 'PATH'],
+    timeoutMs: 120000,
+  });
+
   const browserAvailability = options.desktopBrowserBridge ? 'AVAILABLE' : 'UNAVAILABLE';
   registry.register({
     id: 'service.desktop.browser.read-page',
@@ -193,7 +209,7 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
 }
 
 export function createDesktopCapabilityRegistry(): CapabilityRegistry {
-  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true, desktopBrowserBridge: true });
+  return createDefaultCapabilityRegistry({ desktopWorkspaceBridge: true, desktopBrowserBridge: true, desktopAdapterIntegrityBridge: true });
 }
 
 export const defaultCapabilityRegistry = createDefaultCapabilityRegistry();

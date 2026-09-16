@@ -38,7 +38,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   };
 
   return {
-    // Window Management
     handleMinimize: () => {
       if (mainWindow) mainWindow.minimize();
     },
@@ -56,7 +55,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     },
     handleIsMaximized: () => mainWindow ? mainWindow.isMaximized() : false,
 
-    // System Telemetry
     handleGetSystemInfo: () => ({
       platform: process.platform,
       arch: process.arch,
@@ -67,7 +65,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     }),
     handleGetAppVersion: () => app.getVersion(),
 
-    // Desktop Notifications
     handleShowNotification: (_event: IpcMainInvokeEvent, options: unknown) => {
       if (!options || typeof options !== 'object') return { success: false, error: 'Invalid notification payload' };
       const value = options as { title?: unknown; body?: unknown; silent?: unknown };
@@ -79,7 +76,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return { success: true };
     },
 
-    // Emergency Stop
     handleEmergencyStop: (_event: IpcMainInvokeEvent, reason: unknown) => {
       const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
       console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
@@ -87,7 +83,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return { success: true };
     },
 
-    // Workspace authority is created only by an explicit native directory picker.
     handleAuthorizeWorkspace: async () => {
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory'],
@@ -127,7 +122,28 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
-    // Browser bridge is intentionally read-only in TP-0.41.
+    handleHashWorkspaceTree: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateWorkspacePathRequest(request)) return { success: false, error: 'Invalid workspace tree-hash request' };
+      try {
+        const result = await workspaceSandbox.hashTree(request.workspaceId, request.relativePath);
+        return {
+          success: true,
+          result: {
+            schemaVersion: result.schemaVersion,
+            algorithm: result.algorithm,
+            canonicalization: result.canonicalization,
+            rootRelativePath: result.rootRelativePath,
+            fingerprint: result.fingerprint,
+            fileCount: result.fileCount,
+            totalBytes: result.totalBytes,
+            limits: result.limits,
+          },
+        };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
     handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
       if (!validateBrowserReadRequest(request)) return { success: false, error: 'Invalid browser read request' };
       try {

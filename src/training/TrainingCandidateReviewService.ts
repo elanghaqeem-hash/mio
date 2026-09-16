@@ -1,6 +1,7 @@
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import { StorageProvider } from '../storage/StorageProvider';
 import { BenchmarkReportRepository, StoredBenchmarkReport } from './BenchmarkReportRepository';
+import { CandidateAdapterIntegrityEvidence, TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
 import { MioModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
 import { evaluateModelPromotion } from './ModelPromotionGate';
@@ -10,6 +11,7 @@ export interface TrainingCandidateReviewSnapshot {
   candidate: TrainingCandidateRecord;
   manifest: MioModelManifest;
   latestBenchmark?: StoredBenchmarkReport;
+  latestIntegrity?: CandidateAdapterIntegrityEvidence;
   releaseCandidateEligible: boolean;
   blockingReasons: string[];
 }
@@ -31,11 +33,13 @@ export class TrainingCandidateReviewService {
   private readonly candidates: TrainingCandidateRegistry;
   private readonly manifests: ModelManifestRepository;
   private readonly benchmarks: BenchmarkReportRepository;
+  private readonly integrity: TrainingCandidateIntegrityService;
 
   constructor(private readonly storage: StorageProvider = defaultStorageProvider) {
     this.candidates = new TrainingCandidateRegistry(storage);
     this.manifests = new ModelManifestRepository(storage);
     this.benchmarks = new BenchmarkReportRepository(storage);
+    this.integrity = new TrainingCandidateIntegrityService(storage);
   }
 
   public async list(limit = 100): Promise<TrainingCandidateReviewSnapshot[]> {
@@ -53,12 +57,16 @@ export class TrainingCandidateReviewService {
     if (!candidate) return undefined;
     const manifest = await this.manifests.get(candidate.manifestId);
     if (!manifest) return undefined;
-    const latestBenchmark = await this.benchmarks.latestForManifest(manifest.id);
-    const blockingReasons = this.blockingReasons(candidate, manifest, latestBenchmark);
+    const [latestBenchmark, latestIntegrity] = await Promise.all([
+      this.benchmarks.latestForManifest(manifest.id),
+      this.integrity.latest(candidate.id),
+    ]);
+    const blockingReasons = this.blockingReasons(candidate, manifest, latestBenchmark, latestIntegrity);
     return {
       candidate,
       manifest,
       latestBenchmark,
+      latestIntegrity,
       releaseCandidateEligible: blockingReasons.length === 0,
       blockingReasons,
     };
@@ -90,6 +98,7 @@ export class TrainingCandidateReviewService {
       notes: [
         snapshot.manifest.notes,
         `Advanced to RELEASE_CANDIDATE after explicit data-governance and security attestations using benchmark report ${snapshot.latestBenchmark.id}. Promotion remains a separate explicit action.`,
+        snapshot.latestIntegrity ? `Latest adapter byte-integrity evidence at review: ${snapshot.latestIntegrity.id} (${snapshot.latestIntegrity.comparison}, baseline ${snapshot.latestIntegrity.baselineFingerprint}).` : undefined,
       ].filter(Boolean).join(' '),
     };
 
@@ -106,6 +115,7 @@ export class TrainingCandidateReviewService {
     candidate: TrainingCandidateRecord,
     manifest: MioModelManifest,
     latestBenchmark?: StoredBenchmarkReport,
+    latestIntegrity?: CandidateAdapterIntegrityEvidence,
   ): string[] {
     const reasons: string[] = [];
     if (manifest.lifecycle !== 'EXPERIMENTAL') reasons.push(`Model lifecycle is ${manifest.lifecycle}, not EXPERIMENTAL`);
@@ -115,6 +125,16 @@ export class TrainingCandidateReviewService {
     if (latestBenchmark && candidate.latestBenchmarkReportId !== latestBenchmark.id) reasons.push('Candidate benchmark pointer does not match latest stored benchmark report');
     if (latestBenchmark && latestBenchmark.report.model !== manifest.runtimeModel) reasons.push('Stored benchmark model identity does not match candidate runtime model');
     if (latestBenchmark && latestBenchmark.report.generatedAt < manifest.createdAt) reasons.push('Stored benchmark report predates the candidate manifest');
+
+    if (latestIntegrity) {
+      if (latestIntegrity.candidateId !== candidate.id || latestIntegrity.manifestId !== manifest.id) reasons.push('Adapter integrity evidence is not bound to the current candidate manifest');
+      if (latestIntegrity.runtimeModel !== manifest.runtimeModel) reasons.push('Adapter integrity evidence runtime identity does not match candidate runtime model');
+      if (latestIntegrity.artifactUri !== candidate.artifactUri) reasons.push('Adapter integrity evidence artifact identity does not match candidate artifact URI');
+      if (latestIntegrity.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Adapter integrity evidence training-result SHA-256 does not match candidate registration');
+      if (!/^[a-f0-9]{64}$/.test(latestIntegrity.fingerprint) || !/^[a-f0-9]{64}$/.test(latestIntegrity.baselineFingerprint)) reasons.push('Adapter integrity evidence fingerprint is malformed');
+      if (latestIntegrity.comparison === 'DRIFT') reasons.push('Latest adapter byte-integrity evidence reports DRIFT');
+    }
+
     if (latestBenchmark) {
       const prospective: MioModelManifest = {
         ...manifest,
