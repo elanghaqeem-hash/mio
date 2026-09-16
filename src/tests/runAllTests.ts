@@ -4,6 +4,7 @@ import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
 import { runMioLocalProviderTests } from './mioLocalProviderTests';
 import { runTrainingFoundationTests } from './trainingFoundationTests';
+import { runModelPromotionTests } from './modelPromotionTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runResearchProxyTests } from './researchProxyTests';
 import { runContextContinuityTests } from './contextContinuityTests';
@@ -44,6 +45,7 @@ const runners = [
   runModelRouterTests,
   runMioLocalProviderTests,
   runTrainingFoundationTests,
+  runModelPromotionTests,
   runAiProxyTests,
   runResearchProxyTests,
   runContextContinuityTests,
