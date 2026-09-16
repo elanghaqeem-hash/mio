@@ -74,7 +74,8 @@ function defaultDesktopPort(): CandidateIntegrityDesktopPort {
       return result.data;
     },
     async revokeDirectory(workspaceId) {
-      await revokeDesktopWorkspace(workspaceId, workspaceBridge);
+      const revoked = await revokeDesktopWorkspace(workspaceId, workspaceBridge);
+      if (!revoked) throw new Error('Desktop workspace authority could not be revoked');
     },
   };
 }
@@ -112,16 +113,16 @@ export class TrainingCandidateIntegrityService {
     const workspace = await port.authorizeDirectory();
     if (!workspace) return { cancelled: true };
 
+    let revoked = false;
     try {
       const relativePath = '.';
       const taskId = `adapter_integrity_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const hash = await port.hashDirectory(workspace.id, relativePath, taskId);
       validateHash(hash, relativePath);
 
-      const history = await this.list(candidateId, 500);
-      const baseline = history.at(-1);
-      const baselineFingerprint = baseline?.baselineFingerprint ?? baseline?.fingerprint ?? hash.fingerprint;
-      const comparison: AdapterIntegrityComparison = history.length === 0
+      const latest = await this.latest(candidateId);
+      const baselineFingerprint = latest?.baselineFingerprint ?? hash.fingerprint;
+      const comparison: AdapterIntegrityComparison = !latest
         ? 'BASELINE_CAPTURED'
         : baselineFingerprint === hash.fingerprint
           ? 'MATCH'
@@ -147,10 +148,17 @@ export class TrainingCandidateIntegrityService {
         limits: { ...hash.limits },
         disclosure: 'Byte-level SHA-256 evidence for the explicitly authorized local directory. Every re-scan is compared with the immutable first-scan baseline. This evidence does not prove model quality, origin authenticity, or promotion readiness, and it never promotes or activates the candidate.',
       };
+
+      // A one-shot desktop authority is part of the evidence contract. Do not persist
+      // successful-looking evidence until that authority has actually been revoked.
+      await port.revokeDirectory(workspace.id);
+      revoked = true;
       await this.save(evidence);
       return { cancelled: false, workspaceLabel: workspace.name, evidence };
     } finally {
-      try { await port.revokeDirectory(workspace.id); } catch { /* Revocation failure must not erase completed integrity evidence. */ }
+      if (!revoked) {
+        try { await port.revokeDirectory(workspace.id); } catch { /* Best-effort fallback after the primary failure. */ }
+      }
     }
   }
 
