@@ -39,21 +39,40 @@ function verifyBundleDigest(bundle) {
   return computed;
 }
 
-function publicKeyId(publicKey) {
-  const key = crypto.createPublicKey(publicKey);
-  if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
-    throw new Error('Audit attestation authority key must be ECDSA P-256 / prime256v1');
+function asPrivateKey(input) {
+  if (input instanceof crypto.KeyObject) {
+    if (input.type !== 'private') throw new Error('Audit attestation signing requires a private key');
+    return input;
   }
+  return crypto.createPrivateKey(input);
+}
+
+function asPublicKey(input) {
+  if (input instanceof crypto.KeyObject) {
+    if (input.type === 'public') return input;
+    if (input.type === 'private') return crypto.createPublicKey(input);
+    throw new Error('Audit attestation verification requires an asymmetric public key');
+  }
+  return crypto.createPublicKey(input);
+}
+
+function assertP256Key(key, label) {
+  if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+    throw new Error(`${label} must be ECDSA P-256 / prime256v1`);
+  }
+}
+
+function publicKeyId(publicKeyInput) {
+  const key = asPublicKey(publicKeyInput);
+  assertP256Key(key, 'Audit attestation authority key');
   const spki = key.export({ type: 'spki', format: 'der' });
   return `p256:${crypto.createHash('sha256').update(spki).digest('hex')}`;
 }
 
 function privateKeyAndId(privateKeyInput) {
-  const privateKey = crypto.createPrivateKey(privateKeyInput);
-  if (privateKey.asymmetricKeyType !== 'ec' || privateKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
-    throw new Error('Audit attestation private key must be ECDSA P-256 / prime256v1');
-  }
-  const publicKey = crypto.createPublicKey(privateKey);
+  const privateKey = asPrivateKey(privateKeyInput);
+  assertP256Key(privateKey, 'Audit attestation private key');
+  const publicKey = asPublicKey(privateKey);
   return { privateKey, authorityKeyId: publicKeyId(publicKey) };
 }
 
@@ -113,7 +132,8 @@ function verifyAttestation(bundle, attestation, publicKeyInput) {
   let authorityKeyId;
   let publicKey;
   try {
-    publicKey = crypto.createPublicKey(publicKeyInput);
+    publicKey = asPublicKey(publicKeyInput);
+    assertP256Key(publicKey, 'Audit attestation authority key');
     authorityKeyId = publicKeyId(publicKey);
   } catch (error) {
     reasons.push(error instanceof Error ? error.message : 'Authority public key is invalid');
