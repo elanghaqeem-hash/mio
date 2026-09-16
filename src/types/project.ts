@@ -3,7 +3,7 @@ import { SecurityEvent } from './security';
 import type { CreativePipelineRecord } from './creativePipeline';
 
 export type AssetOrigin = 'GENERATED' | 'VERIFIED' | 'USER-EDITED' | 'IMPORTED' | 'AI-SUGGESTED';
-export type AssetType = '3d' | 'animation' | 'graphic' | 'sfx' | 'music' | 'document' | 'reference';
+export type AssetType = '3d' | 'animation' | 'graphic' | 'drawing' | 'photo' | 'motion-2d' | 'sfx' | 'music' | 'document' | 'reference';
 export type KnowledgeSourceTrust = 'VERIFIED' | 'QUARANTINED';
 export type KnowledgeFreshness = 'CURRENT' | 'STALE' | 'UNKNOWN';
 export type KnowledgeSourcePriority = 'PRIMARY' | 'STANDARD' | 'LOW';
