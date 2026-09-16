@@ -33,6 +33,11 @@ jobs:
       - name: Run standard-library training runner self-test
         run: python training/train_mio_lora.py --self-test
 
+      - name: Validate training run handoff packager
+        run: |
+          node --check scripts/training/create-training-run-handoff.mjs
+          node scripts/training/create-training-run-handoff.mjs --self-test
+
       - name: Validate signed artifact provenance utility
         run: |
           node --check scripts/training/sign-model-artifact-provenance.mjs
