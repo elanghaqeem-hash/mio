@@ -63,55 +63,54 @@ export const AgentCommandCenter: React.FC<AgentCommandCenterProps> = ({ coreStat
   };
 
   return (
-    <div className="agent-command-center h-full overflow-y-auto bg-[#05070b]">
-      <section className="agent-hero cyber-grid relative isolate min-h-[430px] overflow-hidden border-b border-cyan-950/70 px-4 py-7 sm:px-8 lg:min-h-[470px] lg:px-10">
+    <div className="agent-command-center h-full overflow-y-auto bg-[#06101b]">
+      <section className="agent-hero cyber-grid relative isolate min-h-[560px] overflow-hidden border-b border-sky-950/60 px-4 py-8 sm:px-8 lg:min-h-[610px] lg:px-10">
         <div className="agent-hero-glow" aria-hidden="true" />
         <div className="hud-corner hud-corner-tl" aria-hidden="true" />
         <div className="hud-corner hud-corner-tr" aria-hidden="true" />
-        <div className="relative z-10 mx-auto grid h-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(280px,0.9fr)_minmax(360px,1.1fr)]">
-          <div className="order-2 lg:order-1">
-            <div className="mb-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
-              <span className="agent-status-chip"><Radio size={11} /> {preferences.networkState}</span>
-              <span className="agent-status-chip"><ShieldCheck size={11} /> {preferences.autonomyLevel}</span>
-              <span className="agent-status-chip"><Command size={11} /> {providerLabel}</span>
-            </div>
-            <p className="mb-3 font-mono text-[11px] font-bold tracking-[0.28em] text-cyan-300">{copy.eyebrow}</p>
-            <h1 className="max-w-2xl text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl lg:text-5xl">{copy.title}</h1>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">{copy.detail}</p>
 
-            <div className="mt-7 grid gap-2 sm:grid-cols-3">
-              {quickCommands.map((command) => (
-                <button key={command.label} type="button" onClick={() => setDraft(command.prompt)} className="agent-quick-command group">
-                  <Sparkles size={15} className="text-cyan-300" />
-                  <span>{command.label}</span>
-                  <ArrowRight size={14} className="ml-auto text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-cyan-300" />
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] text-slate-500">
-              <span className="inline-flex items-center gap-1.5"><FolderGit2 size={12} /> {project.name}</span>
-              <span>{project.assets.length} ASSETS</span>
-              <button type="button" onClick={() => onSelectMode('TASKS')} className="inline-flex items-center gap-1 text-cyan-300 hover:text-cyan-200">OPEN MISSION CONTROL <ArrowRight size={11} /></button>
-            </div>
+        <div className="relative z-10 mx-auto flex min-h-[500px] max-w-5xl flex-col items-center justify-center text-center lg:min-h-[550px]">
+          <div className="mb-4 flex flex-wrap justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            <span className="agent-status-chip"><Radio size={11} /> {preferences.networkState}</span>
+            <span className="agent-status-chip"><ShieldCheck size={11} /> {preferences.autonomyLevel}</span>
+            <span className="agent-status-chip"><Command size={11} /> {providerLabel}</span>
           </div>
 
-          <div className="order-1 flex min-h-[240px] items-center justify-center lg:order-2 lg:min-h-[390px]">
-            <div className="agent-orb-stage" aria-live="polite" aria-label={`${copy.eyebrow}. ${copy.title}`}>
-              <div className="agent-orbit agent-orbit-one" aria-hidden="true" />
-              <div className="agent-orbit agent-orbit-two" aria-hidden="true" />
-              <MioCoreVisualizer state={coreState} size={300} interactive={false} priority="hero" />
-              <div className="agent-orb-caption"><WandSparkles size={12} /> MIO COGNITIVE CORE</div>
-            </div>
+          <div className="agent-orb-stage mb-1" aria-live="polite" aria-label={`${copy.eyebrow}. ${copy.title}`}>
+            <div className="agent-orbit agent-orbit-one" aria-hidden="true" />
+            <div className="agent-orbit agent-orbit-two" aria-hidden="true" />
+            <MioCoreVisualizer state={coreState} size={300} interactive={false} priority="hero" />
+            <div className="agent-orb-caption"><WandSparkles size={12} /> MIO COGNITIVE CORE</div>
+          </div>
+
+          <p className="mb-2 font-mono text-[11px] font-bold tracking-[0.3em] text-sky-300">{copy.eyebrow}</p>
+          <h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl lg:text-[2.8rem]">{copy.title}</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">{copy.detail}</p>
+
+          <div className="mt-6 grid w-full max-w-3xl gap-2 sm:grid-cols-3">
+            {quickCommands.map((command) => (
+              <button key={command.label} type="button" onClick={() => setDraft(command.prompt)} className="agent-quick-command group justify-start">
+                <Sparkles size={15} className="text-sky-300" />
+                <span>{command.label}</span>
+                <ArrowRight size={14} className="ml-auto text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-sky-300" />
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[10px] text-slate-500">
+            <span className="inline-flex items-center gap-1.5"><FolderGit2 size={12} /> {project.name}</span>
+            <span>{project.assets.length} ASSETS</span>
+            <button type="button" onClick={() => onSelectMode('TASKS')} className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200">OPEN MISSION CONTROL <ArrowRight size={11} /></button>
           </div>
         </div>
       </section>
 
       <MissionPulse onSelectMode={onSelectMode} />
 
-      <section id="mio-conversation" className="mx-auto min-h-[560px] max-w-6xl border-x border-gray-900/80 bg-[#070a10]">
+      <section id="mio-conversation" className="mx-auto min-h-[560px] w-[calc(100%_-_1rem)] max-w-6xl overflow-hidden rounded-[1.25rem] border border-sky-950/60 bg-[#07111d] shadow-2xl shadow-black/20 sm:w-[calc(100%_-_2rem)]">
         <ChatStudioView />
       </section>
+      <div className="h-5" aria-hidden="true" />
     </div>
   );
 };
