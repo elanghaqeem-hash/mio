@@ -127,6 +127,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
+    handleHashWorkspaceTree: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateWorkspacePathRequest(request)) return { success: false, error: 'Invalid workspace tree-hash request' };
+      try {
+        const result = await workspaceSandbox.hashTree(request.workspaceId, request.relativePath);
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
     // Browser bridge is intentionally read-only in TP-0.41.
     handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
       if (!validateBrowserReadRequest(request)) return { success: false, error: 'Invalid browser read request' };
