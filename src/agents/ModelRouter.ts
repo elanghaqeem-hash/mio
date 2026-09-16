@@ -23,6 +23,7 @@ export class ModelRouter {
     researchEndpoint: '/api/research',
     allowOfflineFallback: true,
     enableWebSearch: false,
+    enableBrowserRead: false,
   };
 
   public static setNetworkState(state: NetworkState) {
@@ -40,7 +41,8 @@ export class ModelRouter {
       || next.mioLocalBackend !== this.config.mioLocalBackend
       || next.mioLocalEndpoint !== this.config.mioLocalEndpoint
       || next.researchEndpoint !== this.config.researchEndpoint
-      || next.enableWebSearch !== this.config.enableWebSearch;
+      || next.enableWebSearch !== this.config.enableWebSearch
+      || next.enableBrowserRead !== this.config.enableBrowserRead;
     if (authorizationBoundaryChanged) PermissionEngine.revokeSessionGrants('Model routing authorization boundary changed');
     if (authorizationBoundaryChanged) this.readinessCache = undefined;
     this.config = next;
@@ -62,13 +64,20 @@ export class ModelRouter {
         const model = this.config.model ?? 'qwen3:8b';
         const backend = createLocalInferenceBackend(backendId, this.config.mioLocalEndpoint, model);
         const readiness = await backend.checkReadiness(controller.signal);
-        const webDetail = this.config.enableWebSearch
-          ? this.networkState === 'ONLINE'
-            ? ' Governed web grounding is enabled through the MIO research gateway.'
-            : ' Web grounding is configured but suspended while network mode is OFFLINE.'
-          : '';
+        const featureDetails = [
+          this.config.enableWebSearch
+            ? this.networkState === 'ONLINE'
+              ? 'Governed web grounding enabled.'
+              : 'Web grounding configured but suspended while OFFLINE.'
+            : undefined,
+          this.config.enableBrowserRead
+            ? this.networkState === 'ONLINE'
+              ? 'Governed desktop browser reading enabled when the desktop bridge is available.'
+              : 'Browser reading configured but suspended while OFFLINE.'
+            : undefined,
+        ].filter(Boolean).join(' ');
         return readiness.ready
-          ? { provider, ready: true, status: 'READY', detail: `MIO Local ${backend.displayName}: ${readiness.detail}${webDetail}` }
+          ? { provider, ready: true, status: 'READY', detail: `MIO Local ${backend.displayName}: ${readiness.detail}${featureDetails ? ` ${featureDetails}` : ''}` }
           : { provider, ready: false, status: 'NOT_CONFIGURED', detail: `MIO Local ${backend.displayName}: ${readiness.detail}` };
       }
 
@@ -117,16 +126,11 @@ export class ModelRouter {
 
   public static materializeApplicationContext(request: ModelRequest): ModelRequest {
     if (!request.applicationContext || request.applicationContext.sources.length === 0) return { ...request, messages: [...request.messages] };
-
-    const applicationMessage: ModelMessage = {
-      role: 'user',
-      content: this.serializeApplicationContext(request.applicationContext),
-    };
+    const applicationMessage: ModelMessage = { role: 'user', content: this.serializeApplicationContext(request.applicationContext) };
     const messages = [...request.messages];
     const lastUserIndex = messages.map((message) => message.role).lastIndexOf('user');
     if (lastUserIndex >= 0) messages.splice(lastUserIndex, 0, applicationMessage);
     else messages.push(applicationMessage);
-
     return { ...request, messages, applicationContext: undefined };
   }
 
@@ -138,7 +142,6 @@ export class ModelRouter {
     const preparedRequest = this.materializeApplicationContext(request);
 
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
-
     if (taskId) {
       const modelPreflight = resourceGovernor.authorize(taskId, 'MODEL_CALL', mode);
       if (!modelPreflight.allowed) throw new Error(modelPreflight.reason ?? 'Resource budget blocked model execution');
@@ -236,7 +239,6 @@ export class ModelRouter {
       if (remoteGrant) PermissionEngine.revokeGrant(remoteGrant.id, 'Task cancelled before model execution');
       throw new Error('Model request cancelled before execution');
     }
-
     if (taskId) {
       const resourceDecision = resourceGovernor.consumeModelCall(taskId, remoteAccess, mode);
       if (!resourceDecision.allowed) {
@@ -244,7 +246,6 @@ export class ModelRouter {
         throw new Error(resourceDecision.reason ?? 'Resource budget blocked model execution');
       }
     }
-
     if (remoteGrant && requiredScope && !PermissionEngine.consumeGrant(remoteGrant.id, requiredScope)) {
       throw new Error('Remote model authorization expired, was revoked, or no longer matches provider scope');
     }
@@ -255,11 +256,7 @@ export class ModelRouter {
       this.readinessCache = undefined;
       if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
       if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
-      eventBus.emit('ACTIVITY_LOG', {
-        timestamp: Date.now(),
-        message: `Model provider ${provider.id} unavailable; using explicit offline fallback`,
-        mode: 'CHAT',
-      });
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Model provider ${provider.id} unavailable; using explicit offline fallback`, mode: 'CHAT' });
       if (taskId) {
         const fallbackDecision = resourceGovernor.consumeModelCall(taskId, false, mode);
         if (!fallbackDecision.allowed) throw new Error(fallbackDecision.reason ?? 'Resource budget blocked local model fallback');
@@ -301,6 +298,7 @@ export class ModelRouter {
       endpoint: config.mioLocalEndpoint,
       model: config.model,
       enableWebSearch: config.enableWebSearch && this.networkState === 'ONLINE',
+      enableBrowserRead: config.enableBrowserRead === true && this.networkState === 'ONLINE',
       researchEndpoint: config.researchEndpoint,
     });
     if (config.provider === 'ollama') return new OllamaProvider(config.ollamaEndpoint, config.model);
@@ -313,7 +311,6 @@ export class ModelRouter {
     const unregisterCancellation = taskId ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort()) : () => undefined;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
-
     try {
       const result = await provider.generate(request, controller.signal);
       if (controller.signal.aborted) throw new Error(taskId && taskRuntime.isCancelled(taskId) ? 'Model request cancelled' : `Model provider '${provider.id}' timed out after ${timeoutMs}ms`);

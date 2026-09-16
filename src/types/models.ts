@@ -81,6 +81,7 @@ export interface ModelRouterConfig {
   researchEndpoint?: string;
   allowOfflineFallback: boolean;
   enableWebSearch: boolean;
+  enableBrowserRead?: boolean;
 }
 
 export interface ProviderReadiness {

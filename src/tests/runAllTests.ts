@@ -3,6 +3,7 @@ import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
 import { runMioLocalProviderTests } from './mioLocalProviderTests';
+import { runMioLocalBrowserAgentTests } from './mioLocalBrowserAgentTests';
 import { runLocalInferenceBackendTests } from './localInferenceBackendTests';
 import { runTrainingFoundationTests } from './trainingFoundationTests';
 import { runModelPromotionTests } from './modelPromotionTests';
@@ -48,6 +49,7 @@ const runners = [
   runToolRouterTests,
   runModelRouterTests,
   runMioLocalProviderTests,
+  runMioLocalBrowserAgentTests,
   runLocalInferenceBackendTests,
   runTrainingFoundationTests,
   runModelPromotionTests,
