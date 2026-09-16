@@ -1,6 +1,8 @@
 import { createLocalInferenceBackend, defaultLocalInferenceEndpoint } from '../intelligence/model/LocalInferenceBackend';
 import { systemPreferences } from '../settings/SystemPreferences';
 import type { LocalInferenceBackendId, ModelRouterConfig } from '../types/models';
+import type { TrainingArtifactBindingEvidence } from './TrainingArtifactBindingService';
+import { TrainingArtifactBindingService } from './TrainingArtifactBindingService';
 import type { CandidateAdapterIntegrityEvidence } from './TrainingCandidateIntegrityService';
 import { TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
 import type { CandidateSignedProvenanceEvidence } from './SignedModelArtifactProvenance';
@@ -9,6 +11,7 @@ import type { MioModelManifest } from './ModelManifest';
 import { validateModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
 import { TrainingCandidateRegistry } from './TrainingCandidateRegistry';
+import { TrainingRunHandoffService } from './TrainingRunHandoffService';
 
 export type PromotedModelRuntimeState = 'NONE' | 'READY_TO_ACTIVATE' | 'ACTIVE' | 'CONFIGURATION_DRIFT' | 'INTEGRITY_BLOCKED';
 
@@ -28,6 +31,7 @@ export interface PromotedModelActivationResult {
   endpoint: string;
   readinessDetail: string;
   integrityEvidenceId?: string;
+  artifactBindingEvidenceId?: string;
   provenanceEvidenceId?: string;
 }
 
@@ -51,6 +55,7 @@ interface ActivationIntegrityDecision {
   allowed: boolean;
   reasons: string[];
   evidence?: CandidateAdapterIntegrityEvidence;
+  artifactBindingEvidence?: TrainingArtifactBindingEvidence;
   provenanceEvidence?: CandidateSignedProvenanceEvidence;
 }
 
@@ -62,6 +67,8 @@ export class PromotedModelActivationService {
     private readonly integrity: TrainingCandidateIntegrityService = new TrainingCandidateIntegrityService(),
     private readonly provenance: TrainingCandidateProvenanceService = new TrainingCandidateProvenanceService(),
     private readonly signers: ModelSignerTrustStore = new ModelSignerTrustStore(),
+    private readonly handoffs: TrainingRunHandoffService = new TrainingRunHandoffService(),
+    private readonly artifactBindings: TrainingArtifactBindingService = new TrainingArtifactBindingService(),
   ) {}
 
   public async listPromoted(limit = 100): Promise<MioModelManifest[]> {
@@ -194,6 +201,7 @@ export class PromotedModelActivationService {
       endpoint: runtime.endpoint,
       readinessDetail: readiness.detail,
       integrityEvidenceId: integrityDecision.evidence?.id,
+      artifactBindingEvidenceId: integrityDecision.artifactBindingEvidence?.id,
       provenanceEvidenceId: integrityDecision.provenanceEvidence?.id,
     };
   }
@@ -210,9 +218,10 @@ export class PromotedModelActivationService {
     }
     if (!manifest.promotion.integrityEvidenceId) reasons.push('Promotion provenance has no adapter-integrity evidence id');
 
-    const [latest, latestProvenance] = await Promise.all([
+    const [latest, latestProvenance, handoffReceipt] = await Promise.all([
       this.integrity.latest(candidate.id),
       this.provenance.latest(candidate.id),
+      this.handoffs.getReceipt(candidate.id),
     ]);
     if (!latest) {
       reasons.push('No adapter-integrity evidence is available for activation');
@@ -225,6 +234,23 @@ export class PromotedModelActivationService {
     if (latest.comparison !== 'MATCH') reasons.push(`Post-promotion adapter integrity must be MATCH, found ${latest.comparison}`);
     if (latest.id === manifest.promotion.integrityEvidenceId) reasons.push('A new adapter integrity scan is required after promotion before activation');
     if (latest.scannedAt < manifest.promotion.promotedAt) reasons.push('Latest adapter integrity scan predates model promotion');
+
+    let artifactBindingEvidence: TrainingArtifactBindingEvidence | undefined;
+    if (handoffReceipt) {
+      if (!manifest.promotion.artifactBindingEvidenceId) {
+        reasons.push('TP-0.58 training handoff candidate promotion provenance has no TP-0.59 artifact-binding evidence id');
+      } else {
+        const bindingVerification = await this.artifactBindings.verifyEvidence(manifest.promotion.artifactBindingEvidenceId);
+        artifactBindingEvidence = bindingVerification.binding;
+        if (!bindingVerification.valid) {
+          reasons.push(...bindingVerification.errors.map((reason) => `Promotion-time training artifact binding: ${reason}`));
+        } else if (artifactBindingEvidence?.candidateId !== candidate.id || artifactBindingEvidence.manifestId !== manifest.id) {
+          reasons.push('Promotion-time training artifact binding is not bound to this promoted candidate');
+        }
+      }
+    } else if (manifest.promotion.artifactBindingEvidenceId) {
+      reasons.push('Promotion provenance references training artifact binding but the TP-0.58 handoff receipt is unavailable');
+    }
 
     if (manifest.promotion.provenanceEvidenceId && !latestProvenance) {
       reasons.push('Promotion provenance references signed evidence that is no longer available');
@@ -249,6 +275,7 @@ export class PromotedModelActivationService {
       allowed: reasons.length === 0,
       reasons: [...new Set(reasons)],
       evidence: latest,
+      artifactBindingEvidence,
       provenanceEvidence: latestProvenance,
     };
   }
