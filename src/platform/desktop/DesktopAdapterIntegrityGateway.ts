@@ -3,12 +3,6 @@ import { SecureServiceGateway } from '../../services/SecureServiceGateway';
 import type { CapabilityExecutionContext } from '../../types/capabilities';
 import { getDesktopWorkspaceBridge } from './DesktopWorkspaceGateway';
 
-export interface AdapterIntegrityFileHash {
-  relativePath: string;
-  bytes: number;
-  sha256: string;
-}
-
 export interface AdapterIntegrityHashOutput {
   schemaVersion: 1;
   algorithm: 'SHA-256';
@@ -17,7 +11,6 @@ export interface AdapterIntegrityHashOutput {
   fingerprint: string;
   fileCount: number;
   totalBytes: number;
-  files: AdapterIntegrityFileHash[];
   limits: { maxFiles: number; maxBytes: number; maxDepth: number };
 }
 
@@ -50,17 +43,6 @@ function scopeMatches(input: AdapterIntegrityHashInput, context: CapabilityExecu
   return context.resourceId === input.workspaceId && context.path === input.relativePath;
 }
 
-function validFile(item: AdapterIntegrityFileHash): boolean {
-  return typeof item.relativePath === 'string'
-    && item.relativePath.length > 0
-    && item.relativePath.length <= 4096
-    && !item.relativePath.startsWith('/')
-    && !item.relativePath.includes('\\')
-    && Number.isSafeInteger(item.bytes)
-    && item.bytes >= 0
-    && SHA256.test(item.sha256);
-}
-
 function validOutput(output: AdapterIntegrityHashOutput): boolean {
   return output.schemaVersion === 1
     && output.algorithm === 'SHA-256'
@@ -72,12 +54,12 @@ function validOutput(output: AdapterIntegrityHashOutput): boolean {
     && output.fileCount > 0
     && Number.isSafeInteger(output.totalBytes)
     && output.totalBytes >= 0
-    && Array.isArray(output.files)
-    && output.files.length === output.fileCount
-    && output.files.every(validFile)
     && Number.isSafeInteger(output.limits.maxFiles)
+    && output.limits.maxFiles > 0
     && Number.isSafeInteger(output.limits.maxBytes)
-    && Number.isSafeInteger(output.limits.maxDepth);
+    && output.limits.maxBytes > 0
+    && Number.isSafeInteger(output.limits.maxDepth)
+    && output.limits.maxDepth > 0;
 }
 
 export function getDesktopAdapterIntegrityBridge(): DesktopAdapterIntegrityBridge | undefined {
