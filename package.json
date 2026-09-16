@@ -13,6 +13,7 @@
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
     "pack:win": "npm run build:all && electron-builder --win --dir",
     "dist:win": "npm run build:all && electron-builder --win",
+    "training:export": "tsx scripts/training/export-training-bundle.ts",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:smoke": "node scripts/release-smoke.mjs",
     "release:manifest": "node scripts/generate-release-manifest.mjs",
