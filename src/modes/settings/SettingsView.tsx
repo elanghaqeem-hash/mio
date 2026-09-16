@@ -6,6 +6,7 @@ import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
 import { ModelProvenancePanel } from './ModelProvenancePanel';
+import { SignerAuditChainStatusPanel } from './SignerAuditChainStatusPanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 
@@ -189,6 +190,7 @@ export const SettingsView: React.FC = () => {
 
       <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <ModelProvenancePanel />
+      <SignerAuditChainStatusPanel />
       <TrainingCandidatePanel />
       <PromotedModelPanel />
 
