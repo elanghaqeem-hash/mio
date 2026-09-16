@@ -114,6 +114,10 @@ export class ModelPromotionService {
     if (!manifest.review.securityReviewed) reasons.push('Security review is incomplete');
     if (!latestBenchmark) reasons.push('Stored benchmark report is unavailable');
 
+    if (manifest.trainingMethod !== 'BASE' && !candidate) {
+      reasons.push('Governed training-candidate binding is required for adapter-based promotion');
+    }
+
     if (candidate) {
       if (candidate.manifestId !== manifest.id) reasons.push('Training candidate is not bound to the current model manifest');
       if (candidate.status !== 'BENCHMARKED_POLICY_PASS') reasons.push('Training candidate does not hold a benchmark policy pass');
