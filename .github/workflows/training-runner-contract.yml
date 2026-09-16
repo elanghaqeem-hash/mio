@@ -16,6 +16,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -27,6 +32,11 @@ jobs:
 
       - name: Run standard-library training runner self-test
         run: python training/train_mio_lora.py --self-test
+
+      - name: Validate signed artifact provenance utility
+        run: |
+          node --check scripts/training/sign-model-artifact-provenance.mjs
+          node scripts/training/sign-model-artifact-provenance.mjs --self-test
 
       - name: Confirm training dependencies stay isolated
         run: |

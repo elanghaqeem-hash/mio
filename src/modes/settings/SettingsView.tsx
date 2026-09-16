@@ -5,6 +5,7 @@ import { ModelRouter } from '../../agents/ModelRouter';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
+import { ModelProvenancePanel } from './ModelProvenancePanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 
@@ -187,6 +188,7 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
+      <ModelProvenancePanel />
       <TrainingCandidatePanel />
       <PromotedModelPanel />
 
