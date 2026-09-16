@@ -8,6 +8,7 @@ export interface MioModelPromotionProvenance {
   promotedAt: number;
   benchmarkReportId: string;
   integrityEvidenceId?: string;
+  provenanceEvidenceId?: string;
 }
 
 export interface MioModelManifest {
@@ -70,6 +71,7 @@ export function validateModelManifest(manifest: MioModelManifest): ModelManifest
     if (!Number.isFinite(manifest.promotion.promotedAt) || manifest.promotion.promotedAt <= 0) errors.push('Promotion provenance promotedAt is invalid');
     if (!manifest.promotion.benchmarkReportId.trim()) errors.push('Promotion provenance benchmarkReportId is required');
     if (manifest.promotion.integrityEvidenceId !== undefined && !manifest.promotion.integrityEvidenceId.trim()) errors.push('Promotion provenance integrityEvidenceId is invalid');
+    if (manifest.promotion.provenanceEvidenceId !== undefined && !manifest.promotion.provenanceEvidenceId.trim()) errors.push('Promotion provenance provenanceEvidenceId is invalid');
   }
   if (manifest.lifecycle === 'PROMOTED' && (!manifest.review.dataGovernanceReviewed || !manifest.review.securityReviewed)) {
     errors.push('Promoted models require data-governance and security review');
