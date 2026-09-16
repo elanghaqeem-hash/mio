@@ -25,13 +25,17 @@ export async function runCandidateLifecyclePipelineTests(): Promise<{ passed: nu
   const registry = new TrainingCandidateRegistry(storage);
   const reviews = new TrainingCandidateReviewService(storage);
   const manifests = new ModelManifestRepository(storage);
-  const routerConfig = {
-    provider: 'local_heuristic' as const,
-    allowOfflineFallback: true,
-    enableWebSearch: false,
-  };
+  let activationStatusReads = 0;
   const pipeline = new CandidateLifecyclePipelineService(storage, {
-    routerConfigProvider: () => ({ ...routerConfig }),
+    activationStatusProvider: async () => {
+      activationStatusReads += 1;
+      return {
+        state: 'NONE',
+        configuredProvider: 'local_heuristic',
+        backend: 'ollama',
+        detail: 'No promoted model is selected in this isolated pipeline test.',
+      };
+    },
   });
 
   const example: MioTrainingExample = {
@@ -103,6 +107,7 @@ export async function runCandidateLifecyclePipelineTests(): Promise<{ passed: nu
   assert(JSON.stringify(candidateBefore) === JSON.stringify(candidateAfterInspect), 'Pipeline inspection does not mutate the candidate record');
   assert(JSON.stringify(manifestBefore) === JSON.stringify(manifestAfterInspect), 'Pipeline inspection does not mutate the model manifest');
   assert((await manifests.getActivePromoted()) === undefined, 'Pipeline inspection does not change the active promoted-model pointer');
+  assert(activationStatusReads > 0, 'Pipeline reads activation health through the existing activation-status authority instead of inferring ACTIVE from router configuration');
 
   const benchmarkCase: MioBenchCase = {
     id: 'pipeline-general',
