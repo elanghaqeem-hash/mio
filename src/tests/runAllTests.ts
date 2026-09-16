@@ -9,6 +9,7 @@ import { runTrainingFoundationTests } from './trainingFoundationTests';
 import { runTrainingBundleTests } from './trainingBundleTests';
 import { runTrainingRunHandoffTests } from './trainingRunHandoffTests';
 import { runTrainingArtifactBindingTests } from './trainingArtifactBindingTests';
+import { runTrainingCandidateEvidencePackageTests } from './trainingCandidateEvidencePackageTests';
 import { runTrainingCandidateRegistryTests } from './trainingCandidateRegistryTests';
 import { runTrainingCandidateReviewTests } from './trainingCandidateReviewTests';
 import { runTrainingCandidateLabTests } from './trainingCandidateLabTests';
@@ -71,6 +72,7 @@ const runners = [
   runTrainingBundleTests,
   runTrainingRunHandoffTests,
   runTrainingArtifactBindingTests,
+  runTrainingCandidateEvidencePackageTests,
   runTrainingCandidateRegistryTests,
   runTrainingCandidateReviewTests,
   runTrainingCandidateLabTests,
