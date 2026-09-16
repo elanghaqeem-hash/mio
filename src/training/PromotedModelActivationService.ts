@@ -1,10 +1,14 @@
 import { createLocalInferenceBackend, defaultLocalInferenceEndpoint } from '../intelligence/model/LocalInferenceBackend';
 import { systemPreferences } from '../settings/SystemPreferences';
-import { LocalInferenceBackendId, ModelRouterConfig } from '../types/models';
-import { MioModelManifest, validateModelManifest } from './ModelManifest';
+import type { LocalInferenceBackendId, ModelRouterConfig } from '../types/models';
+import type { CandidateAdapterIntegrityEvidence } from './TrainingCandidateIntegrityService';
+import { TrainingCandidateIntegrityService } from './TrainingCandidateIntegrityService';
+import type { MioModelManifest } from './ModelManifest';
+import { validateModelManifest } from './ModelManifest';
 import { ModelManifestRepository } from './ModelManifestRepository';
+import { TrainingCandidateRegistry } from './TrainingCandidateRegistry';
 
-export type PromotedModelRuntimeState = 'NONE' | 'READY_TO_ACTIVATE' | 'ACTIVE' | 'CONFIGURATION_DRIFT';
+export type PromotedModelRuntimeState = 'NONE' | 'READY_TO_ACTIVATE' | 'ACTIVE' | 'CONFIGURATION_DRIFT' | 'INTEGRITY_BLOCKED';
 
 export interface PromotedModelRuntimeStatus {
   state: PromotedModelRuntimeState;
@@ -21,6 +25,7 @@ export interface PromotedModelActivationResult {
   backend: LocalInferenceBackendId;
   endpoint: string;
   readinessDetail: string;
+  integrityEvidenceId?: string;
 }
 
 export interface PromotedModelActivationOptions {
@@ -39,10 +44,18 @@ const defaultPreferencePort: ModelRouterPreferencePort = {
   setModelRouter: (patch) => systemPreferences.setModelRouter(patch),
 };
 
+interface ActivationIntegrityDecision {
+  allowed: boolean;
+  reasons: string[];
+  evidence?: CandidateAdapterIntegrityEvidence;
+}
+
 export class PromotedModelActivationService {
   constructor(
     private readonly manifests: ModelManifestRepository = new ModelManifestRepository(),
     private readonly preferences: ModelRouterPreferencePort = defaultPreferencePort,
+    private readonly candidates: TrainingCandidateRegistry = new TrainingCandidateRegistry(),
+    private readonly integrity: TrainingCandidateIntegrityService = new TrainingCandidateIntegrityService(),
   ) {}
 
   public async listPromoted(limit = 100): Promise<MioModelManifest[]> {
@@ -61,6 +74,19 @@ export class PromotedModelActivationService {
         backend,
         endpoint: config.mioLocalEndpoint,
         detail: 'No promoted MIO Local model is selected in the model manifest registry.',
+      };
+    }
+
+    const integrityDecision = await this.activationIntegrityDecision(manifest);
+    if (!integrityDecision.allowed) {
+      return {
+        state: 'INTEGRITY_BLOCKED',
+        manifest,
+        configuredProvider: config.provider,
+        configuredModel: config.model,
+        backend,
+        endpoint: config.mioLocalEndpoint,
+        detail: `Active promoted-model integrity requires attention: ${integrityDecision.reasons.join('; ')}`,
       };
     }
 
@@ -115,6 +141,11 @@ export class PromotedModelActivationService {
       throw new Error('Promoted model activation requires completed data-governance and security review');
     }
 
+    const integrityDecision = await this.activationIntegrityDecision(manifest);
+    if (!integrityDecision.allowed) {
+      throw new Error(`Promoted model activation blocked by adapter integrity: ${integrityDecision.reasons.join('; ')}`);
+    }
+
     const current = this.preferences.getModelRouter();
     const backend = options.backend ?? current.mioLocalBackend ?? 'ollama';
     const endpoint = options.endpoint?.trim()
@@ -156,7 +187,36 @@ export class PromotedModelActivationService {
       backend,
       endpoint: runtime.endpoint,
       readinessDetail: readiness.detail,
+      integrityEvidenceId: integrityDecision.evidence?.id,
     };
+  }
+
+  private async activationIntegrityDecision(manifest: MioModelManifest): Promise<ActivationIntegrityDecision> {
+    const candidate = await this.candidates.get(manifest.id);
+    if (!candidate) return { allowed: true, reasons: [] };
+
+    const reasons: string[] = [];
+    if (manifest.trainingMethod === 'BASE') return { allowed: true, reasons: [] };
+    if (!manifest.promotion) {
+      reasons.push('Governed adapter candidate is missing structured promotion provenance');
+      return { allowed: false, reasons };
+    }
+    if (!manifest.promotion.integrityEvidenceId) reasons.push('Promotion provenance has no adapter-integrity evidence id');
+
+    const latest = await this.integrity.latest(candidate.id);
+    if (!latest) {
+      reasons.push('No adapter-integrity evidence is available for activation');
+      return { allowed: false, reasons };
+    }
+    if (latest.candidateId !== candidate.id || latest.manifestId !== manifest.id) reasons.push('Latest integrity evidence is not bound to this promoted candidate');
+    if (latest.runtimeModel !== manifest.runtimeModel) reasons.push('Latest integrity runtime identity does not match the promoted model');
+    if (latest.artifactUri !== candidate.artifactUri) reasons.push('Latest integrity artifact identity does not match the promoted candidate');
+    if (latest.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Latest integrity training-result SHA does not match the promoted candidate');
+    if (latest.comparison !== 'MATCH') reasons.push(`Post-promotion adapter integrity must be MATCH, found ${latest.comparison}`);
+    if (latest.id === manifest.promotion.integrityEvidenceId) reasons.push('A new adapter integrity scan is required after promotion before activation');
+    if (latest.scannedAt < manifest.promotion.promotedAt) reasons.push('Latest adapter integrity scan predates model promotion');
+
+    return { allowed: reasons.length === 0, reasons: [...new Set(reasons)], evidence: latest };
   }
 }
 
