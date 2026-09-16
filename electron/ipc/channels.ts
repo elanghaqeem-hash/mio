@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   FS_REVOKE_WORKSPACE: 'mio:fs:revokeWorkspace',
   FS_READ_WORKSPACE_TEXT: 'mio:fs:readWorkspaceText',
   FS_LIST_WORKSPACE: 'mio:fs:listWorkspace',
+  FS_HASH_WORKSPACE_TREE: 'mio:fs:hashWorkspaceTree',
 
   // Governed read-only browser bridge.
   BROWSER_READ_PAGE: 'mio:browser:readPage',
