@@ -80,7 +80,7 @@ function bindingBody(binding: TrainingArtifactBindingEvidence): TrainingArtifact
   };
 }
 
-function currentEvidenceErrors(
+function evidenceErrors(
   candidate: TrainingCandidateRecord,
   manifest: MioModelManifest,
   receipt?: TrainingRunHandoffReceipt,
@@ -95,13 +95,13 @@ function currentEvidenceErrors(
   if (receipt.configSha256 !== candidate.configSha256) errors.push('Training handoff receipt config SHA-256 does not match candidate registration');
   if (!SHA256.test(receipt.handoffSha256) || !SHA256.test(receipt.trainingResultSha256)) errors.push('Training handoff receipt fingerprint contract is invalid');
 
-  if (!integrity) return [...errors, 'Current adapter byte-integrity evidence is unavailable'];
+  if (!integrity) return [...errors, 'Adapter byte-integrity evidence is unavailable'];
   if (integrity.candidateId !== candidate.id || integrity.manifestId !== manifest.id) errors.push('Adapter integrity evidence is not bound to the current candidate manifest');
   if (integrity.runtimeModel !== manifest.runtimeModel) errors.push('Adapter integrity runtime identity does not match candidate runtime model');
   if (integrity.artifactUri !== candidate.artifactUri) errors.push('Adapter integrity artifact identity does not match candidate artifact URI');
   if (integrity.trainingResultSha256 !== candidate.trainingResultSha256) errors.push('Adapter integrity training-result SHA-256 does not match candidate registration');
   if (!SHA256.test(integrity.fingerprint) || !SHA256.test(integrity.baselineFingerprint)) errors.push('Adapter integrity fingerprint contract is invalid');
-  if (integrity.comparison === 'DRIFT') errors.push('Latest adapter byte-integrity evidence reports DRIFT');
+  if (integrity.comparison === 'DRIFT') errors.push('Adapter byte-integrity evidence reports DRIFT');
   return [...new Set(errors)];
 }
 
@@ -128,10 +128,10 @@ export class TrainingArtifactBindingService {
       this.integrity.latest(candidate.id),
       this.latest(candidate.id),
     ]);
-    const blockingReasons = currentEvidenceErrors(candidate, manifest, receipt, latestIntegrity);
-    const verification = latestBinding
+    const blockingReasons = evidenceErrors(candidate, manifest, receipt, latestIntegrity);
+    const verification: TrainingArtifactBindingVerification = latestBinding
       ? await this.verifyBinding(latestBinding, candidate, manifest, receipt, latestIntegrity)
-      : { valid: false, errors: ['Current handoff-to-adapter binding is unavailable'] };
+      : { valid: false, errors: ['Current handoff-to-adapter binding is unavailable'], receipt, integrity: latestIntegrity };
     return {
       candidate,
       manifest,
@@ -154,7 +154,7 @@ export class TrainingArtifactBindingService {
       this.integrity.latest(candidate.id),
       this.latest(candidate.id),
     ]);
-    const errors = currentEvidenceErrors(candidate, manifest, receipt, latestIntegrity);
+    const errors = evidenceErrors(candidate, manifest, receipt, latestIntegrity);
     if (errors.length || !receipt || !latestIntegrity) throw new Error(`Training artifact binding blocked: ${errors.join('; ')}`);
     if (latestIntegrity.comparison === 'DRIFT') throw new Error('Training artifact binding blocked: latest adapter integrity evidence reports DRIFT');
 
@@ -181,7 +181,7 @@ export class TrainingArtifactBindingService {
       runtimeModel: manifest.runtimeModel,
       artifactUri: candidate.artifactUri,
       boundAt,
-      disclosure: 'TP-0.59 evidence binding a verified TP-0.58 training handoff receipt to the current TP-0.50 adapter byte-integrity scan. This binding is not a benchmark, provenance signature, promotion decision, activation authorization, or proof of model safety.',
+      disclosure: 'TP-0.59 evidence binding a verified TP-0.58 training handoff receipt to TP-0.50 adapter byte-integrity evidence. This binding is not a benchmark, provenance signature, promotion decision, activation authorization, or proof of model safety.',
     };
     const bindingSha256 = await sha256Hex(stableJsonStringify(body));
     const evidence: TrainingArtifactBindingEvidence = {
@@ -209,6 +209,26 @@ export class TrainingArtifactBindingService {
     return this.verifyBinding(binding, candidate, manifest, receipt, integrity);
   }
 
+  public async verifyEvidence(bindingId: string): Promise<TrainingArtifactBindingVerification> {
+    const binding = await this.get(bindingId);
+    if (!binding) return { valid: false, errors: [`Training artifact binding '${bindingId}' is unavailable`] };
+    const candidate = await this.candidates.get(binding.candidateId);
+    if (!candidate) return { valid: false, errors: [`Training candidate '${binding.candidateId}' is not registered`], binding };
+    const manifest = await this.manifests.get(candidate.manifestId);
+    if (!manifest) return { valid: false, errors: [`Model manifest '${candidate.manifestId}' is missing`], binding };
+    const [receipt, integrityHistory] = await Promise.all([
+      this.handoffs.getReceipt(candidate.id),
+      this.integrity.list(candidate.id, 500),
+    ]);
+    const referencedIntegrity = integrityHistory.find((item) => item.id === binding.integrityEvidenceId);
+    return this.verifyBinding(binding, candidate, manifest, receipt, referencedIntegrity);
+  }
+
+  public async get(bindingId: string): Promise<TrainingArtifactBindingEvidence | undefined> {
+    const value = await this.storage.get<TrainingArtifactBindingEvidence>(NAMESPACE, bindingId);
+    return value ? structuredClone(value) : undefined;
+  }
+
   public async latest(candidateId: string): Promise<TrainingArtifactBindingEvidence | undefined> {
     const history = await this.list(candidateId, 1);
     return history[0];
@@ -232,7 +252,7 @@ export class TrainingArtifactBindingService {
     receipt?: TrainingRunHandoffReceipt,
     integrity?: CandidateAdapterIntegrityEvidence,
   ): Promise<TrainingArtifactBindingVerification> {
-    const errors = currentEvidenceErrors(candidate, manifest, receipt, integrity);
+    const errors = evidenceErrors(candidate, manifest, receipt, integrity);
     if (binding.schemaVersion !== 1) errors.push('Unsupported training artifact binding schema');
     if (!SHA256.test(binding.bindingSha256)) errors.push('Training artifact binding SHA-256 is malformed');
     if (!Number.isSafeInteger(binding.boundAt) || binding.boundAt <= 0) errors.push('Training artifact binding timestamp is invalid');
@@ -245,9 +265,9 @@ export class TrainingArtifactBindingService {
     if (binding.trainingResultSha256 !== candidate.trainingResultSha256) errors.push('Training artifact binding result SHA-256 does not match candidate registration');
     if (binding.runtimeModel !== manifest.runtimeModel || binding.artifactUri !== candidate.artifactUri) errors.push('Training artifact binding runtime/artifact identity does not match current candidate');
     if (integrity) {
-      if (binding.integrityEvidenceId !== integrity.id) errors.push('Training artifact binding is stale relative to the latest adapter integrity scan');
-      if (binding.adapterFingerprint !== integrity.fingerprint || binding.baselineFingerprint !== integrity.baselineFingerprint) errors.push('Training artifact binding fingerprint does not match current adapter integrity evidence');
-      if (binding.integrityComparison !== integrity.comparison) errors.push('Training artifact binding integrity comparison does not match current scan');
+      if (binding.integrityEvidenceId !== integrity.id) errors.push('Training artifact binding is stale relative to the supplied adapter integrity evidence');
+      if (binding.adapterFingerprint !== integrity.fingerprint || binding.baselineFingerprint !== integrity.baselineFingerprint) errors.push('Training artifact binding fingerprint does not match adapter integrity evidence');
+      if (binding.integrityComparison !== integrity.comparison) errors.push('Training artifact binding integrity comparison does not match adapter integrity evidence');
     }
     if (!binding.disclosure?.trim() || binding.disclosure.length > 1000) errors.push('Training artifact binding disclosure is invalid');
     try {
