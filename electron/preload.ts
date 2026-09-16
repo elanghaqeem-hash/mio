@@ -31,6 +31,37 @@ export interface MioBrowserReadResult {
   error?: string;
 }
 
+export type MioTrainingPythonRuntime = 'python' | 'python3' | 'py';
+export type MioTrainingJobMode = 'DRY_RUN' | 'TRAIN';
+export type MioTrainingJobState = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+
+export interface MioTrainingJobSnapshot {
+  schemaVersion: 1;
+  id: string;
+  state: MioTrainingJobState;
+  mode: MioTrainingJobMode;
+  pythonRuntime: MioTrainingPythonRuntime;
+  workspaceId: string;
+  bundleRelativePath: string;
+  outputRelativePath?: string;
+  startedAt: number;
+  finishedAt?: number;
+  exitCode?: number;
+  signal?: string;
+  stdoutTail: string;
+  stderrTail: string;
+  resultFileRelativePath?: string;
+  disclosure: string;
+}
+
+export interface MioTrainingStartRequest {
+  workspaceId: string;
+  bundleRelativePath: string;
+  outputRelativePath?: string;
+  pythonRuntime: MioTrainingPythonRuntime;
+  mode: MioTrainingJobMode;
+}
+
 export interface MioDesktopAPI {
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<boolean>;
@@ -58,6 +89,10 @@ export interface MioDesktopAPI {
   hashWorkspaceTree: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; result?: MioWorkspaceTreeHashResult; error?: string }>;
   browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
 
+  startTrainingJob: (request: MioTrainingStartRequest) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
+  getTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
+  cancelTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
+
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
 }
 
@@ -80,6 +115,10 @@ const desktopAPI: MioDesktopAPI = {
   listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
   hashWorkspaceTree: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, request),
   browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),
+
+  startTrainingJob: (request) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_START_JOB, request),
+  getTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_GET_JOB, jobId),
+  cancelTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_CANCEL_JOB, jobId),
 
   onEmergencyStopTriggered: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, reason: string) => callback(reason);
