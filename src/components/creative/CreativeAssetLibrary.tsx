@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Archive, ArrowRight, Check, Library, Plus, X } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
-import { createCreativeProjectSnapshotInput, isAssetCompatibleWithDocument, sortCreativeAssetsNewestFirst } from '../../creative/CreativeProjectAssets';
+import { createCreativeProjectSnapshotInput, creativeDocumentKindForAssetType, isAssetCompatibleWithDocument, sortCreativeAssetsNewestFirst } from '../../creative/CreativeProjectAssets';
 import { creativeStudioForDocumentKind } from '../../creative/CreativeWorkspaceIntegration';
 import type { CreativeStudioWorkspace } from '../../creative/useCreativeStudioDocument';
 import { ProjectManager } from '../../project/ProjectManager';
@@ -11,7 +11,10 @@ interface Props<T> {
   workspace: Pick<CreativeStudioWorkspace<T>, 'document' | 'state' | 'setState' | 'status'>;
 }
 
-const assetLabel = (asset: ProjectAsset): string => creativeStudioForDocumentKind(asset.type as never)?.shortLabel ?? asset.type.toUpperCase();
+const assetLabel = (asset: ProjectAsset): string => {
+  const kind = creativeDocumentKindForAssetType(asset.type);
+  return kind ? creativeStudioForDocumentKind(kind)?.shortLabel ?? asset.type.toUpperCase() : asset.type.toUpperCase();
+};
 
 export const CreativeAssetLibrary = <T,>({ workspace }: Props<T>) => {
   const [open, setOpen] = useState(false);
@@ -49,7 +52,8 @@ export const CreativeAssetLibrary = <T,>({ workspace }: Props<T>) => {
   };
 
   const openAssetStudio = (asset: ProjectAsset) => {
-    const kind = asset.type as typeof workspace.document.kind;
+    const kind = creativeDocumentKindForAssetType(asset.type);
+    if (!kind) return;
     const studio = creativeStudioForDocumentKind(kind);
     if (studio) eventBus.emit('SWITCH_MODE', studio.mode);
   };
