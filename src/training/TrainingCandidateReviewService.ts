@@ -98,7 +98,7 @@ export class TrainingCandidateReviewService {
       notes: [
         snapshot.manifest.notes,
         `Advanced to RELEASE_CANDIDATE after explicit data-governance and security attestations using benchmark report ${snapshot.latestBenchmark.id}. Promotion remains a separate explicit action.`,
-        snapshot.latestIntegrity ? `Latest adapter byte-integrity evidence at review: ${snapshot.latestIntegrity.id} (${snapshot.latestIntegrity.comparison}).` : undefined,
+        snapshot.latestIntegrity ? `Latest adapter byte-integrity evidence at review: ${snapshot.latestIntegrity.id} (${snapshot.latestIntegrity.comparison}, baseline ${snapshot.latestIntegrity.baselineFingerprint}).` : undefined,
       ].filter(Boolean).join(' '),
     };
 
@@ -130,8 +130,8 @@ export class TrainingCandidateReviewService {
       if (latestIntegrity.candidateId !== candidate.id || latestIntegrity.manifestId !== manifest.id) reasons.push('Adapter integrity evidence is not bound to the current candidate manifest');
       if (latestIntegrity.runtimeModel !== manifest.runtimeModel) reasons.push('Adapter integrity evidence runtime identity does not match candidate runtime model');
       if (latestIntegrity.artifactUri !== candidate.artifactUri) reasons.push('Adapter integrity evidence artifact identity does not match candidate artifact URI');
-      if (latestIntegrity.trainingResultFingerprint !== candidate.trainingResultFingerprint) reasons.push('Adapter integrity evidence training-result fingerprint does not match candidate registration');
-      if (!/^[a-f0-9]{64}$/.test(latestIntegrity.fingerprint)) reasons.push('Adapter integrity evidence fingerprint is malformed');
+      if (latestIntegrity.trainingResultSha256 !== candidate.trainingResultSha256) reasons.push('Adapter integrity evidence training-result SHA-256 does not match candidate registration');
+      if (!/^[a-f0-9]{64}$/.test(latestIntegrity.fingerprint) || !/^[a-f0-9]{64}$/.test(latestIntegrity.baselineFingerprint)) reasons.push('Adapter integrity evidence fingerprint is malformed');
       if (latestIntegrity.comparison === 'DRIFT') reasons.push('Latest adapter byte-integrity evidence reports DRIFT');
     }
 
