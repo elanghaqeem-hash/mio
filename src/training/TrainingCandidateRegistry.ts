@@ -169,10 +169,9 @@ export class TrainingCandidateRegistry {
     }
     await this.manifests.save(manifest);
 
-    const id = manifestId;
     const candidate: TrainingCandidateRecord = {
       schemaVersion: 1,
-      id,
+      id: manifestId,
       manifestId,
       bundleId: input.bundle.bundleId,
       artifactUri,
@@ -182,65 +181,67 @@ export class TrainingCandidateRegistry {
       registeredAt: Date.now(),
       status: 'REGISTERED_UNEVALUATED',
     };
-    const existingCandidate = await this.storage.get<TrainingCandidateRecord>(NAMESPACE, this.key(id));
-    if (existingCandidate) {
-      if (
-        existingCandidate.trainingResultSha256 !== trainingResultSha256
-        || existingCandidate.artifactUri !== artifactUri
-        || existingCandidate.bundleId !== input.bundle.bundleId
-      ) throw new Error('Existing training candidate record conflicts with this registration');
-      return { candidate: existingCandidate, manifest };
+    await this.saveCandidate(candidate);
+    return { candidate, manifest };
+  }
+
+  public async evaluate(manifestId: string, provider: ModelProvider, cases: MioBenchCase[] = MIO_BENCH_CORE): Promise<CandidateBenchmarkEvaluation> {
+    const candidate = await this.get(manifestId);
+    if (!candidate) throw new Error(`Training candidate '${manifestId}' is not registered`);
+    const manifest = await this.manifests.get(manifestId);
+    if (!manifest) throw new Error(`Model manifest '${manifestId}' is missing`);
+    if (manifest.lifecycle === 'PROMOTED' || manifest.lifecycle === 'RETIRED') throw new Error(`Candidate evaluation requires EXPERIMENTAL or RELEASE_CANDIDATE lifecycle, found ${manifest.lifecycle}`);
+
+    const report = await new MioBenchRunner(cases).run(provider);
+    if (report.model !== manifest.runtimeModel) {
+      throw new Error(`Benchmark model identity mismatch: '${report.model}' does not match '${manifest.runtimeModel}'`);
     }
-    await this.storage.set(NAMESPACE, this.key(id), candidate);
-    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
-    await this.storage.set(NAMESPACE, INDEX_KEY, [id, ...index.filter((item) => item !== id)].slice(0, 500));
-    return { candidate: structuredClone(candidate), manifest };
-  }
-
-  public async get(id: string): Promise<TrainingCandidateRecord | undefined> {
-    const value = await this.storage.get<TrainingCandidateRecord>(NAMESPACE, this.key(id));
-    return value ? structuredClone(value) : undefined;
-  }
-
-  public async list(limit = 100): Promise<TrainingCandidateRecord[]> {
-    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
-    const output: TrainingCandidateRecord[] = [];
-    for (const id of index.slice(0, Math.max(1, Math.min(limit, 500)))) {
-      const record = await this.get(id);
-      if (record) output.push(record);
-    }
-    return output;
-  }
-
-  public async evaluate(
-    candidateId: string,
-    provider: ModelProvider,
-    cases: MioBenchCase[] = MIO_BENCH_CORE,
-  ): Promise<CandidateBenchmarkEvaluation> {
-    const candidate = await this.get(candidateId);
-    if (!candidate) throw new Error(`Training candidate '${candidateId}' is not registered`);
-    const manifest = await this.manifests.get(candidate.manifestId);
-    if (!manifest) throw new Error(`Model manifest '${candidate.manifestId}' is unavailable`);
-    if (manifest.lifecycle !== 'EXPERIMENTAL') throw new Error(`Candidate lifecycle is ${manifest.lifecycle}; benchmark evaluation is only allowed while EXPERIMENTAL`);
-    if (manifest.trainingMethod !== 'LORA' && manifest.trainingMethod !== 'QLORA') throw new Error(`Candidate training method '${manifest.trainingMethod}' is unsupported by the TP-0.47 registry`);
-
-    const runner = new MioBenchRunner(provider);
-    const report = await runner.run(manifest.runtimeModel, cases);
-    const decision = benchmarkPolicyDecision(manifest, report);
     const storedReport = await this.benchmarks.save(manifest.id, report);
+    const decision = benchmarkPolicyDecision(manifest, report);
     const updated: TrainingCandidateRecord = {
       ...candidate,
       status: decision.passed ? 'BENCHMARKED_POLICY_PASS' : 'BENCHMARKED_POLICY_FAIL',
       latestBenchmarkReportId: storedReport.id,
-      latestBenchmarkAt: storedReport.storedAt,
+      latestBenchmarkAt: storedReport.recordedAt,
     };
-    await this.storage.set(NAMESPACE, this.key(updated.id), updated);
-    return { candidate: structuredClone(updated), manifest, storedReport, policyPassed: decision.passed, reasons: decision.reasons, metrics: decision };
+    await this.saveCandidate(updated);
+
+    return {
+      candidate: updated,
+      manifest,
+      storedReport,
+      policyPassed: decision.passed,
+      reasons: decision.reasons,
+      metrics: {
+        passRate: decision.passRate,
+        scoreRatio: decision.scoreRatio,
+        averageLatencyMs: decision.averageLatencyMs,
+        coveredDomains: decision.coveredDomains,
+      },
+    };
+  }
+
+  public async get(id: string): Promise<TrainingCandidateRecord | undefined> {
+    return (await this.storage.get<TrainingCandidateRecord>(NAMESPACE, this.key(id))) ?? undefined;
+  }
+
+  public async list(limit = 100): Promise<TrainingCandidateRecord[]> {
+    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
+    const records: TrainingCandidateRecord[] = [];
+    for (const id of index.slice(0, Math.max(1, Math.min(limit, 500)))) {
+      const record = await this.get(id);
+      if (record) records.push(record);
+    }
+    return records;
+  }
+
+  private async saveCandidate(candidate: TrainingCandidateRecord): Promise<void> {
+    await this.storage.set(NAMESPACE, this.key(candidate.id), structuredClone(candidate));
+    const index = await this.storage.get<string[]>(NAMESPACE, INDEX_KEY) ?? [];
+    await this.storage.set(NAMESPACE, INDEX_KEY, [candidate.id, ...index.filter((id) => id !== candidate.id)].slice(0, 500));
   }
 
   private key(id: string): string {
-    return `training-candidate:${id}`;
+    return `training-candidate:${id.trim().slice(0, 180)}`;
   }
 }
-
-export const trainingCandidateRegistry = new TrainingCandidateRegistry();
