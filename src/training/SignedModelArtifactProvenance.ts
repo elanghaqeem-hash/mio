@@ -8,13 +8,16 @@ import type { MioModelManifest } from './ModelManifest';
 
 const NAMESPACE = 'training' as const;
 const SIGNER_INDEX_KEY = 'trusted-model-signer-index-v1';
+const SIGNER_AUDIT_INDEX_KEY = 'trusted-model-signer-audit-index-v1';
 const PROVENANCE_INDEX_KEY = 'candidate-signed-provenance-index-v1';
 const MAX_PROVENANCE_JSON_CHARS = 2 * 1024 * 1024;
 const MAX_PUBLIC_KEY_CHARS = 32 * 1024;
+const MAX_SIGNER_AUDIT_EVENTS = 10_000;
 const SHA256 = /^[a-f0-9]{64}$/;
 const SAFE_KEY_ID = /^p256:[a-f0-9]{64}$/;
 
 export type ModelSignerTrustStatus = 'TRUSTED' | 'REVOKED';
+export type ModelSignerTrustAction = 'TRUST' | 'RETRUST' | 'REVOKE';
 
 export interface TrustedModelSigner {
   schemaVersion: 1;
@@ -24,6 +27,35 @@ export interface TrustedModelSigner {
   status: ModelSignerTrustStatus;
   trustedAt: number;
   revokedAt?: number;
+}
+
+export interface ModelSignerTrustEvent {
+  schemaVersion: 1;
+  id: string;
+  sequence: number;
+  action: ModelSignerTrustAction;
+  keyId: string;
+  label: string;
+  actor: string;
+  reason?: string;
+  rotationId?: string;
+  previousStatus?: ModelSignerTrustStatus;
+  resultingStatus: ModelSignerTrustStatus;
+  occurredAt: number;
+}
+
+export interface RotateModelSignerInput {
+  currentKeyId: string;
+  replacementLabel: string;
+  replacementPublicKey: string;
+  actor: string;
+  reason?: string;
+}
+
+export interface ModelSignerRotationResult {
+  rotationId: string;
+  previous: TrustedModelSigner;
+  replacement: TrustedModelSigner;
 }
 
 export interface MioArtifactProvenancePayload {
@@ -133,6 +165,18 @@ function boundedLabel(value: string): string {
   return label;
 }
 
+function boundedActor(value: string): string {
+  const actor = value.trim().slice(0, 200);
+  if (!actor) throw new Error('Signer trust mutation requires an actor identity');
+  return actor;
+}
+
+function boundedReason(value?: string): string | undefined {
+  if (value === undefined) return undefined;
+  const reason = value.trim().slice(0, 500);
+  return reason || undefined;
+}
+
 function payloadShapeErrors(payload: MioArtifactProvenancePayload): string[] {
   const errors: string[] = [];
   if (payload.schemaVersion !== 1) errors.push('Unsupported provenance payload schema');
@@ -199,11 +243,20 @@ function assertIntegrityBinding(
 export class ModelSignerTrustStore {
   constructor(private readonly storage: StorageProvider = defaultStorageProvider) {}
 
-  public async trust(labelInput: string, publicKeyPemOrBase64: string): Promise<TrustedModelSigner> {
+  public async trust(
+    labelInput: string,
+    publicKeyPemOrBase64: string,
+    actorInput = 'MIO local operator',
+    reasonInput?: string,
+    rotationId?: string,
+  ): Promise<TrustedModelSigner> {
     const label = boundedLabel(labelInput);
+    const actor = boundedActor(actorInput);
+    const reason = boundedReason(reasonInput);
     const publicKeySpkiBase64 = normalizeSpkiPublicKey(publicKeyPemOrBase64);
     await importP256PublicKey(publicKeySpkiBase64);
     const keyId = await keyIdForSpki(publicKeySpkiBase64);
+    const previous = await this.get(keyId);
     const signer: TrustedModelSigner = {
       schemaVersion: 1,
       keyId,
@@ -212,18 +265,71 @@ export class ModelSignerTrustStore {
       status: 'TRUSTED',
       trustedAt: Date.now(),
     };
-    await this.storage.set(NAMESPACE, this.key(keyId), signer);
-    const index = await this.storage.get<string[]>(NAMESPACE, SIGNER_INDEX_KEY) ?? [];
-    await this.storage.set(NAMESPACE, SIGNER_INDEX_KEY, [keyId, ...index.filter((item) => item !== keyId)].slice(0, 500));
+    await this.persistMutation(previous, signer, {
+      action: previous ? 'RETRUST' : 'TRUST',
+      actor,
+      reason,
+      rotationId,
+    });
     return structuredClone(signer);
   }
 
-  public async revoke(keyId: string): Promise<TrustedModelSigner> {
+  public async revoke(
+    keyId: string,
+    actorInput = 'MIO local operator',
+    reasonInput?: string,
+    rotationId?: string,
+  ): Promise<TrustedModelSigner> {
+    const actor = boundedActor(actorInput);
+    const reason = boundedReason(reasonInput);
     const signer = await this.get(keyId);
     if (!signer) throw new Error(`Trusted model signer '${keyId}' was not found`);
     const revoked: TrustedModelSigner = { ...signer, status: 'REVOKED', revokedAt: Date.now() };
-    await this.storage.set(NAMESPACE, this.key(keyId), revoked);
+    await this.persistMutation(signer, revoked, { action: 'REVOKE', actor, reason, rotationId });
     return structuredClone(revoked);
+  }
+
+  public async rotate(input: RotateModelSignerInput): Promise<ModelSignerRotationResult> {
+    const actor = boundedActor(input.actor);
+    const reason = boundedReason(input.reason);
+    const previous = await this.get(input.currentKeyId);
+    if (!previous) throw new Error(`Current signer '${input.currentKeyId}' was not found`);
+    if (previous.status !== 'TRUSTED') throw new Error('Only a TRUSTED signer can be rotated');
+
+    const replacementSpki = normalizeSpkiPublicKey(input.replacementPublicKey);
+    await importP256PublicKey(replacementSpki);
+    const replacementKeyId = await keyIdForSpki(replacementSpki);
+    if (replacementKeyId === previous.keyId) throw new Error('Replacement signer key must differ from the current signer key');
+    const priorReplacement = await this.get(replacementKeyId);
+    const rotationSeed = `${previous.keyId}|${replacementKeyId}|${actor}|${Date.now()}`;
+    const rotationId = `signer-rotation:${(await sha256Hex(rotationSeed)).slice(0, 24)}`;
+
+    const replacement = await this.trust(
+      input.replacementLabel,
+      input.replacementPublicKey,
+      actor,
+      reason ? `Rotation replacement: ${reason}` : 'Rotation replacement key trusted',
+      rotationId,
+    );
+    try {
+      const revokedPrevious = await this.revoke(
+        previous.keyId,
+        actor,
+        reason ? `Rotated to ${replacement.keyId}: ${reason}` : `Rotated to ${replacement.keyId}`,
+        rotationId,
+      );
+      return { rotationId, previous: revokedPrevious, replacement };
+    } catch (error) {
+      if (!priorReplacement || priorReplacement.status === 'REVOKED') {
+        await this.revoke(
+          replacement.keyId,
+          actor,
+          `Rollback after failed rotation from ${previous.keyId}`,
+          rotationId,
+        ).catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   public async get(keyId: string): Promise<TrustedModelSigner | undefined> {
@@ -240,6 +346,77 @@ export class ModelSignerTrustStore {
       if (signer) output.push(signer);
     }
     return output;
+  }
+
+  public async history(keyId?: string, limit = 100): Promise<ModelSignerTrustEvent[]> {
+    if (keyId !== undefined && !SAFE_KEY_ID.test(keyId)) throw new Error('Signer audit keyId is invalid');
+    const index = await this.storage.get<string[]>(NAMESPACE, SIGNER_AUDIT_INDEX_KEY) ?? [];
+    const output: ModelSignerTrustEvent[] = [];
+    for (const id of index) {
+      const event = await this.storage.get<ModelSignerTrustEvent>(NAMESPACE, id);
+      if (event && (!keyId || event.keyId === keyId)) output.push(structuredClone(event));
+      if (output.length >= Math.max(1, Math.min(limit, 500))) break;
+    }
+    return output;
+  }
+
+  private async persistMutation(
+    previous: TrustedModelSigner | undefined,
+    next: TrustedModelSigner,
+    metadata: { action: ModelSignerTrustAction; actor: string; reason?: string; rotationId?: string },
+  ): Promise<void> {
+    const signerIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_INDEX_KEY) ?? [];
+    const auditIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_AUDIT_INDEX_KEY) ?? [];
+    if (auditIndex.length >= MAX_SIGNER_AUDIT_EVENTS) {
+      throw new Error('Signer trust audit capacity reached; trust mutation is blocked until audit storage is administratively handled');
+    }
+    const sequence = auditIndex.length + 1;
+    const occurredAt = Date.now();
+    const eventSeed = stableJsonStringify({
+      sequence,
+      action: metadata.action,
+      keyId: next.keyId,
+      actor: metadata.actor,
+      rotationId: metadata.rotationId,
+      occurredAt,
+      previousStatus: previous?.status,
+      resultingStatus: next.status,
+    });
+    const eventId = `signer-trust-event:${sequence}:${(await sha256Hex(eventSeed)).slice(0, 20)}`;
+    const event: ModelSignerTrustEvent = {
+      schemaVersion: 1,
+      id: eventId,
+      sequence,
+      action: metadata.action,
+      keyId: next.keyId,
+      label: next.label,
+      actor: metadata.actor,
+      ...(metadata.reason ? { reason: metadata.reason } : {}),
+      ...(metadata.rotationId ? { rotationId: metadata.rotationId } : {}),
+      ...(previous ? { previousStatus: previous.status } : {}),
+      resultingStatus: next.status,
+      occurredAt,
+    };
+    const nextSignerIndex = [next.keyId, ...signerIndex.filter((item) => item !== next.keyId)].slice(0, 500);
+    const nextAuditIndex = [event.id, ...auditIndex];
+
+    try {
+      await this.storage.set(NAMESPACE, this.key(next.keyId), structuredClone(next));
+      await this.storage.set(NAMESPACE, SIGNER_INDEX_KEY, nextSignerIndex);
+      await this.storage.set(NAMESPACE, event.id, structuredClone(event));
+      await this.storage.set(NAMESPACE, SIGNER_AUDIT_INDEX_KEY, nextAuditIndex);
+    } catch (error) {
+      try {
+        if (previous) await this.storage.set(NAMESPACE, this.key(next.keyId), structuredClone(previous));
+        else await this.storage.delete(NAMESPACE, this.key(next.keyId));
+        await this.storage.set(NAMESPACE, SIGNER_INDEX_KEY, signerIndex);
+        await this.storage.delete(NAMESPACE, event.id);
+        await this.storage.set(NAMESPACE, SIGNER_AUDIT_INDEX_KEY, auditIndex);
+      } catch {
+        throw new Error('Signer trust mutation failed and audit rollback could not be fully confirmed; manual trust-store inspection is required');
+      }
+      throw error;
+    }
   }
 
   private key(keyId: string): string { return `trusted-model-signer:${keyId}`; }
