@@ -24,6 +24,7 @@ The required governed flow is:
 14. Re-bind if a newer adapter scan is performed before release review or promotion.
 15. Complete explicit release review, promotion, post-promotion integrity scan, and activation gates.
 16. Export a TP-0.60 portable candidate evidence package whenever an audit/review snapshot is needed. Export is informational only and never changes lifecycle state.
+17. When the evidence package must cross a local trust boundary, sign it externally with TP-0.61 and verify it in Mio against the existing trusted P-256 signer store.
 
 User feedback is opt-in and never becomes trainable merely because it was stored. `FeedbackCollector.toTrainingCandidate()` deliberately creates an unapproved candidate requiring further review.
 
@@ -175,6 +176,53 @@ node scripts/training/verify-candidate-evidence-package.mjs --self-test
 
 A `valid: true` result proves only that the portable package is internally consistent with its packaged evidence and digest contract. It is **not** a quality/safety certification, signer authenticity re-verification against an external root of trust, promotion approval, activation authorization, deployment authorization, or proof that referenced model/adapter bytes are still present locally.
 
+## Sign a TP-0.60 package with TP-0.61
+
+TP-0.61 adds authenticity for evidence exchange without moving a private key into Mio. Use a dedicated external P-256 private key and sign the already-verified TP-0.60 package:
+
+```bash
+node scripts/training/sign-candidate-evidence-package.mjs \
+  --package /path/to/mio-candidate-evidence.json \
+  --private-key /secure/path/candidate-evidence-private.pem \
+  --issuer "MIO Release Engineering" \
+  --output /path/to/signed-candidate-evidence.json \
+  --public-key-output /path/to/candidate-evidence-public.pem
+```
+
+The signature payload binds:
+
+- `packageSha256`;
+- candidate ID;
+- manifest ID;
+- lifecycle snapshot;
+- package export timestamp;
+- issuer;
+- signature timestamp.
+
+Only the public key should be imported/trusted through the existing Mio signer-trust workflow. **Never import the private key into Mio, browser storage, repository secrets, or project files.**
+
+Inside Mio, use **Settings → Trusted Signed Candidate Evidence** to verify the signed envelope. Application verification requires:
+
+1. the embedded TP-0.60 package to pass its full schema/privacy/identity verification;
+2. payload fields to bind exactly to that package;
+3. the P-256 signature to verify;
+4. the envelope key ID to match the trusted public key;
+5. the signer to be currently `TRUSTED` in the existing signer trust store/audit chain.
+
+Signer revocation therefore causes current Mio verification to fail while leaving the historical envelope unchanged. Explicit re-trust of the same deterministic public-key identity can restore current verification.
+
+For independent cryptographic verification outside Mio:
+
+```bash
+node scripts/training/verify-signed-candidate-evidence-package.mjs \
+  --input /path/to/signed-candidate-evidence.json \
+  --public-key /path/to/candidate-evidence-public.pem
+```
+
+The offline verifier proves signature validity only for the supplied public key. It does **not** establish that the supplied key should be trusted; trust must be established independently. Conversely, the Mio application verifier combines cryptographic verification with the current trusted-signer state.
+
+TP-0.61 signing/verification does not train, benchmark, review, promote, activate, upload, publish, or deploy a model and never changes the active promoted-model pointer.
+
 ## Compatibility entrypoint
 
 `training/sft_lora.py` remains only as a compatibility shim and delegates to the governed bundle runner. The former raw `--dataset` path is intentionally no longer accepted because it could bypass bundle fingerprints and governance metadata.
@@ -187,4 +235,4 @@ A `valid: true` result proves only that the portable package is internally consi
 - `Mio-Local-8B-v1-rc`: candidate that passes MioBench/security review.
 - `Mio-Local-8B-v1`: explicitly promoted model/adapter after documented review.
 
-Model weights, checkpoints, large datasets, training handoff files containing dataset content, candidate evidence packages containing governance metadata, and user data must not be committed to this repository.
+Model weights, checkpoints, large datasets, training handoff files containing dataset content, candidate evidence packages containing governance metadata, signed candidate evidence envelopes, and user data must not be committed to this repository.
