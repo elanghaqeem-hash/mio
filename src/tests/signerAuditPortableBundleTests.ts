@@ -61,10 +61,10 @@ export async function runSignerAuditPortableBundleTests(): Promise<{ passed: num
   const tamperedDigestResult = await verifyPortableSignerAuditBundle(tamperedDigest);
   check(tamperedDigestResult.state === 'CORRUPT' && tamperedDigestResult.reasons.some((reason) => reason.toLowerCase().includes('digest mismatch')), 'Portable verifier detects bundle digest tampering');
 
-  const badKind = structuredClone(bundle) as typeof bundle & { kind: string };
-  badKind.kind = 'NOT_MIO_AUDIT';
-  const badKindResult = await verifyPortableSignerAuditBundle(badKind as typeof bundle);
-  check(badKindResult.state === 'CORRUPT' && badKindResult.reasons.some((reason) => reason.toLowerCase().includes('kind')), 'Portable verifier rejects unsupported bundle kind');
+  const externalBadKind = JSON.parse(JSON.stringify(bundle)) as Record<string, unknown>;
+  externalBadKind.kind = 'NOT_MIO_AUDIT';
+  const badKindResult = await verifyPortableSignerAuditBundle(JSON.stringify(externalBadKind));
+  check(badKindResult.state === 'CORRUPT' && badKindResult.reasons.some((reason) => reason.toLowerCase().includes('kind')), 'Portable verifier rejects unsupported bundle kind from external JSON input');
 
   const auditIndex = await storage.get<string[]>('training', 'trusted-model-signer-audit-index-v1') ?? [];
   const newestId = auditIndex[0];
