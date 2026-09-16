@@ -7,6 +7,7 @@ import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPr
 import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
 import { ModelProvenancePanel } from './ModelProvenancePanel';
 import { SignerAuditChainStatusPanel } from './SignerAuditChainStatusPanel';
+import { SignedCandidateEvidencePanel } from './SignedCandidateEvidencePanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingArtifactBindingPanel } from './TrainingArtifactBindingPanel';
 import { TrainingCandidateEvidencePackagePanel } from './TrainingCandidateEvidencePackagePanel';
@@ -194,6 +195,7 @@ export const SettingsView: React.FC = () => {
       <TrainingRunHandoffPanel />
       <TrainingArtifactBindingPanel />
       <TrainingCandidateEvidencePackagePanel />
+      <SignedCandidateEvidencePanel />
       <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <ModelProvenancePanel />
       <SignerAuditChainStatusPanel />
