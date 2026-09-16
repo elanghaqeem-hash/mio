@@ -1,6 +1,4 @@
-import { ModelMessage, ModelRequest } from '../../types/models';
-
-export type LocalInferenceBackendId = 'ollama' | 'vllm' | 'llamacpp';
+import { LocalInferenceBackendId, ModelMessage, ModelRequest } from '../../types/models';
 
 export interface LocalInferenceChatResult {
   model: string;
