@@ -18,6 +18,7 @@ const SAFE_KEY_ID = /^p256:[a-f0-9]{64}$/;
 
 export type ModelSignerTrustStatus = 'TRUSTED' | 'REVOKED';
 export type ModelSignerTrustAction = 'TRUST' | 'RETRUST' | 'REVOKE';
+export type ModelSignerAuditChainState = 'EMPTY' | 'VALID' | 'LEGACY_UNCHAINED' | 'CORRUPT';
 
 export interface TrustedModelSigner {
   schemaVersion: 1;
@@ -42,6 +43,16 @@ export interface ModelSignerTrustEvent {
   previousStatus?: ModelSignerTrustStatus;
   resultingStatus: ModelSignerTrustStatus;
   occurredAt: number;
+  previousEventHash?: string;
+  eventHash?: string;
+}
+
+export interface ModelSignerAuditVerification {
+  schemaVersion: 1;
+  state: ModelSignerAuditChainState;
+  checkedEvents: number;
+  latestEventHash?: string;
+  reasons: string[];
 }
 
 export interface RotateModelSignerInput {
@@ -175,6 +186,27 @@ function boundedReason(value?: string): string | undefined {
   if (value === undefined) return undefined;
   const reason = value.trim().slice(0, 500);
   return reason || undefined;
+}
+
+function auditEventHashMaterial(event: ModelSignerTrustEvent): object {
+  return {
+    schemaVersion: event.schemaVersion,
+    sequence: event.sequence,
+    action: event.action,
+    keyId: event.keyId,
+    label: event.label,
+    actor: event.actor,
+    ...(event.reason ? { reason: event.reason } : {}),
+    ...(event.rotationId ? { rotationId: event.rotationId } : {}),
+    ...(event.previousStatus ? { previousStatus: event.previousStatus } : {}),
+    resultingStatus: event.resultingStatus,
+    occurredAt: event.occurredAt,
+    ...(event.previousEventHash ? { previousEventHash: event.previousEventHash } : {}),
+  };
+}
+
+async function computeAuditEventHash(event: ModelSignerTrustEvent): Promise<string> {
+  return sha256Hex(stableJsonStringify(auditEventHashMaterial(event)));
 }
 
 function payloadShapeErrors(payload: MioArtifactProvenancePayload): string[] {
@@ -334,15 +366,16 @@ export class ModelSignerTrustStore {
 
   public async get(keyId: string): Promise<TrustedModelSigner | undefined> {
     if (!SAFE_KEY_ID.test(keyId)) return undefined;
-    const value = await this.storage.get<TrustedModelSigner>(NAMESPACE, this.key(keyId));
-    return value ? structuredClone(value) : undefined;
+    await this.assertAuditIntegrity();
+    return this.getRaw(keyId);
   }
 
   public async list(limit = 100): Promise<TrustedModelSigner[]> {
+    await this.assertAuditIntegrity();
     const index = await this.storage.get<string[]>(NAMESPACE, SIGNER_INDEX_KEY) ?? [];
     const output: TrustedModelSigner[] = [];
     for (const keyId of index.slice(0, Math.max(1, Math.min(limit, 500)))) {
-      const signer = await this.get(keyId);
+      const signer = await this.getRaw(keyId);
       if (signer) output.push(signer);
     }
     return output;
@@ -360,11 +393,109 @@ export class ModelSignerTrustStore {
     return output;
   }
 
+  public async verifyAuditChain(): Promise<ModelSignerAuditVerification> {
+    const auditIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_AUDIT_INDEX_KEY) ?? [];
+    if (auditIndex.length === 0) {
+      return { schemaVersion: 1, state: 'EMPTY', checkedEvents: 0, reasons: [] };
+    }
+
+    const reasons: string[] = [];
+    let legacy = false;
+    if (auditIndex.length > MAX_SIGNER_AUDIT_EVENTS) reasons.push(`Audit index exceeds bounded capacity ${MAX_SIGNER_AUDIT_EVENTS}`);
+    if (new Set(auditIndex).size !== auditIndex.length) reasons.push('Audit index contains duplicate event IDs');
+
+    const events: ModelSignerTrustEvent[] = [];
+    for (let index = 0; index < auditIndex.length; index += 1) {
+      const id = auditIndex[index];
+      const event = await this.storage.get<ModelSignerTrustEvent>(NAMESPACE, id);
+      if (!event) {
+        reasons.push(`Audit event '${id}' is missing from storage`);
+        continue;
+      }
+      events.push(event);
+      const expectedSequence = auditIndex.length - index;
+      if (event.id !== id) reasons.push(`Audit event index ID mismatch at sequence ${event.sequence}`);
+      if (event.sequence !== expectedSequence) reasons.push(`Audit event '${id}' sequence ${event.sequence} does not match expected ${expectedSequence}`);
+      if (event.schemaVersion !== 1) reasons.push(`Audit event '${id}' has unsupported schema`);
+      if (!SAFE_KEY_ID.test(event.keyId)) reasons.push(`Audit event '${id}' has invalid signer key ID`);
+      if (!event.label?.trim() || !event.actor?.trim()) reasons.push(`Audit event '${id}' is missing label or actor identity`);
+      if (event.action !== 'TRUST' && event.action !== 'RETRUST' && event.action !== 'REVOKE') reasons.push(`Audit event '${id}' has invalid action`);
+      if (event.resultingStatus !== 'TRUSTED' && event.resultingStatus !== 'REVOKED') reasons.push(`Audit event '${id}' has invalid resulting status`);
+      if (!Number.isSafeInteger(event.occurredAt) || event.occurredAt <= 0) reasons.push(`Audit event '${id}' has invalid timestamp`);
+    }
+
+    let previousComputedHash: string | undefined;
+    if (events.length === auditIndex.length) {
+      for (const event of [...events].reverse()) {
+        const computedHash = await computeAuditEventHash(event);
+        if (!event.eventHash) {
+          legacy = true;
+        } else {
+          if (!SHA256.test(event.eventHash)) reasons.push(`Audit event '${event.id}' eventHash is malformed`);
+          if (event.eventHash !== computedHash) reasons.push(`Audit event '${event.id}' hash mismatch`);
+          const expectedId = `signer-trust-event:${event.sequence}:${computedHash.slice(0, 20)}`;
+          if (event.id !== expectedId) reasons.push(`Audit event '${event.id}' does not match its computed hash identity`);
+        }
+
+        if (previousComputedHash) {
+          if (!event.previousEventHash) legacy = true;
+          else if (event.previousEventHash !== previousComputedHash) reasons.push(`Audit event '${event.id}' previousEventHash does not match its predecessor`);
+        } else if (event.previousEventHash) {
+          reasons.push(`First audit event '${event.id}' unexpectedly references a predecessor`);
+        }
+        previousComputedHash = computedHash;
+      }
+    }
+
+    const signerIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_INDEX_KEY) ?? [];
+    if (new Set(signerIndex).size !== signerIndex.length) reasons.push('Signer index contains duplicate key IDs');
+    const latestByKey = new Map<string, ModelSignerTrustEvent>();
+    for (const event of events) {
+      if (!latestByKey.has(event.keyId)) latestByKey.set(event.keyId, event);
+    }
+    for (const [keyId, latest] of latestByKey) {
+      if (!signerIndex.includes(keyId)) reasons.push(`Signer '${keyId}' has audit history but is missing from signer index`);
+      const signer = await this.getRaw(keyId);
+      if (!signer) {
+        reasons.push(`Signer '${keyId}' has audit history but signer state is missing`);
+        continue;
+      }
+      if (signer.status !== latest.resultingStatus) reasons.push(`Signer '${keyId}' state does not match latest audit status`);
+      if (signer.label !== latest.label) reasons.push(`Signer '${keyId}' label does not match latest audit event`);
+    }
+
+    return {
+      schemaVersion: 1,
+      state: reasons.length > 0 ? 'CORRUPT' : legacy ? 'LEGACY_UNCHAINED' : 'VALID',
+      checkedEvents: auditIndex.length,
+      ...(previousComputedHash ? { latestEventHash: previousComputedHash } : {}),
+      reasons: [...new Set(reasons)],
+    };
+  }
+
+  private async assertAuditIntegrity(): Promise<ModelSignerAuditVerification> {
+    const verification = await this.verifyAuditChain();
+    if (verification.state === 'CORRUPT') {
+      throw new Error(`Signer trust audit chain verification failed: ${verification.reasons.join('; ')}`);
+    }
+    return verification;
+  }
+
+  private async getRaw(keyId: string): Promise<TrustedModelSigner | undefined> {
+    if (!SAFE_KEY_ID.test(keyId)) return undefined;
+    const value = await this.storage.get<TrustedModelSigner>(NAMESPACE, this.key(keyId));
+    return value ? structuredClone(value) : undefined;
+  }
+
   private async persistMutation(
     previous: TrustedModelSigner | undefined,
     next: TrustedModelSigner,
     metadata: { action: ModelSignerTrustAction; actor: string; reason?: string; rotationId?: string },
   ): Promise<void> {
+    const verification = await this.verifyAuditChain();
+    if (verification.state === 'CORRUPT') {
+      throw new Error(`Signer trust audit chain verification failed: ${verification.reasons.join('; ')}`);
+    }
     const signerIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_INDEX_KEY) ?? [];
     const auditIndex = await this.storage.get<string[]>(NAMESPACE, SIGNER_AUDIT_INDEX_KEY) ?? [];
     if (auditIndex.length >= MAX_SIGNER_AUDIT_EVENTS) {
@@ -372,20 +503,9 @@ export class ModelSignerTrustStore {
     }
     const sequence = auditIndex.length + 1;
     const occurredAt = Date.now();
-    const eventSeed = stableJsonStringify({
-      sequence,
-      action: metadata.action,
-      keyId: next.keyId,
-      actor: metadata.actor,
-      rotationId: metadata.rotationId,
-      occurredAt,
-      previousStatus: previous?.status,
-      resultingStatus: next.status,
-    });
-    const eventId = `signer-trust-event:${sequence}:${(await sha256Hex(eventSeed)).slice(0, 20)}`;
-    const event: ModelSignerTrustEvent = {
+    const eventBase: ModelSignerTrustEvent = {
       schemaVersion: 1,
-      id: eventId,
+      id: '',
       sequence,
       action: metadata.action,
       keyId: next.keyId,
@@ -396,6 +516,13 @@ export class ModelSignerTrustStore {
       ...(previous ? { previousStatus: previous.status } : {}),
       resultingStatus: next.status,
       occurredAt,
+      ...(verification.latestEventHash ? { previousEventHash: verification.latestEventHash } : {}),
+    };
+    const eventHash = await computeAuditEventHash(eventBase);
+    const event: ModelSignerTrustEvent = {
+      ...eventBase,
+      id: `signer-trust-event:${sequence}:${eventHash.slice(0, 20)}`,
+      eventHash,
     };
     const nextSignerIndex = [next.keyId, ...signerIndex.filter((item) => item !== next.keyId)].slice(0, 500);
     const nextAuditIndex = [event.id, ...auditIndex];
