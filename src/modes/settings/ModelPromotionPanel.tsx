@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowUpCircle, BadgeCheck, Fingerprint, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, BadgeCheck, FileSignature, Fingerprint, RefreshCw, ShieldCheck } from 'lucide-react';
 import {
   type ModelPromotionSnapshot,
   modelPromotionService,
@@ -80,7 +80,7 @@ export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onProm
       </div>
 
       <p className="text-gray-500 text-[10px] leading-relaxed">
-        RELEASE_CANDIDATE models require a final explicit promotion action. MIO revalidates governance/security review, the bound MioBench report, benchmark policy, and candidate byte-integrity evidence before writing PROMOTED. Promotion never activates the runtime automatically.
+        RELEASE_CANDIDATE models require a final explicit promotion action. MIO revalidates governance/security review, the bound MioBench report, candidate byte-integrity evidence, and any existing signed-provenance evidence plus current signer trust before writing PROMOTED. Promotion never activates the runtime automatically.
       </p>
 
       {loading ? (
@@ -94,11 +94,17 @@ export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onProm
           {candidates.map((snapshot) => {
             const selectedRow = selectedId === snapshot.manifest.id;
             const integrity = snapshot.latestIntegrity;
+            const provenance = snapshot.latestProvenance;
             const integrityClass = integrity?.comparison === 'DRIFT'
               ? 'text-red-300'
               : integrity
                 ? 'text-emerald-300'
                 : 'text-amber-300';
+            const provenanceClass = snapshot.provenanceSignerStatus === 'TRUSTED'
+              ? 'text-emerald-300'
+              : provenance
+                ? 'text-red-300'
+                : 'text-gray-500';
             return (
               <div key={snapshot.manifest.id} className={`rounded-lg border p-3 space-y-2 ${selectedRow ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-gray-800 bg-[#111726]'}`}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -108,6 +114,7 @@ export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onProm
                     <div className="mt-1 flex flex-wrap gap-1.5 text-[9px]">
                       <span className="rounded border border-emerald-500/30 bg-emerald-950/20 px-2 py-0.5 font-bold text-emerald-300">RELEASE_CANDIDATE</span>
                       <span className={`rounded border border-gray-700 bg-gray-900 px-2 py-0.5 ${integrityClass}`}><Fingerprint size={9} className="inline mr-1" />{integrity?.comparison ?? 'INTEGRITY REQUIRED'}</span>
+                      <span className={`rounded border border-gray-700 bg-gray-900 px-2 py-0.5 ${provenanceClass}`}><FileSignature size={9} className="inline mr-1" />{provenance ? `SIGNED ${snapshot.provenanceSignerStatus ?? 'UNKNOWN'}` : 'NO SIGNED PROVENANCE'}</span>
                     </div>
                   </div>
                   <button
@@ -127,6 +134,11 @@ export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onProm
                 {integrity && (
                   <div className="text-[9px] text-gray-500">
                     Adapter fingerprint: <code>{integrity.fingerprint.slice(0, 20)}…</code> · baseline <code>{integrity.baselineFingerprint.slice(0, 20)}…</code>
+                  </div>
+                )}
+                {provenance && (
+                  <div className="text-[9px] text-gray-500">
+                    Signed provenance: signer <code>{provenance.signerKeyId.slice(0, 28)}…</code> · trust <strong className={provenanceClass}>{snapshot.provenanceSignerStatus ?? 'UNKNOWN'}</strong> · artifact <code>{provenance.artifactFingerprint.slice(0, 20)}…</code>
                   </div>
                 )}
 
@@ -157,7 +169,7 @@ export const ModelPromotionPanel: React.FC<ModelPromotionPanelProps> = ({ onProm
           />
           <label className="flex items-start gap-2 rounded border border-gray-800 bg-[#111726] p-2.5 cursor-pointer">
             <input type="checkbox" checked={finalAttestation} onChange={(event) => setFinalAttestation(event.target.checked)} className="mt-0.5 accent-emerald-400" />
-            <span className="text-[10px] text-gray-300"><strong>Final promotion review completed.</strong> I confirm that the bound MioBench report, governance/security reviews, candidate identity, and adapter byte-integrity evidence shown by MIO are the intended evidence for this promotion.</span>
+            <span className="text-[10px] text-gray-300"><strong>Final promotion review completed.</strong> I confirm that the bound MioBench report, governance/security reviews, candidate identity, adapter byte-integrity evidence, and any signed-provenance/signer-trust evidence shown by MIO are the intended evidence for this promotion.</span>
           </label>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button onClick={() => setSelectedId(null)} disabled={busy} className="rounded border border-gray-700 px-3 py-2 text-[10px] font-bold text-gray-400 hover:text-gray-200 disabled:opacity-50">CANCEL</button>
