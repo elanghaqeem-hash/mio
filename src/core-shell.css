@@ -200,6 +200,17 @@
   background: linear-gradient(180deg, rgba(10, 28, 46, 0.98), rgba(6, 18, 31, 0.98)) !important;
 }
 
+.mio-navigation-popup nav button[class*='bg-cyan'] {
+  border-color: rgba(125, 211, 252, 0.38) !important;
+  background: rgba(14, 116, 144, 0.2) !important;
+  color: #bae6fd !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.08) !important;
+}
+
+.mio-navigation-popup nav button[class*='bg-cyan'] span {
+  color: #7dd3fc !important;
+}
+
 .mio-context-overlay {
   justify-content: flex-end;
   align-items: stretch;
@@ -245,6 +256,10 @@
 
 .mio-core-first-shell .agent-orbit-two {
   border-color: rgba(56, 189, 248, 0.12);
+}
+
+.mio-core-first-shell .agent-orb-stage canvas {
+  filter: hue-rotate(14deg) saturate(0.72) brightness(1.08);
 }
 
 .mio-core-first-shell .agent-orb-caption,
