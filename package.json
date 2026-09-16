@@ -60,6 +60,10 @@
         "from": "training",
         "to": "training",
         "filter": ["train_mio_lora.py", "sft_lora.py", "requirements.txt", "configs/**/*"]
+      },
+      {
+        "from": "scripts/training/create-training-run-handoff.mjs",
+        "to": "scripts/training/create-training-run-handoff.mjs"
       }
     ],
     "win": { "target": ["nsis", "portable"] },

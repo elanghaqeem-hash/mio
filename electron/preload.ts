@@ -35,6 +35,12 @@ export type MioTrainingPythonRuntime = 'python' | 'python3' | 'py';
 export type MioTrainingJobMode = 'DRY_RUN' | 'TRAIN';
 export type MioTrainingJobState = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
+export interface MioTrainingBundleIdentity {
+  bundleId: string;
+  datasetSha256: string;
+  configSha256: string;
+}
+
 export interface MioTrainingJobSnapshot {
   schemaVersion: 1;
   id: string;
@@ -44,6 +50,7 @@ export interface MioTrainingJobSnapshot {
   workspaceId: string;
   bundleRelativePath: string;
   outputRelativePath?: string;
+  trainingIdentity: MioTrainingBundleIdentity;
   startedAt: number;
   finishedAt?: number;
   exitCode?: number;
@@ -60,6 +67,30 @@ export interface MioTrainingStartRequest {
   outputRelativePath?: string;
   pythonRuntime: MioTrainingPythonRuntime;
   mode: MioTrainingJobMode;
+}
+
+export interface MioTrainingHandoffPackageRequest {
+  jobId: string;
+  workspaceId: string;
+  bundleRelativePath: string;
+  resultFileRelativePath: string;
+  handoffRelativePath: string;
+}
+
+export interface MioTrainingHandoffPackageReceipt {
+  schemaVersion: 1;
+  kind: 'MIO_TRAINING_HANDOFF_PACKAGE_RECEIPT_V1';
+  trainingJobId: string;
+  workspaceId: string;
+  bundleRelativePath: string;
+  resultFileRelativePath: string;
+  handoffRelativePath: string;
+  bundleId: string;
+  datasetSha256: string;
+  configSha256: string;
+  handoffSha256: string;
+  packagedAt: number;
+  disclosure: string;
 }
 
 export interface MioDesktopAPI {
@@ -93,6 +124,8 @@ export interface MioDesktopAPI {
   getTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
   listTrainingJobs: () => Promise<{ success: boolean; jobs?: MioTrainingJobSnapshot[]; error?: string }>;
   cancelTrainingJob: (jobId: string) => Promise<{ success: boolean; job?: MioTrainingJobSnapshot; error?: string }>;
+  packageTrainingHandoff: (request: MioTrainingHandoffPackageRequest) => Promise<{ success: boolean; receipt?: MioTrainingHandoffPackageReceipt; error?: string }>;
+  getTrainingHandoffReceipt: (jobId: string) => Promise<{ success: boolean; receipt?: MioTrainingHandoffPackageReceipt; error?: string }>;
 
   onEmergencyStopTriggered: (callback: (reason: string) => void) => () => void;
 }
@@ -121,6 +154,8 @@ const desktopAPI: MioDesktopAPI = {
   getTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_GET_JOB, jobId),
   listTrainingJobs: () => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_LIST_JOBS),
   cancelTrainingJob: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_CANCEL_JOB, jobId),
+  packageTrainingHandoff: (request) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_PACKAGE_HANDOFF, request),
+  getTrainingHandoffReceipt: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.TRAINING_GET_HANDOFF_RECEIPT, jobId),
 
   onEmergencyStopTriggered: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, reason: string) => callback(reason);

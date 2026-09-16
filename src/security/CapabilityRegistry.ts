@@ -179,6 +179,19 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     scopeFields: ['TASK', 'RESOURCE', 'PATH'],
     timeoutMs: 15000,
   });
+  registry.register({
+    id: 'service.desktop.training.package-handoff',
+    kind: 'SERVICE',
+    description: 'Create the fixed TP-0.58 mio-training-handoff.json beside the result of a successful governed TP-0.62 TRAIN job. The exact job workspace, bundle, result, and output identity are scope-bound and existing handoffs are never overwritten.',
+    ownerLayer: 'SERVICE',
+    modes: ['SETTINGS'],
+    riskLevel: 'HIGH',
+    permissionLevel: 'L4_EXECUTE',
+    availability: trainingAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'RESOURCE', 'PATH'],
+    timeoutMs: 65000,
+  });
 
   const browserAvailability = options.desktopBrowserBridge ? 'AVAILABLE' : 'UNAVAILABLE';
   registry.register({

@@ -99,6 +99,8 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.TRAINING_GET_JOB, (event, args) => handlers.handleGetTrainingJob(event, args[0]));
   secureHandle(IPC_CHANNELS.TRAINING_LIST_JOBS, () => handlers.handleListTrainingJobs());
   secureHandle(IPC_CHANNELS.TRAINING_CANCEL_JOB, (event, args) => handlers.handleCancelTrainingJob(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_PACKAGE_HANDOFF, (event, args) => handlers.handlePackageTrainingHandoff(event, args[0]));
+  secureHandle(IPC_CHANNELS.TRAINING_GET_HANDOFF_RECEIPT, (event, args) => handlers.handleGetTrainingHandoffReceipt(event, args[0]));
 
   const distHtmlPath = path.join(__dirname, '../dist/index.html');
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
