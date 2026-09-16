@@ -1,0 +1,27 @@
+{
+  "baseModel": "Qwen/Qwen3-8B",
+  "targetModel": "Mio-Local-8B-v1-candidate",
+  "trainingMethod": "QLORA",
+  "seed": 42,
+  "maxSequenceLength": 4096,
+  "learningRate": 0.0002,
+  "epochs": 2,
+  "perDeviceTrainBatchSize": 1,
+  "gradientAccumulationSteps": 16,
+  "assistantOnlyLoss": true,
+  "packing": false,
+  "lora": {
+    "rank": 32,
+    "alpha": 64,
+    "dropout": 0.05
+  },
+  "requiredDomains": [
+    "GENERAL",
+    "REASONING",
+    "CODING",
+    "RESEARCH",
+    "TOOL_USE",
+    "SAFETY"
+  ],
+  "minExamples": 100
+}
