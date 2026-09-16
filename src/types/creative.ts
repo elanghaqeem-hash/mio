@@ -108,6 +108,36 @@ export interface MioDrawingDocument {
   layers: DrawingLayer[];
 }
 
+// Nondestructive Photo Document Specification (.miophoto)
+export interface PhotoAdjustments {
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  temperature: number;
+  tint: number;
+  grayscale: number;
+  sepia: number;
+  blur: number;
+  vignette: number;
+}
+
+export interface PhotoLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  sourceDataUrl?: string;
+  adjustments: PhotoAdjustments;
+}
+
+export interface MioPhotoDocument {
+  width: number;
+  height: number;
+  backgroundColor: string;
+  layers: PhotoLayer[];
+}
+
 // SFX Patch Specification (.miosfx)
 export interface SFXLayer {
   id: string;

@@ -12,6 +12,7 @@ const DEFAULT_BUDGETS: Record<MioSystemMode, TaskResourceBudget> = {
   '3D': { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   GRAPHIC: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   DRAWING: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
+  PHOTO: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   SFX: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   MUSIC: { maxDurationMs: 120_000, maxToolCalls: 8, maxNetworkCalls: 2, maxModelCalls: 3 },
   SECURITY: { maxDurationMs: 45_000, maxToolCalls: 4, maxNetworkCalls: 1, maxModelCalls: 1 },
