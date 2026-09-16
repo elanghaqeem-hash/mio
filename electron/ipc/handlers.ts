@@ -49,7 +49,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       && value.bundleRelativePath.length <= 4096
       && (value.outputRelativePath === undefined || (typeof value.outputRelativePath === 'string' && value.outputRelativePath.length > 0 && value.outputRelativePath.length <= 4096))
       && (value.pythonRuntime === 'python' || value.pythonRuntime === 'python3' || value.pythonRuntime === 'py')
-      && (value.mode === 'DRY_RUN' || value.mode === 'TRAIN');
+      && (value.mode === 'DRY_RUN' || value.mode === 'TRAIN')
+      && (value.mode !== 'DRY_RUN' || value.outputRelativePath === undefined)
+      && (value.mode !== 'TRAIN' || typeof value.outputRelativePath === 'string');
   };
 
   const validateTrainingJobId = (jobId: unknown): jobId is string => {
@@ -119,8 +121,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     handleRevokeWorkspace: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
       if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace authority id' };
-      const active = [...Array.from({ length: 0 })];
-      void active;
+      if (trainingJobManager.hasRunningForWorkspace(workspaceId)) {
+        trainingJobManager.cancelWorkspace(workspaceId);
+        return { success: false, error: 'Active governed training used this workspace. Cancellation was requested; retry revocation after the job reaches a terminal state.' };
+      }
       return { success: workspaceSandbox.revoke(workspaceId) };
     },
 
@@ -191,6 +195,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return job ? { success: true, job } : { success: false, error: 'Governed training job was not found' };
     },
 
+    handleListTrainingJobs: () => ({ success: true, jobs: trainingJobManager.list(20) }),
+
     handleCancelTrainingJob: (_event: IpcMainInvokeEvent, jobId: unknown) => {
       if (!validateTrainingJobId(jobId)) return { success: false, error: 'Invalid governed training job id' };
       try {
@@ -200,8 +206,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
+    cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
+
     revokeAllWorkspaceAuthority: () => {
-      trainingJobManager.cancelAll();
+      trainingJobManager.forceStopAll();
       workspaceSandbox.revokeAll();
     },
   };
