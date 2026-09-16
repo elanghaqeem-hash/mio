@@ -83,8 +83,8 @@ export class TrainingRunHandoffService {
       registeredAt: Date.now(),
       disclosure: 'Verified TP-0.58 handoff receipt. This receipt binds training bundle/result identity to the candidate registration but does not prove adapter bytes, benchmark success, promotion readiness, or activation safety.',
     };
-    await this.saveReceipt(receipt);
-    return { candidate: registered.candidate, verification, receipt };
+    const persistedReceipt = await this.saveReceipt(receipt);
+    return { candidate: registered.candidate, verification, receipt: persistedReceipt };
   }
 
   public async getReceipt(candidateId: string): Promise<TrainingRunHandoffReceipt | undefined> {
@@ -102,7 +102,7 @@ export class TrainingRunHandoffService {
     return output;
   }
 
-  private async saveReceipt(receipt: TrainingRunHandoffReceipt): Promise<void> {
+  private async saveReceipt(receipt: TrainingRunHandoffReceipt): Promise<TrainingRunHandoffReceipt> {
     const existing = await this.storage.get<TrainingRunHandoffReceipt>(NAMESPACE, receipt.id);
     if (existing) {
       const immutableFieldsMatch = existing.candidateId === receipt.candidateId
@@ -114,11 +114,12 @@ export class TrainingRunHandoffService {
         && existing.configSha256 === receipt.configSha256
         && existing.handoffCreatedAt === receipt.handoffCreatedAt;
       if (!immutableFieldsMatch) throw new Error('Existing training handoff receipt conflicts with this registration');
-      return;
+      return structuredClone(existing);
     }
     await this.storage.set(NAMESPACE, receipt.id, structuredClone(receipt));
     const index = await this.storage.get<string[]>(NAMESPACE, RECEIPT_INDEX_KEY) ?? [];
     await this.storage.set(NAMESPACE, RECEIPT_INDEX_KEY, [receipt.id, ...index.filter((id) => id !== receipt.id)].slice(0, 1_000));
+    return structuredClone(receipt);
   }
 
   private receiptKey(candidateId: string): string {
