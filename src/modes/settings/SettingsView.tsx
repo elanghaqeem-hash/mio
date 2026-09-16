@@ -4,6 +4,7 @@ import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
 import { PromotedModelPanel } from './PromotedModelPanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 
@@ -185,6 +186,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
       <TrainingCandidatePanel />
       <PromotedModelPanel />
 
