@@ -91,7 +91,10 @@ export class TrainingJobManager {
       const outputStat = await fs.promises.stat(outputPath);
       if (!outputStat.isDirectory()) throw new Error('Training output path must resolve to a directory');
       if ((await fs.promises.readdir(outputPath)).length > 0) throw new Error('Training output directory must be empty; automatic overwrite is intentionally disabled');
-      if (outputPath === bundlePath) throw new Error('Training output directory must differ from the governed bundle directory');
+      const outputInsideBundle = path.relative(bundlePath, outputPath);
+      if (outputInsideBundle === '' || (!outputInsideBundle.startsWith(`..${path.sep}`) && outputInsideBundle !== '..' && !path.isAbsolute(outputInsideBundle))) {
+        throw new Error('Training output directory must be outside the governed bundle directory');
+      }
     }
 
     const runnerPath = await this.resolveRunnerPath();
@@ -157,6 +160,19 @@ export class TrainingJobManager {
     return record ? this.snapshot(record) : undefined;
   }
 
+  public list(limit = 20): TrainingJobSnapshot[] {
+    const bounded = Math.max(1, Math.min(limit, MAX_JOBS));
+    return this.order
+      .slice(0, bounded)
+      .map((id) => this.jobs.get(id))
+      .filter((record): record is TrainingJobRecord => Boolean(record))
+      .map((record) => this.snapshot(record));
+  }
+
+  public hasRunningForWorkspace(workspaceId: string): boolean {
+    return [...this.jobs.values()].some((job) => job.workspaceId === workspaceId && job.state === 'RUNNING');
+  }
+
   public cancel(jobId: string): TrainingJobSnapshot {
     const record = this.jobs.get(jobId);
     if (!record) throw new Error(`Training job '${jobId}' was not found`);
@@ -171,15 +187,29 @@ export class TrainingJobManager {
     return this.snapshot(record);
   }
 
-  public cancelWorkspace(workspaceId: string): void {
+  public cancelWorkspace(workspaceId: string): number {
+    let cancelled = 0;
     for (const record of this.jobs.values()) {
-      if (record.workspaceId === workspaceId && record.state === 'RUNNING' && record.process) this.cancel(record.id);
+      if (record.workspaceId === workspaceId && record.state === 'RUNNING' && record.process) {
+        this.cancel(record.id);
+        cancelled += 1;
+      }
     }
+    return cancelled;
   }
 
   public cancelAll(): void {
     for (const record of this.jobs.values()) {
       if (record.state === 'RUNNING' && record.process) this.cancel(record.id);
+    }
+  }
+
+  public forceStopAll(): void {
+    for (const record of this.jobs.values()) {
+      if (record.state !== 'RUNNING' || !record.process) continue;
+      record.cancelRequested = true;
+      record.stderrTail = tail(`${record.stderrTail}\nMIO: process force-stopped during desktop authority shutdown.`);
+      record.process.kill('SIGKILL');
     }
   }
 
@@ -190,6 +220,7 @@ export class TrainingJobManager {
     if (request.outputRelativePath !== undefined && (!SAFE_RELATIVE_PATH.test(request.outputRelativePath) || path.isAbsolute(request.outputRelativePath))) throw new Error('Training output path must be a bounded relative path');
     if (!SAFE_RUNTIME.has(request.pythonRuntime)) throw new Error('Python runtime is not in the governed runtime whitelist');
     if (request.mode !== 'DRY_RUN' && request.mode !== 'TRAIN') throw new Error('Unsupported governed training job mode');
+    if (request.mode === 'DRY_RUN' && request.outputRelativePath !== undefined) throw new Error('Dry-run mode must not declare an output path');
   }
 
   private async resolveRunnerPath(): Promise<string> {
