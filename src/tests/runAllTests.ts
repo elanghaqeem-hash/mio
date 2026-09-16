@@ -15,6 +15,7 @@ import { runAdapterIntegrityReviewGateTests } from './adapterIntegrityReviewGate
 import { runSignedModelArtifactProvenanceTests } from './signedModelArtifactProvenanceTests';
 import { runSignedProvenancePromotionGateTests } from './signedProvenancePromotionGateTests';
 import { runModelSignerTrustAuditTests } from './modelSignerTrustAuditTests';
+import { runModelSignerTrustAuditChainTests } from './modelSignerTrustAuditChainTests';
 import { runModelPromotionTests } from './modelPromotionTests';
 import { runModelPromotionServiceTests } from './modelPromotionServiceTests';
 import { runPromotedModelActivationTests } from './promotedModelActivationTests';
@@ -73,6 +74,7 @@ const runners = [
   runSignedModelArtifactProvenanceTests,
   runSignedProvenancePromotionGateTests,
   runModelSignerTrustAuditTests,
+  runModelSignerTrustAuditChainTests,
   runModelPromotionTests,
   runModelPromotionServiceTests,
   runPromotedModelActivationTests,
