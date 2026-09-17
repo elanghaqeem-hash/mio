@@ -1,12 +1,13 @@
 import { InMemoryStorageProvider } from './InMemoryStorageProvider';
-import { StorageProvider } from './StorageProvider';
+import { ObservableStorageProvider } from './ObservableStorageProvider';
+import type { StorageProvider } from './StorageProvider';
 import { IndexedDbStorageProvider } from './web/IndexedDbStorageProvider';
 
 const createDefaultProvider = (): StorageProvider => {
-  if (typeof indexedDB !== 'undefined') {
-    return new IndexedDbStorageProvider();
-  }
-  return new InMemoryStorageProvider();
+  const inner: StorageProvider = typeof indexedDB !== 'undefined'
+    ? new IndexedDbStorageProvider()
+    : new InMemoryStorageProvider();
+  return new ObservableStorageProvider(inner);
 };
 
 export const defaultStorageProvider: StorageProvider = createDefaultProvider();

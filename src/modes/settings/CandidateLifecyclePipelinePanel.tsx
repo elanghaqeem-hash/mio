@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowDownToLine, BadgeCheck, CircleDashed, RefreshCw, Route, ShieldCheck } from 'lucide-react';
 import {
   candidateLifecyclePipelineService,
@@ -10,6 +10,7 @@ import {
   lifecycleSurfaceIdForLabel,
   navigateToCandidateLifecycleSurface,
 } from './CandidateLifecycleNavigation';
+import { subscribeCandidateLifecycleRefresh } from './CandidateLifecycleRefreshCoordinator';
 
 const STATE_LABEL: Record<CandidateLifecycleStageState, string> = {
   COMPLETE: 'COMPLETE',
@@ -81,21 +82,35 @@ function StageCard({
 export const CandidateLifecyclePipelinePanel: React.FC = () => {
   const [snapshots, setSnapshots] = useState<CandidateLifecyclePipelineSnapshot[]>([]);
   const [busy, setBusy] = useState(false);
+  const [liveRefreshing, setLiveRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+  const backgroundSequence = useRef(0);
 
-  const refresh = useCallback(async () => {
-    setBusy(true);
+  const refresh = useCallback(async (background = false) => {
+    const requestId = ++requestSequence.current;
+    const backgroundId = background ? ++backgroundSequence.current : 0;
+    if (background) setLiveRefreshing(true);
+    else setBusy(true);
     setMessage(null);
     try {
-      setSnapshots(await candidateLifecyclePipelineService.list(50));
+      const next = await candidateLifecyclePipelineService.list(50);
+      if (requestId === requestSequence.current) setSnapshots(next);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Candidate lifecycle pipeline could not be assembled');
+      if (requestId === requestSequence.current) {
+        setMessage(error instanceof Error ? error.message : 'Candidate lifecycle pipeline could not be assembled');
+      }
     } finally {
-      setBusy(false);
+      if (background) {
+        if (backgroundId === backgroundSequence.current) setLiveRefreshing(false);
+      } else {
+        setBusy(false);
+      }
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => subscribeCandidateLifecycleRefresh(() => { void refresh(true); }), [refresh]);
 
   const summary = useMemo(() => ({
     total: snapshots.length,
@@ -107,12 +122,15 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
   return (
     <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-bold text-gray-300"><Route size={14} className="text-cyan-400" /> CANDIDATE LIFECYCLE PIPELINE</div>
-        <button onClick={() => void refresh()} disabled={busy} className="flex items-center gap-1.5 rounded border border-gray-700 px-2.5 py-1 text-[9px] text-gray-400 hover:border-cyan-500/40 hover:text-cyan-300 disabled:opacity-50"><RefreshCw size={10} className={busy ? 'animate-spin' : ''} /> REFRESH</button>
+        <div className="flex items-center gap-2 font-bold text-gray-300">
+          <Route size={14} className="text-cyan-400" /> CANDIDATE LIFECYCLE PIPELINE
+          <span className="rounded border border-emerald-500/20 bg-emerald-950/10 px-1.5 py-0.5 text-[8px] text-emerald-300">LIVE SYNC</span>
+        </div>
+        <button onClick={() => void refresh()} disabled={busy} className="flex items-center gap-1.5 rounded border border-gray-700 px-2.5 py-1 text-[9px] text-gray-400 hover:border-cyan-500/40 hover:text-cyan-300 disabled:opacity-50"><RefreshCw size={10} className={busy || liveRefreshing ? 'animate-spin' : ''} /> REFRESH</button>
       </div>
 
       <p className="text-[10px] leading-relaxed text-gray-500">
-        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass. <strong className="text-cyan-300">GO TO CANDIDATE</strong> only navigates/highlights a unique visible candidate card; ambiguous or missing matches fall back to the panel and never execute the gate.
+        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass. <strong className="text-cyan-300">GO TO CANDIDATE</strong> only navigates/highlights a unique visible candidate card; ambiguous or missing matches fall back to the panel and never execute the gate. Successful training-namespace persistence and model-router preference changes trigger a debounced read-only refresh automatically.
       </p>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
