@@ -3,7 +3,7 @@ export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cyl
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
-export type AnimationInterpolation = 'linear'|'easeIn'|'easeOut'|'easeInOut'|'step';
+export type AnimationInterpolation = 'linear'|'easeIn'|'easeOut'|'easeInOut'|'step'|'bezier';
 export type AnimationHandleType = 'AUTO'|'VECTOR'|'ALIGNED'|'FREE';
 export interface Keyframe { id?:string; time:number; value:any; interpolation:AnimationInterpolation; handleType?:AnimationHandleType; handleLeft?:[number,number]; handleRight?:[number,number]; }
 export interface AnimationTrack { id:string; targetObjectId:string; property:'position.x'|'position.y'|'position.z'|'rotation.x'|'rotation.y'|'rotation.z'|'scale'; keyframes:Keyframe[]; }
