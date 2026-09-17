@@ -4,6 +4,7 @@ import {
   lifecycleSurfaceIdForLabel,
   navigateToCandidateLifecycleSurface,
   selectUniqueCandidateTextIndex,
+  textContainsBoundedRuntimeIdentity,
 } from '../modes/settings/CandidateLifecycleNavigation';
 
 export async function runCandidateLifecycleGuidedNavigationTests(): Promise<{ passed: number; total: number }> {
@@ -33,12 +34,24 @@ export async function runCandidateLifecycleGuidedNavigationTests(): Promise<{ pa
   assert(lifecycleSurfaceIdForLabel('Native Model Candidate Lab') === CANDIDATE_LIFECYCLE_SURFACE_IDS.CANDIDATE_LAB, 'Surface label resolves to stable DOM anchor id');
 
   assert(
+    textContainsBoundedRuntimeIdentity('candidate Mio-A · EXPERIMENTAL', 'Mio-A') === true,
+    'Deep focus accepts a bounded exact runtime-model identity',
+  );
+  assert(
+    textContainsBoundedRuntimeIdentity('candidate Mio-A2 · EXPERIMENTAL', 'Mio-A') === false,
+    'Deep focus does not treat a longer runtime alias as an exact identity match',
+  );
+  assert(
     selectUniqueCandidateTextIndex(['Mio-A · EXPERIMENTAL', 'Mio-B · RELEASE_CANDIDATE'], 'Mio-B') === 1,
     'Deep focus selects the unique candidate card containing the requested runtime model',
   );
   assert(
     selectUniqueCandidateTextIndex(['Mio-A · row 1', 'Mio-A · row 2'], 'Mio-A') === undefined,
     'Deep focus refuses ambiguous duplicate runtime-model matches instead of guessing',
+  );
+  assert(
+    selectUniqueCandidateTextIndex(['Mio-A2', 'Mio-B'], 'Mio-A') === undefined,
+    'Deep focus falls back rather than matching a runtime-model prefix',
   );
   assert(
     selectUniqueCandidateTextIndex(['Mio-A', 'Mio-B'], 'Mio-C') === undefined,
