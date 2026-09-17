@@ -1,6 +1,5 @@
-import type { MioLocale } from '../MioVoiceService';
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
-import type { MioTranscriptionResult, MioVoiceProviderCapability } from './MioVoiceProvider';
+import type { MioLocale, MioTranscriptionResult, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
