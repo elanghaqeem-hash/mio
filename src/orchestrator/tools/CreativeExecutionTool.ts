@@ -1,4 +1,7 @@
 import { CreativeOrchestrator, type CreativePlanStep } from '../../agents/CreativeOrchestrator';
+import { creativeAssetHandoff } from '../../creative/CreativeAssetHandoff';
+import { eventBus } from '../../core/EventBus';
+import { ProjectManager } from '../../project/ProjectManager';
 import type { MioSystemMode } from '../../types/core';
 import type { MioTool } from '../../types/tools';
 
@@ -19,6 +22,7 @@ export interface CreativeExecutionOutput {
     outputAssetId?: string;
   }>;
   outputAssetIds: string[];
+  primaryAssetId?: string;
 }
 
 export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExecutionOutput> = {
@@ -42,17 +46,11 @@ export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExec
     const planned = CreativeOrchestrator.planCreativePipeline(input.prompt);
     let steps = planned;
 
-    // A single-mode Mission Control task must execute the routed studio rather than
-    // accidentally expanding into unrelated creative studios. Preserve dependencies
-    // only when they are part of the selected set.
     if (requestedMode !== 'GRAPHIC') {
       const selected = planned.filter((step) => step.mode === requestedMode);
       if (selected.length > 0) {
         const selectedIds = new Set(selected.map((step) => step.id));
-        steps = selected.map((step) => ({
-          ...step,
-          dependsOnStepIds: step.dependsOnStepIds.filter((id) => selectedIds.has(id)),
-        }));
+        steps = selected.map((step) => ({ ...step, dependsOnStepIds: step.dependsOnStepIds.filter((id) => selectedIds.has(id)) }));
       }
     }
 
@@ -63,11 +61,22 @@ export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExec
     if (!completed) throw new Error(`${requestedMode} Creative Engine pipeline failed validation or execution`);
 
     const outputAssetIds = steps.flatMap((step) => step.outputAssetId ? [step.outputAssetId] : []);
+    const primaryAssetId = [...steps].reverse().find((step) => step.mode === requestedMode && step.outputAssetId)?.outputAssetId ?? outputAssetIds.at(-1);
+    if (primaryAssetId) {
+      const asset = ProjectManager.getProject().assets.find((candidate) => candidate.id === primaryAssetId);
+      if (asset) {
+        creativeAssetHandoff.publish({ taskId: context.taskId, assetId: asset.id, assetType: asset.type, mode: requestedMode, name: asset.name });
+        eventBus.emit('SWITCH_MODE', requestedMode);
+        eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Creative handoff ${asset.id} → ${requestedMode} studio`, mode: requestedMode });
+      }
+    }
+
     return {
       mode: requestedMode,
       completed,
       steps: steps.map((step) => ({ id: step.id, mode: step.mode, status: step.status, outputAssetId: step.outputAssetId })),
       outputAssetIds,
+      primaryAssetId,
     };
   },
   validateOutput: (output) => output.completed === true && output.outputAssetIds.length > 0 && output.steps.every((step) => step.status === 'completed'),
