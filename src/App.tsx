@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { MioCoreState, MioSystemMode } from './types/core';
 import { DryRunRequest } from './types/security';
 import { eventBus } from './core/EventBus';
+import { installMioVoiceRuntime, mioVoice } from './services/MioVoiceService';
 import { TopBar } from './components/layout/TopBar';
 import { ModeNavigation } from './components/layout/ModeNavigation';
 import { ContextPanel } from './components/layout/ContextPanel';
@@ -29,22 +30,10 @@ const TaskMonitorView = lazy(() => import('./modes/tasks/TaskMonitorView').then(
 const SettingsView = lazy(() => import('./modes/settings/SettingsView').then((m) => ({ default: m.SettingsView })));
 
 const WORKSPACE_LABELS: Record<MioSystemMode, string> = {
-  CHAT: 'Mio Core',
-  RESEARCH: 'Research Studio',
-  FILES: 'File Sandbox',
-  MOTION: 'Motion Tracking',
-  '3D': '3D Modeling Studio',
-  ANIMATION: 'Animation Studio',
-  MOTION_2D: '2D / Motion Studio',
-  GRAPHIC: 'Graphic Design Studio',
-  DRAWING: 'Drawing Studio',
-  PHOTO: 'Photo Editing Studio',
-  SFX: 'SFX Studio',
-  MUSIC: 'Music Studio',
-  PROJECT: 'Project Context',
-  TASKS: 'Mission Control',
-  SECURITY: 'Security Center',
-  SETTINGS: 'System Settings',
+  CHAT: 'Mio Core', RESEARCH: 'Research Studio', FILES: 'File Sandbox', MOTION: 'Motion Tracking', '3D': '3D Modeling Studio',
+  ANIMATION: 'Animation Studio', MOTION_2D: '2D / Motion Studio', GRAPHIC: 'Graphic Design Studio', DRAWING: 'Drawing Studio',
+  PHOTO: 'Photo Editing Studio', SFX: 'SFX Studio', MUSIC: 'Music Studio', PROJECT: 'Project Context', TASKS: 'Mission Control',
+  SECURITY: 'Security Center', SETTINGS: 'System Settings',
 };
 
 const WorkspaceLoader = () => (
@@ -64,13 +53,16 @@ export const App: React.FC = () => {
   const [showWizard, setShowWizard] = useState<boolean>(() => localStorage.getItem('mio_v2_setup_completed') !== 'true');
 
   useEffect(() => {
-    const unsubState = eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state));
-    const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => {
-      setActiveMode(mode);
-      setWorkspaceOpen(mode !== 'CHAT');
-      setNavigationOpen(false);
-      setContextOpen(false);
+    installMioVoiceRuntime();
+    return mioVoice.subscribe((voiceState) => {
+      if (voiceState === 'SPEAKING') eventBus.emit('CORE_STATE_CHANGE', 'SPEAKING');
+      else eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
     });
+  }, []);
+
+  useEffect(() => {
+    const unsubState = eventBus.on('CORE_STATE_CHANGE', (state: MioCoreState) => setCoreState(state));
+    const unsubMode = eventBus.on('SWITCH_MODE', (mode: MioSystemMode) => { setActiveMode(mode); setWorkspaceOpen(mode !== 'CHAT'); setNavigationOpen(false); setContextOpen(false); });
     const unsubPerm = eventBus.on('REQUEST_DRY_RUN_PERMISSION', (req: DryRunRequest) => setDryRunRequest(req));
     return () => { unsubState(); unsubMode(); unsubPerm(); };
   }, []);
@@ -87,109 +79,38 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [workspaceOpen, navigationOpen, contextOpen]);
 
-  const selectMode = (mode: MioSystemMode) => {
-    setActiveMode(mode);
-    setWorkspaceOpen(mode !== 'CHAT');
-    setNavigationOpen(false);
-    setContextOpen(false);
-  };
-
-  const closeWorkspace = () => {
-    setWorkspaceOpen(false);
-    setActiveMode('CHAT');
-  };
-
+  const selectMode = (mode: MioSystemMode) => { setActiveMode(mode); setWorkspaceOpen(mode !== 'CHAT'); setNavigationOpen(false); setContextOpen(false); };
+  const closeWorkspace = () => { setWorkspaceOpen(false); setActiveMode('CHAT'); };
   const renderActiveWorkspace = () => {
     switch (activeMode) {
-      case 'CHAT': return <ChatStudioView />;
-      case '3D': return <Studio3DView />;
-      case 'ANIMATION': return <AnimationStudioView />;
-      case 'GRAPHIC': return <GraphicStudioView />;
-      case 'DRAWING': return <DrawingStudioView />;
-      case 'PHOTO': return <PhotoStudioView />;
-      case 'MOTION_2D': return <Motion2DStudioView />;
-      case 'SFX': return <SFXStudioView />;
-      case 'MUSIC': return <MusicStudioView />;
-      case 'RESEARCH': return <ResearchStudioView />;
-      case 'FILES': return <FileOrganizationView />;
-      case 'MOTION': return <MotionTrackingView />;
-      case 'SECURITY': return <SecurityDashboardView />;
-      case 'PROJECT': return <ProjectOverviewView />;
-      case 'TASKS': return <TaskMonitorView />;
-      case 'SETTINGS': return <SettingsView />;
-      default: return <ChatStudioView />;
+      case 'CHAT': return <ChatStudioView />; case '3D': return <Studio3DView />; case 'ANIMATION': return <AnimationStudioView />;
+      case 'GRAPHIC': return <GraphicStudioView />; case 'DRAWING': return <DrawingStudioView />; case 'PHOTO': return <PhotoStudioView />;
+      case 'MOTION_2D': return <Motion2DStudioView />; case 'SFX': return <SFXStudioView />; case 'MUSIC': return <MusicStudioView />;
+      case 'RESEARCH': return <ResearchStudioView />; case 'FILES': return <FileOrganizationView />; case 'MOTION': return <MotionTrackingView />;
+      case 'SECURITY': return <SecurityDashboardView />; case 'PROJECT': return <ProjectOverviewView />; case 'TASKS': return <TaskMonitorView />;
+      case 'SETTINGS': return <SettingsView />; default: return <ChatStudioView />;
     }
   };
 
   return (
     <div className="mio-app-shell mio-core-first-shell flex h-[100dvh] min-h-[100svh] w-full max-w-full flex-col overflow-hidden font-sans text-slate-200 select-none">
-      <TopBar
-        coreState={coreState}
-        activeMode={workspaceOpen ? activeMode : 'CHAT'}
-        onOpenSecurity={() => selectMode('SECURITY')}
-        onToggleNavigation={() => {
-          setNavigationOpen((open) => !open);
-          setContextOpen(false);
-        }}
-        onToggleContext={() => {
-          setContextOpen((open) => !open);
-          setNavigationOpen(false);
-        }}
-      />
-
+      <TopBar coreState={coreState} activeMode={workspaceOpen ? activeMode : 'CHAT'} onOpenSecurity={() => selectMode('SECURITY')}
+        onToggleNavigation={() => { setNavigationOpen((open) => !open); setContextOpen(false); }}
+        onToggleContext={() => { setContextOpen((open) => !open); setNavigationOpen(false); }} />
       <main className="mio-core-stage relative min-h-0 min-w-0 flex-1 overflow-hidden">
-        <Suspense fallback={<WorkspaceLoader />}>
-          {agenticInterfaceEnabled
-            ? <AgentCommandCenter coreState={coreState} onSelectMode={selectMode} />
-            : <ChatStudioView />}
-        </Suspense>
+        <Suspense fallback={<WorkspaceLoader />}>{agenticInterfaceEnabled ? <AgentCommandCenter coreState={coreState} onSelectMode={selectMode} /> : <ChatStudioView />}</Suspense>
       </main>
-
       {workspaceOpen && activeMode !== 'CHAT' && (
         <div className="mio-workspace-overlay" role="presentation">
           <button type="button" aria-label="Close current workspace" onClick={closeWorkspace} className="mio-overlay-backdrop" />
           <section className="mio-workspace-popup" role="dialog" aria-modal="true" aria-label={`${WORKSPACE_LABELS[activeMode]} workspace`}>
-            <header className="mio-workspace-popup-header">
-              <div className="min-w-0">
-                <p className="mio-popup-kicker">MIO WORKSPACE // POPUP</p>
-                <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="truncate text-sm font-semibold text-slate-100 sm:text-base">{WORKSPACE_LABELS[activeMode]}</h2>
-                  <span className="mio-popup-live-chip">ACTIVE</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setNavigationOpen(true)} className="mio-popup-action">SWITCH</button>
-                <button type="button" onClick={closeWorkspace} className="mio-popup-close" aria-label="Close workspace">×</button>
-              </div>
-            </header>
-            <div className="mio-workspace-popup-body">
-              <Suspense fallback={<WorkspaceLoader />}>{renderActiveWorkspace()}</Suspense>
-              {agenticInterfaceEnabled && (
-                <StudioCopilotDock state={coreState} mode={activeMode} onOpenCore={closeWorkspace} />
-              )}
-            </div>
+            <header className="mio-workspace-popup-header"><div className="min-w-0"><p className="mio-popup-kicker">MIO WORKSPACE // POPUP</p><div className="flex min-w-0 items-center gap-2"><h2 className="truncate text-sm font-semibold text-slate-100 sm:text-base">{WORKSPACE_LABELS[activeMode]}</h2><span className="mio-popup-live-chip">ACTIVE</span></div></div><div className="flex items-center gap-2"><button type="button" onClick={() => setNavigationOpen(true)} className="mio-popup-action">SWITCH</button><button type="button" onClick={closeWorkspace} className="mio-popup-close" aria-label="Close workspace">×</button></div></header>
+            <div className="mio-workspace-popup-body"><Suspense fallback={<WorkspaceLoader />}>{renderActiveWorkspace()}</Suspense>{agenticInterfaceEnabled && <StudioCopilotDock state={coreState} mode={activeMode} onOpenCore={closeWorkspace} />}</div>
           </section>
         </div>
       )}
-
-      {navigationOpen && (
-        <div className="mio-panel-overlay mio-navigation-overlay">
-          <button type="button" aria-label="Close workspace navigation" onClick={() => setNavigationOpen(false)} className="mio-overlay-backdrop" />
-          <div className="mio-navigation-popup">
-            <ModeNavigation activeMode={workspaceOpen ? activeMode : 'CHAT'} onSelectMode={selectMode} mobile />
-          </div>
-        </div>
-      )}
-
-      {contextOpen && (
-        <div className="mio-panel-overlay mio-context-overlay">
-          <button type="button" aria-label="Close context panel" onClick={() => setContextOpen(false)} className="mio-overlay-backdrop" />
-          <div className="mio-context-popup">
-            <ContextPanel mobile />
-          </div>
-        </div>
-      )}
-
+      {navigationOpen && <div className="mio-panel-overlay mio-navigation-overlay"><button type="button" aria-label="Close workspace navigation" onClick={() => setNavigationOpen(false)} className="mio-overlay-backdrop" /><div className="mio-navigation-popup"><ModeNavigation activeMode={workspaceOpen ? activeMode : 'CHAT'} onSelectMode={selectMode} mobile /></div></div>}
+      {contextOpen && <div className="mio-panel-overlay mio-context-overlay"><button type="button" aria-label="Close context panel" onClick={() => setContextOpen(false)} className="mio-overlay-backdrop" /><div className="mio-context-popup"><ContextPanel mobile /></div></div>}
       <PermissionModal key={dryRunRequest?.id ?? 'no-permission-request'} request={dryRunRequest} onClose={() => setDryRunRequest(null)} />
       {showWizard && <FirstRunWizard onComplete={() => setShowWizard(false)} />}
     </div>
