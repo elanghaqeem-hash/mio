@@ -85,9 +85,11 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
   const [liveRefreshing, setLiveRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const backgroundSequence = useRef(0);
 
   const refresh = useCallback(async (background = false) => {
     const requestId = ++requestSequence.current;
+    const backgroundId = background ? ++backgroundSequence.current : 0;
     if (background) setLiveRefreshing(true);
     else setBusy(true);
     setMessage(null);
@@ -99,9 +101,10 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
         setMessage(error instanceof Error ? error.message : 'Candidate lifecycle pipeline could not be assembled');
       }
     } finally {
-      if (requestId === requestSequence.current) {
-        if (background) setLiveRefreshing(false);
-        else setBusy(false);
+      if (background) {
+        if (backgroundId === backgroundSequence.current) setLiveRefreshing(false);
+      } else {
+        setBusy(false);
       }
     }
   }, []);
