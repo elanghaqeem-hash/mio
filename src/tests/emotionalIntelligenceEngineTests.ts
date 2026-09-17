@@ -14,6 +14,11 @@ export async function runEmotionalIntelligenceEngineTests(): Promise<{ passed: n
   assert(solveId.intent === 'SEEKING_SOLUTION' && solveId.strategy === 'ACKNOWLEDGE_AND_SOLVE', 'ID: routes emotional problem solving');
   const listenEn = EmotionalIntelligenceEngine.analyze('I am overwhelmed. I just want you to listen, no advice.');
   assert(listenEn.primaryEmotion === 'STRESS' && listenEn.intent === 'SEEKING_PRESENCE', 'EN: detects overwhelm and listening intent');
+  const validationId = EmotionalIntelligenceEngine.analyze('Aku sedih dan kesal. Wajar nggak kalau aku merasa begini?');
+  assert(validationId.intent === 'SEEKING_VALIDATION' && validationId.strategy === 'ACKNOWLEDGE_AND_LISTEN', 'ID: validation is distinct from advice seeking');
+  assert(!validationId.solutionRequested && validationId.signals.includes('intent:validation'), 'ID: validation does not accidentally force solution mode');
+  const validationEn = EmotionalIntelligenceEngine.analyze('I am anxious. Am I overreacting?');
+  assert(validationEn.intent === 'SEEKING_VALIDATION', 'EN: detects emotional validation request');
   const perspective = EmotionalIntelligenceEngine.analyze('Menurutmu aku salah? Tolong lihat dari sisi lain.');
   assert(perspective.intent === 'SEEKING_PERSPECTIVE', 'Perspective stays distinct from validation');
   const celebration = EmotionalIntelligenceEngine.analyze('Aku senang banget, akhirnya berhasil!');
@@ -40,5 +45,7 @@ export async function runEmotionalIntelligenceEngineTests(): Promise<{ passed: n
   const guidance = EmotionalIntelligenceEngine.systemGuidance(listenId);
   assert(guidance.includes('never as a diagnosis') && guidance.includes('do not force advice'), 'Guidance avoids diagnosis and unwanted advice');
   assert(guidance.includes('Never encourage emotional dependency') && guidance.includes('Never claim to have human feelings'), 'Guidance protects agency and AI identity');
+  const validationGuidance = EmotionalIntelligenceEngine.systemGuidance(validationId);
+  assert(validationGuidance.includes('without automatically validating unverified beliefs'), 'Validation guidance separates feelings from unverified beliefs');
   return { passed, total };
 }
