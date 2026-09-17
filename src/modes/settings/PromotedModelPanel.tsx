@@ -6,6 +6,7 @@ import {
   PromotedModelRuntimeStatus,
   promotedModelActivationService,
 } from '../../training/PromotedModelActivationService';
+import { CandidateAttentionQueuePanel } from './CandidateAttentionQueuePanel';
 import { CandidateLifecyclePipelinePanel } from './CandidateLifecyclePipelinePanel';
 import { CANDIDATE_LIFECYCLE_SURFACE_IDS } from './CandidateLifecycleNavigation';
 import { ModelPromotionPanel } from './ModelPromotionPanel';
@@ -62,6 +63,7 @@ export const PromotedModelPanel: React.FC = () => {
 
   return (
     <>
+      <CandidateAttentionQueuePanel />
       <CandidateLifecyclePipelinePanel />
       <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.FINAL_PROMOTION} className="scroll-mt-4 outline-none">
         <ModelPromotionPanel onPromoted={refresh} />
