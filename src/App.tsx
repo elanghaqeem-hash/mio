@@ -14,7 +14,7 @@ import { ChatStudioView } from './modes/chat/ChatStudioView';
 import './core-shell.css';
 
 const Studio3DView = lazy(() => import('./modes/studio3d/Studio3DView').then((m) => ({ default: m.Studio3DView })));
-const AnimationStudioView = lazy(() => import('./modes/animation/AnimationStudioView').then((m) => ({ default: m.AnimationStudioView })));
+const AnimationStudioView = lazy(() => import('./modes/animation/AnimationStudio3DView').then((m) => ({ default: m.AnimationStudio3DView })));
 const GraphicStudioView = lazy(() => import('./modes/graphic/GraphicStudioView').then((m) => ({ default: m.GraphicStudioView })));
 const DrawingStudioView = lazy(() => import('./modes/drawing/DrawingStudioView').then((m) => ({ default: m.DrawingStudioView })));
 const PhotoStudioView = lazy(() => import('./modes/photo/PhotoStudioView').then((m) => ({ default: m.PhotoStudioView })));
@@ -31,7 +31,7 @@ const SettingsView = lazy(() => import('./modes/settings/SettingsView').then((m)
 
 const WORKSPACE_LABELS: Record<MioSystemMode, string> = {
   CHAT: 'Mio Core', RESEARCH: 'Research Studio', FILES: 'File Sandbox', MOTION: 'Motion Tracking', '3D': '3D Modeling Studio',
-  ANIMATION: 'Animation Studio', MOTION_2D: '2D / Motion Studio', GRAPHIC: 'Graphic Design Studio', DRAWING: 'Drawing Studio',
+  ANIMATION: '3D Animation Studio', MOTION_2D: '2D / Motion Studio', GRAPHIC: 'Graphic Design Studio', DRAWING: 'Drawing Studio',
   PHOTO: 'Photo Editing Studio', SFX: 'SFX Studio', MUSIC: 'Music Studio', PROJECT: 'Project Context', TASKS: 'Mission Control',
   SECURITY: 'Security Center', SETTINGS: 'System Settings',
 };
