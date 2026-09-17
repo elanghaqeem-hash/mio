@@ -97,21 +97,21 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
     upperLength: upperBone.length,
     lowerLength: endBone.length,
   });
-  const upperDirection = directionToWorldEuler(result.joint, result.end);
-  const rootDirection = directionToWorldEuler(result.root ?? upperWorld.head, result.joint);
-  if (!rootDirection || !upperDirection) return;
+  const rootDirection = directionToWorldEuler(upperWorld.head, result.joint);
+  const endDirection = directionToWorldEuler(result.joint, result.end);
+  if (!rootDirection || !endDirection) return;
 
   const upperKey = `${rig.id}:${upperBone.id}`;
   const endKey = `${rig.id}:${endBone.id}`;
   const upperPose = poses[upperKey];
   const endPose = poses[endKey];
   if (!upperPose || !endPose) return;
-  const upperParentRotation = upperBone.parentId ? world.bones[upperBone.parentId]?.rotation ?? [0, 0, 0] : [0, 0, 0];
+  const upperParentRotation: Vec3 = upperBone.parentId ? world.bones[upperBone.parentId]?.rotation ?? [0, 0, 0] : [0, 0, 0];
   const weight = Math.max(0, Math.min(1, constraint.influence));
   for (let i = 0; i < 3; i++) {
     const upperLocal = rootDirection[i] - upperParentRotation[i];
     upperPose.rotation[i] = lerp(upperPose.rotation[i], upperLocal, weight);
-    const endLocal = upperDirection[i] - rootDirection[i];
+    const endLocal = endDirection[i] - rootDirection[i];
     endPose.rotation[i] = lerp(endPose.rotation[i], endLocal, weight);
   }
 };
