@@ -1,5 +1,5 @@
 import { mioVoice } from '../MioVoiceService';
-import type { MioTranscriptionResult } from './MioVoiceProvider';
+import type { MioTranscriptionResult, MioVoiceProsodyHint } from './MioVoiceProvider';
 import { mioVoiceProviders } from './MioVoiceProviderRegistry';
 import { mioVoiceTurnManager, type MioVoiceTurnManager, type MioVoiceTurnState } from './MioVoiceTurnManager';
 import { webAudioVoiceActivityDetector } from './WebAudioVoiceActivityDetector';
@@ -29,7 +29,6 @@ export class MioChatVoiceController {
         onVoiceActivityInterrupt: async () => {
           const handler = this.lastResultHandler;
           if (!handler) return;
-          // Release WebAudio capture before STT takes ownership of the microphone.
           await this.disableAutomaticBargeIn();
           await this.startListening(handler, this.lastPreferredProviderId);
         },
@@ -50,9 +49,9 @@ export class MioChatVoiceController {
   async stop(): Promise<void> { await this.turns.interrupt(); }
   markThinking(): void { this.turns.markThinking(); }
 
-  async speak(text: string, preferredProviderId?: string): Promise<void> {
+  async speak(text: string, preferredProviderId?: string, prosody?: MioVoiceProsodyHint): Promise<void> {
     const locale = this.getLocale(text);
-    await this.turns.beginMioTurn(text, locale, { preferredProviderId, autoInterruptOnVoiceActivity: Boolean(this.detachVad) });
+    await this.turns.beginMioTurn(text, locale, { preferredProviderId, prosody, autoInterruptOnVoiceActivity: Boolean(this.detachVad) });
   }
 
   async toggleListening(onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
