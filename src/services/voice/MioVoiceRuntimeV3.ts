@@ -1,5 +1,5 @@
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
-import type { MioLocale, MioTranscriptionResult, MioVoiceProviderCapability } from './MioVoiceProvider';
+import type { MioLocale, MioTranscriptionResult, MioVoiceProsodyHint, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
@@ -22,9 +22,9 @@ export class MioVoiceRuntimeV3 {
     if (controller) this.settle(controller); else { this.activeProviderId = null; this.setState('IDLE'); }
   }
 
-  async speak(text: string, locale: MioLocale, preferredProviderId?: string): Promise<void> {
+  async speak(text: string, locale: MioLocale, preferredProviderId?: string, prosody?: MioVoiceProsodyHint): Promise<void> {
     await this.interrupt(); const provider = await this.select('TTS', preferredProviderId); const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
-    try { await provider.speak({ text, locale, signal: controller.signal }); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
+    try { await provider.speak({ text, locale, signal: controller.signal, prosody }); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
   }
 
   async listen(locale: MioLocale, onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
