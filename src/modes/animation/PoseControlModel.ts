@@ -1,5 +1,6 @@
 import type { AnimationBone, AnimationRig, MioAnimationProject } from '../../types/creative';
-import type { PoseAxis, PoseTool } from './PoseOperations';
+import type { PoseAxis } from './PoseOperations';
+import type { PoseTool } from './PoseEditSession';
 
 export interface PoseSelection {
   rigId: string;
