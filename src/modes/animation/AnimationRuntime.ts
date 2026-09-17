@@ -1,7 +1,15 @@
 import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAnimationProject } from '../../types/creative';
 import type { BoneTransformChannel } from './AutoKeyOperations';
 import { solveTwoBoneIK, type Vec3 } from './IKSolver';
-import { evaluateRigWorldTransforms } from './RigTransformEvaluator';
+import {
+  eulerXYZToQuaternion,
+  evaluateRigWorldTransforms,
+  quaternionInverse,
+  quaternionMultiply,
+  quaternionNormalize,
+  quaternionToEulerXYZ,
+  type Quat,
+} from './RigTransformEvaluator';
 
 export interface EvaluatedAnimationState {
   objectChannels: Record<string, Record<string, number>>;
@@ -24,6 +32,12 @@ const directionToWorldEuler = (from: Vec3, to: Vec3): Vec3 | undefined => {
   const y = direction[1] / magnitude;
   const z = Math.max(-1, Math.min(1, direction[2] / magnitude));
   return [Math.asin(z), 0, Math.atan2(-x, y)];
+};
+
+const localEulerFromWorld = (worldEuler: Vec3, parentWorld: Quat = [0, 0, 0, 1]): Vec3 => {
+  const worldQuaternion = eulerXYZToQuaternion(worldEuler);
+  const localQuaternion = quaternionNormalize(quaternionMultiply(quaternionInverse(parentWorld), worldQuaternion));
+  return quaternionToEulerXYZ(localQuaternion);
 };
 
 export const parseBoneTargetId = (targetObjectId: string): BoneTrackTarget | undefined => {
@@ -108,13 +122,13 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   const upperPose = poses[upperKey];
   const endPose = poses[endKey];
   if (!upperPose || !endPose) return;
-  const upperParentRotation: Vec3 = upperBone.parentId ? world.bones[upperBone.parentId]?.rotation ?? [0, 0, 0] : [0, 0, 0];
+  const parentWorld = upperBone.parentId ? world.bones[upperBone.parentId]?.quaternion : undefined;
+  const desiredUpperLocal = localEulerFromWorld(rootDirection, parentWorld);
+  const desiredEndLocal = localEulerFromWorld(endDirection, eulerXYZToQuaternion(rootDirection));
   const weight = Math.max(0, Math.min(1, constraint.influence));
   for (let i = 0; i < 3; i++) {
-    const upperLocal = rootDirection[i] - upperParentRotation[i];
-    upperPose.rotation[i] = lerp(upperPose.rotation[i], upperLocal, weight);
-    const endLocal = endDirection[i] - rootDirection[i];
-    endPose.rotation[i] = lerp(endPose.rotation[i], endLocal, weight);
+    upperPose.rotation[i] = lerp(upperPose.rotation[i], desiredUpperLocal[i], weight);
+    endPose.rotation[i] = lerp(endPose.rotation[i], desiredEndLocal[i], weight);
   }
 };
 
