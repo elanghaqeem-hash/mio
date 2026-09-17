@@ -10,11 +10,7 @@ export type MioVoiceProfile = {
 export type MioVoiceState = 'IDLE' | 'SPEAKING';
 export type MioVoiceListener = (state: MioVoiceState) => void;
 
-/**
- * Mio V2 voice identity.
- * External recordings are character references only: never clone,
- * reproduce, or biometric-match the reference speaker.
- */
+/** Mio V2 uses an original identity. External recordings are character references only. */
 export const MIO_V2_VOICE: MioVoiceProfile = {
   id: 'mio-v2-warm-deep',
   locale: 'id-ID',
@@ -26,16 +22,10 @@ export const MIO_V2_VOICE: MioVoiceProfile = {
 
 function chooseVoice(voices: SpeechSynthesisVoice[], profile: MioVoiceProfile) {
   const locale = profile.locale.toLowerCase();
-  return (
-    voices.find((voice) => voice.lang.toLowerCase() === locale) ??
-    voices.find((voice) => voice.lang.toLowerCase().startsWith('id')) ??
-    voices.find((voice) =>
-      profile.preferredVoiceHints.some((hint) =>
-        `${voice.name} ${voice.lang}`.toLowerCase().includes(hint.toLowerCase()),
-      ),
-    ) ??
-    null
-  );
+  return voices.find((voice) => voice.lang.toLowerCase() === locale)
+    ?? voices.find((voice) => voice.lang.toLowerCase().startsWith('id'))
+    ?? voices.find((voice) => profile.preferredVoiceHints.some((hint) => `${voice.name} ${voice.lang}`.toLowerCase().includes(hint.toLowerCase())))
+    ?? null;
 }
 
 export class MioVoiceService {
@@ -45,9 +35,7 @@ export class MioVoiceService {
   private state: MioVoiceState = 'IDLE';
   private listeners = new Set<MioVoiceListener>();
 
-  constructor(profile: MioVoiceProfile = MIO_V2_VOICE) {
-    this.profile = profile;
-  }
+  constructor(profile: MioVoiceProfile = MIO_V2_VOICE) { this.profile = profile; }
 
   isAvailable() {
     return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
@@ -55,10 +43,10 @@ export class MioVoiceService {
 
   getState() { return this.state; }
 
-  subscribe(listener: MioVoiceListener) {
+  subscribe(listener: MioVoiceListener): () => void {
     this.listeners.add(listener);
     listener(this.state);
-    return () => this.listeners.delete(listener);
+    return () => { this.listeners.delete(listener); };
   }
 
   private setState(state: MioVoiceState) {
@@ -87,17 +75,12 @@ export class MioVoiceService {
     return utterance;
   }
 
-  /**
-   * Compatibility layer for legacy speech calls. Existing UI code can keep
-   * using speechSynthesis while Mio's profile and lifecycle stay centralized.
-   */
   installRuntime() {
     if (!this.isAvailable() || this.runtimeInstalled) return false;
     const synthesis = window.speechSynthesis;
     this.nativeSpeak = synthesis.speak.bind(synthesis);
-    const service = this;
-    synthesis.speak = function mioV2Speak(utterance: SpeechSynthesisUtterance) {
-      service.nativeSpeak?.(service.bindLifecycle(service.applyProfile(utterance)));
+    synthesis.speak = (utterance: SpeechSynthesisUtterance) => {
+      this.nativeSpeak?.(this.bindLifecycle(this.applyProfile(utterance)));
     };
     this.runtimeInstalled = true;
     return true;
@@ -118,13 +101,8 @@ export class MioVoiceService {
     return true;
   }
 
-  test() {
-    return this.speak('Test, ini Mio V2, salam kenal.');
-  }
+  test() { return this.speak('Test, ini Mio V2, salam kenal.'); }
 }
 
 export const mioVoice = new MioVoiceService();
-
-export function installMioVoiceRuntime() {
-  return mioVoice.installRuntime();
-}
+export function installMioVoiceRuntime() { return mioVoice.installRuntime(); }
