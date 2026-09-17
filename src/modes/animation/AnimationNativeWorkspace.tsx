@@ -1,55 +1,14 @@
-import React from 'react';
-import type { MioAnimationProject } from '../../types/creative';
-import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
-import { Animation3DViewportBridge } from './Animation3DViewportBridge';
-import { AnimationEditorWorkspaceProvider, useAnimationEditorWorkspace } from './AnimationEditorWorkspaceContext';
+import React,{useEffect,useState}from'react';
+import type{MioAnimationProject}from'../../types/creative';
+import{CreativeWorkspaceToolbar}from'../../components/creative/CreativeWorkspaceToolbar';
+import{useCreativeStudioDocument}from'../../creative/useCreativeStudioDocument';
+import{Animation3DViewportBridge}from'./Animation3DViewportBridge';
+import{AnimationEditorWorkspaceProvider,useAnimationEditorWorkspace}from'./AnimationEditorWorkspaceContext';
+import{selectAnimationBone,setAnimationEditorTime}from'./AnimationEditorState';
 
-const INITIAL_PROJECT: MioAnimationProject = {
-  duration: 5,
-  fps: 60,
-  currentTime: 0,
-  loop: true,
-  tracks: [],
-  rigs: [{
-    id: 'rig_vanguard',
-    name: 'Vanguard Rig',
-    objectId: 'Vanguard_Mech_Hull',
-    bones: [
-      { id: 'root', name: 'Root', length: 1.2, connected: false, ikFk: 'FK', pose: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
-      { id: 'spine', name: 'Spine', parentId: 'root', length: 1, connected: true, ikFk: 'FK', pose: { position: [0, 1.2, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
-      { id: 'arm_l', name: 'Arm.L', parentId: 'spine', length: .9, connected: false, ikFk: 'FK', pose: { position: [-.55, .7, 0], rotation: [0, 0, .35], scale: [1, 1, 1] } },
-      { id: 'arm_r', name: 'Arm.R', parentId: 'spine', length: .9, connected: false, ikFk: 'FK', pose: { position: [.55, .7, 0], rotation: [0, 0, -.35], scale: [1, 1, 1] } },
-    ],
-  }],
-};
+const INITIAL_PROJECT:MioAnimationProject={duration:5,fps:60,currentTime:0,loop:true,tracks:[],rigs:[{id:'rig_vanguard',name:'Vanguard Rig',objectId:'Vanguard_Mech_Hull',bones:[{id:'root',name:'Root',length:1.2,connected:false,ikFk:'FK',pose:{position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]}},{id:'spine',name:'Spine',parentId:'root',length:1,connected:true,ikFk:'FK',pose:{position:[0,1.2,0],rotation:[0,0,0],scale:[1,1,1]}},{id:'arm_l',name:'Arm.L',parentId:'spine',length:.9,connected:false,ikFk:'FK',pose:{position:[-.55,.7,0],rotation:[0,0,.35],scale:[1,1,1]}},{id:'arm_r',name:'Arm.R',parentId:'spine',length:.9,connected:false,ikFk:'FK',pose:{position:[.55,.7,0],rotation:[0,0,-.35],scale:[1,1,1]}}]}]};
 
-const NativeViewportSurface: React.FC<{ project: MioAnimationProject; onCommitProject: (project: MioAnimationProject) => void }> = ({ project, onCommitProject }) => {
-  const { editor, setEditor } = useAnimationEditorWorkspace();
-  return (
-    <main className="relative min-h-0 flex-1 overflow-hidden bg-[#0d1117]" aria-label="Native 3D animation viewport">
-      <Animation3DViewportBridge project={project} editor={editor} setEditor={setEditor} onCommitProject={onCommitProject} />
-      <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/60 px-2 py-1 font-mono text-[10px] text-gray-300">
-        Native WebGL · Tap joint: Select · Drag: Pose/Orbit · Wheel/Pinch: Zoom
-      </div>
-    </main>
-  );
-};
+const NativeEditor:React.FC<{project:MioAnimationProject;onCommitProject:(p:MioAnimationProject)=>void}>=({project,onCommitProject})=>{const{editor,setEditor}=useAnimationEditorWorkspace();const[playing,setPlaying]=useState(false);const selected=editor.selection?project.rigs?.find(r=>r.id===editor.selection?.rigId)?.bones.find(b=>b.id===editor.selection?.boneId):undefined;useEffect(()=>{if(!playing)return;let last=performance.now(),raf=0;const tick=(now:number)=>{const dt=(now-last)/1000;last=now;setEditor(s=>setAnimationEditorTime(s,s.time+dt>project.duration?(project.loop?0:project.duration):s.time+dt));raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf)},[playing,project.duration,project.loop,setEditor]);const frame=Math.round(editor.time*project.fps);return <div className="flex min-h-0 flex-1 flex-col"><div className="flex min-h-0 flex-1"><aside className="w-56 shrink-0 overflow-auto border-r border-black bg-[#202328] font-mono text-xs"><div className="border-b border-black px-3 py-2 font-bold text-gray-400">SCENE / RIG OUTLINER</div>{(project.rigs??[]).map(r=><div key={r.id}><div className="px-3 py-2 text-orange-200">{r.name}</div>{r.bones.map(b=><button key={b.id} onClick={()=>setEditor(s=>selectAnimationBone(s,r.id,b.id))} className={`flex w-full items-center px-5 py-1 text-left text-[10px] ${editor.selection?.rigId===r.id&&editor.selection?.boneId===b.id?'bg-blue-900/60 text-blue-100':'text-gray-400 hover:bg-white/5'}`}>└ {b.name}<span className="ml-auto">{b.ikFk}</span></button>)}</div>)}</aside><main className="relative min-h-0 flex-1 overflow-hidden bg-[#0d1117]" aria-label="Native 3D animation viewport"><Animation3DViewportBridge project={project} editor={editor} setEditor={setEditor} onCommitProject={onCommitProject}/><div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/60 px-2 py-1 font-mono text-[10px] text-gray-300">Native WebGL · Select · Pose · Orbit · Wheel/Pinch Zoom</div></main><aside className="w-64 shrink-0 overflow-auto border-l border-black bg-[#202328] p-3 font-mono text-xs"><div className="mb-3 font-bold text-gray-400">PROPERTIES</div>{selected?<div className="rounded bg-[#171a1e] p-2"><b className="text-orange-200">{selected.name}</b><div className="mt-1 text-[10px] text-gray-500">{editor.selection?.rigId} · {selected.ikFk}</div><div className="mt-3 grid grid-cols-4 gap-1 text-[10px]"><span>LOC</span>{selected.pose.position.map((v,i)=><span key={`p${i}`}>{v.toFixed(2)}</span>)}<span>ROT</span>{selected.pose.rotation.map((v,i)=><span key={`r${i}`}>{v.toFixed(2)}</span>)}<span>SCL</span>{selected.pose.scale.map((v,i)=><span key={`s${i}`}>{v.toFixed(2)}</span>)}</div></div>:<div className="text-gray-600">Select a rig bone in the Outliner or viewport.</div>}</aside></div><section className="h-32 shrink-0 border-t border-black bg-[#1c2025] font-mono text-xs"><div className="flex h-9 items-center gap-2 border-b border-black px-3"><b className="text-gray-400">TIMELINE</b><button onClick={()=>setPlaying(v=>!v)} className="rounded bg-orange-600 px-2 py-1 text-black">{playing?'PAUSE':'PLAY'}</button><span>Frame {frame}</span><span className="text-gray-600">/ {Math.round(project.duration*project.fps)}</span><span className="ml-auto">{editor.time.toFixed(2)}s</span></div><div className="relative h-[calc(100%-36px)] px-3 py-4"><input aria-label="Animation timeline" type="range" min={0} max={project.duration} step={1/project.fps} value={editor.time} onChange={e=>setEditor(s=>setAnimationEditorTime(s,+e.target.value))} className="w-full"/><div className="mt-2 flex justify-between text-[9px] text-gray-600"><span>0s</span><span>{(project.duration/2).toFixed(1)}s</span><span>{project.duration.toFixed(1)}s</span></div></div></section></div>};
 
-export const AnimationNativeWorkspace: React.FC = () => {
-  const workspace = useCreativeStudioDocument<MioAnimationProject>('MIO_3D_Animation.mioanim', INITIAL_PROJECT);
-  return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#16191d] text-gray-200">
-      <CreativeWorkspaceToolbar workspace={workspace} />
-      <div className="flex h-9 shrink-0 items-center border-b border-black bg-[#25292e] px-3 font-mono text-xs">
-        <b className="text-orange-300">3D ANIMATION STUDIO</b>
-        <span className="ml-2 text-gray-500">Authoritative Native Workspace</span>
-      </div>
-      <AnimationEditorWorkspaceProvider project={workspace.state}>
-        <NativeViewportSurface project={workspace.state} onCommitProject={workspace.setState} />
-      </AnimationEditorWorkspaceProvider>
-    </div>
-  );
-};
-
+export const AnimationNativeWorkspace:React.FC=()=>{const workspace=useCreativeStudioDocument<MioAnimationProject>('MIO_3D_Animation.mioanim',INITIAL_PROJECT);return <div className="flex h-full w-full flex-col overflow-hidden bg-[#16191d] text-gray-200"><CreativeWorkspaceToolbar workspace={workspace}/><div className="flex h-9 shrink-0 items-center border-b border-black bg-[#25292e] px-3 font-mono text-xs"><b className="text-orange-300">3D ANIMATION STUDIO</b><span className="ml-2 text-gray-500">Native Authoring Workspace · Unified State</span></div><AnimationEditorWorkspaceProvider project={workspace.state}><NativeEditor project={workspace.state} onCommitProject={workspace.setState}/></AnimationEditorWorkspaceProvider></div>};
 export default AnimationNativeWorkspace;
