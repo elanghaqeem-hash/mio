@@ -25,6 +25,10 @@ const SURFACE_LABEL_TO_TARGET: Record<string, CandidateLifecycleNavigationTarget
   'Promoted Model Runtime': 'PROMOTED_RUNTIME',
 };
 
+const CANDIDATE_CARD_SELECTOR = '.rounded-lg.border';
+const FOCUS_CLASSES = ['ring-2', 'ring-cyan-500/50', 'ring-offset-2', 'ring-offset-[#07090e]'] as const;
+const IDENTITY_BOUNDARY = /[\s·|,:;()\[\]{}]/;
+
 export function lifecycleNavigationTargetForSurface(surface?: string): CandidateLifecycleNavigationTarget | undefined {
   if (!surface) return undefined;
   return SURFACE_LABEL_TO_TARGET[surface];
@@ -35,23 +39,66 @@ export function lifecycleSurfaceIdForLabel(surface?: string): string | undefined
   return target ? CANDIDATE_LIFECYCLE_SURFACE_IDS[target] : undefined;
 }
 
-export function navigateToCandidateLifecycleSurface(surface?: string): boolean {
+export function textContainsBoundedRuntimeIdentity(text: string, runtimeModel?: string): boolean {
+  const target = runtimeModel?.trim();
+  if (!target) return false;
+  let from = 0;
+  while (from <= text.length - target.length) {
+    const start = text.indexOf(target, from);
+    if (start < 0) return false;
+    const end = start + target.length;
+    const beforeOk = start === 0 || IDENTITY_BOUNDARY.test(text[start - 1] ?? '');
+    const afterOk = end === text.length || IDENTITY_BOUNDARY.test(text[end] ?? '');
+    if (beforeOk && afterOk) return true;
+    from = start + 1;
+  }
+  return false;
+}
+
+export function selectUniqueCandidateTextIndex(texts: string[], runtimeModel?: string): number | undefined {
+  const matches: number[] = [];
+  for (let index = 0; index < texts.length; index++) {
+    if (textContainsBoundedRuntimeIdentity(texts[index] ?? '', runtimeModel)) matches.push(index);
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function candidateFocusElement(surface: HTMLElement, runtimeModel?: string): HTMLElement | undefined {
+  const cards = Array.from(surface.querySelectorAll<HTMLElement>(CANDIDATE_CARD_SELECTOR));
+  const index = selectUniqueCandidateTextIndex(cards.map((card) => card.textContent ?? ''), runtimeModel);
+  return index === undefined ? undefined : cards[index];
+}
+
+function highlightElement(element: HTMLElement, candidateId?: string): void {
+  const previousTabIndex = element.getAttribute('tabindex');
+  const previousCandidate = element.getAttribute('data-mio-navigation-focus-candidate');
+  element.setAttribute('tabindex', '-1');
+  if (candidateId?.trim()) element.setAttribute('data-mio-navigation-focus-candidate', candidateId.trim().slice(0, 180));
+  element.focus({ preventScroll: true });
+  element.classList.add(...FOCUS_CLASSES);
+
+  globalThis.setTimeout(() => {
+    element.classList.remove(...FOCUS_CLASSES);
+    if (previousTabIndex === null) element.removeAttribute('tabindex');
+    else element.setAttribute('tabindex', previousTabIndex);
+    if (previousCandidate === null) element.removeAttribute('data-mio-navigation-focus-candidate');
+    else element.setAttribute('data-mio-navigation-focus-candidate', previousCandidate);
+  }, 1800);
+}
+
+export function navigateToCandidateLifecycleSurface(
+  surface?: string,
+  candidateId?: string,
+  runtimeModel?: string,
+): boolean {
   if (typeof document === 'undefined') return false;
   const id = lifecycleSurfaceIdForLabel(surface);
   if (!id) return false;
-  const element = document.getElementById(id);
-  if (!element) return false;
+  const surfaceElement = document.getElementById(id);
+  if (!surfaceElement) return false;
 
-  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const previousTabIndex = element.getAttribute('tabindex');
-  element.setAttribute('tabindex', '-1');
-  element.focus({ preventScroll: true });
-  element.classList.add('ring-2', 'ring-cyan-500/50', 'ring-offset-2', 'ring-offset-[#07090e]');
-
-  globalThis.setTimeout(() => {
-    element.classList.remove('ring-2', 'ring-cyan-500/50', 'ring-offset-2', 'ring-offset-[#07090e]');
-    if (previousTabIndex === null) element.removeAttribute('tabindex');
-    else element.setAttribute('tabindex', previousTabIndex);
-  }, 1600);
+  const focusElement = candidateFocusElement(surfaceElement, runtimeModel) ?? surfaceElement;
+  focusElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  highlightElement(focusElement, candidateId);
   return true;
 }
