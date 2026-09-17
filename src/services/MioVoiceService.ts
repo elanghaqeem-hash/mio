@@ -7,6 +7,9 @@ export type MioVoiceProfile = {
   preferredVoiceHints: string[];
 };
 
+export type MioVoiceState = 'IDLE' | 'SPEAKING';
+export type MioVoiceListener = (state: MioVoiceState) => void;
+
 /**
  * Mio V2 voice identity.
  * External recordings are character references only: never clone,
@@ -39,6 +42,8 @@ export class MioVoiceService {
   private profile: MioVoiceProfile;
   private runtimeInstalled = false;
   private nativeSpeak: ((utterance: SpeechSynthesisUtterance) => void) | null = null;
+  private state: MioVoiceState = 'IDLE';
+  private listeners = new Set<MioVoiceListener>();
 
   constructor(profile: MioVoiceProfile = MIO_V2_VOICE) {
     this.profile = profile;
@@ -46,6 +51,20 @@ export class MioVoiceService {
 
   isAvailable() {
     return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+  }
+
+  getState() { return this.state; }
+
+  subscribe(listener: MioVoiceListener) {
+    this.listeners.add(listener);
+    listener(this.state);
+    return () => this.listeners.delete(listener);
+  }
+
+  private setState(state: MioVoiceState) {
+    if (this.state === state) return;
+    this.state = state;
+    for (const listener of this.listeners) listener(state);
   }
 
   private applyProfile(utterance: SpeechSynthesisUtterance) {
@@ -58,10 +77,19 @@ export class MioVoiceService {
     return utterance;
   }
 
+  private bindLifecycle(utterance: SpeechSynthesisUtterance) {
+    const originalStart = utterance.onstart;
+    const originalEnd = utterance.onend;
+    const originalError = utterance.onerror;
+    utterance.onstart = (event) => { this.setState('SPEAKING'); originalStart?.call(utterance, event); };
+    utterance.onend = (event) => { this.setState('IDLE'); originalEnd?.call(utterance, event); };
+    utterance.onerror = (event) => { this.setState('IDLE'); originalError?.call(utterance, event); };
+    return utterance;
+  }
+
   /**
-   * Installs a compatibility layer so legacy Mio speech calls also receive
-   * the V2 identity. This lets existing UI code keep using speechSynthesis
-   * while voice output is governed centrally here.
+   * Compatibility layer for legacy speech calls. Existing UI code can keep
+   * using speechSynthesis while Mio's profile and lifecycle stay centralized.
    */
   installRuntime() {
     if (!this.isAvailable() || this.runtimeInstalled) return false;
@@ -69,23 +97,22 @@ export class MioVoiceService {
     this.nativeSpeak = synthesis.speak.bind(synthesis);
     const service = this;
     synthesis.speak = function mioV2Speak(utterance: SpeechSynthesisUtterance) {
-      service.nativeSpeak?.(service.applyProfile(utterance));
+      service.nativeSpeak?.(service.bindLifecycle(service.applyProfile(utterance)));
     };
     this.runtimeInstalled = true;
-
-    // Browser voice lists can arrive asynchronously. The profile is applied
-    // again at speak-time, so newly available Indonesian voices are picked up.
     return true;
   }
 
   stop() {
-    if (this.isAvailable()) window.speechSynthesis.cancel();
+    if (!this.isAvailable()) return;
+    window.speechSynthesis.cancel();
+    this.setState('IDLE');
   }
 
   speak(text: string) {
     if (!text.trim() || !this.isAvailable()) return false;
     this.stop();
-    const utterance = this.applyProfile(new SpeechSynthesisUtterance(text.trim()));
+    const utterance = this.bindLifecycle(this.applyProfile(new SpeechSynthesisUtterance(text.trim())));
     if (this.nativeSpeak) this.nativeSpeak(utterance);
     else window.speechSynthesis.speak(utterance);
     return true;
