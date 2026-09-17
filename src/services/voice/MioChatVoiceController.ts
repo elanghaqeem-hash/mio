@@ -10,39 +10,41 @@ export type MioChatVoiceListener = (state: MioVoiceTurnState) => void;
 export class MioChatVoiceController {
   private detachVad: (() => Promise<void>) | null = null;
   private vadStarting: Promise<void> | null = null;
+  private lastResultHandler: ((result: MioTranscriptionResult) => void) | null = null;
+  private lastPreferredProviderId: string | undefined;
 
   constructor(private readonly turns: MioVoiceTurnManager = mioVoiceTurnManager) {}
-
   subscribe(listener: MioChatVoiceListener): () => void { return this.turns.subscribe(listener); }
   getState(): MioVoiceTurnState { return this.turns.getState(); }
   getLocale(text = ''): string { return text ? mioVoice.resolveLocale(text) : mioVoice.getRecognitionLocale(); }
   setPreferredLocale(locale: string): void { mioVoice.setPreferredLocale(locale); }
   async capabilities() { return mioVoiceProviders.statuses(); }
 
-  /** Enables local energy-based barge-in. Audio is never persisted. */
   async enableAutomaticBargeIn(): Promise<void> {
     if (this.detachVad) return;
     if (this.vadStarting) return this.vadStarting;
     this.vadStarting = (async () => {
-      const detach = await this.turns.attachVoiceActivityDetector(webAudioVoiceActivityDetector, { autoInterruptOnVoiceActivity: true });
+      const detach = await this.turns.attachVoiceActivityDetector(webAudioVoiceActivityDetector, {
+        autoInterruptOnVoiceActivity: true,
+        onVoiceActivityInterrupt: async () => {
+          const handler = this.lastResultHandler;
+          if (!handler) return;
+          // Release WebAudio capture before STT takes ownership of the microphone.
+          await this.disableAutomaticBargeIn();
+          await this.startListening(handler, this.lastPreferredProviderId);
+        },
+      });
       this.detachVad = detach;
     })();
-    try { await this.vadStarting; }
-    finally { this.vadStarting = null; }
+    try { await this.vadStarting; } finally { this.vadStarting = null; }
   }
 
-  async disableAutomaticBargeIn(): Promise<void> {
-    const detach = this.detachVad;
-    this.detachVad = null;
-    if (detach) await detach();
-  }
+  async disableAutomaticBargeIn(): Promise<void> { const detach = this.detachVad; this.detachVad = null; if (detach) await detach(); }
 
   async startListening(onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
+    this.lastResultHandler = onResult; this.lastPreferredProviderId = preferredProviderId;
     const locale = this.getLocale();
-    await this.turns.beginUserTurn(locale, (result) => {
-      if (result.text) mioVoice.resolveLocale(result.text);
-      onResult(result);
-    }, { preferredProviderId });
+    await this.turns.beginUserTurn(locale, (result) => { if (result.text) mioVoice.resolveLocale(result.text); onResult(result); }, { preferredProviderId });
   }
 
   async stop(): Promise<void> { await this.turns.interrupt(); }
@@ -55,17 +57,14 @@ export class MioChatVoiceController {
 
   async toggleListening(onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
     if (this.getState() === 'USER_TURN') { await this.stop(); return; }
+    await this.disableAutomaticBargeIn();
     await this.startListening(onResult, preferredProviderId);
-    // Arm VAD only after the explicit STT session releases the microphone. This
-    // avoids competing captures on mobile Safari while ensuring subsequent Mio
-    // speech can be interrupted naturally. VAD failure must not break STT.
-    try { await this.enableAutomaticBargeIn(); }
-    catch (error) { console.warn('[Mio Voice] Automatic barge-in unavailable:', error); }
+    try { await this.enableAutomaticBargeIn(); } catch (error) { console.warn('[Mio Voice] Automatic barge-in unavailable:', error); }
   }
 
   async dispose(): Promise<void> {
-    await this.disableAutomaticBargeIn();
-    await this.stop();
+    this.lastResultHandler = null; this.lastPreferredProviderId = undefined;
+    await this.disableAutomaticBargeIn(); await this.stop();
   }
 }
 
