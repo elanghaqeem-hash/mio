@@ -18,6 +18,7 @@ export const PromotedModelPanel: React.FC = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [liveRefreshing, setLiveRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const backgroundSequence = useRef(0);
@@ -35,10 +36,11 @@ export const PromotedModelPanel: React.FC = () => {
       if (requestId === requestSequence.current) {
         setStatus(nextStatus);
         setModels(promoted);
+        setRefreshError(null);
       }
     } catch (error) {
       if (requestId === requestSequence.current) {
-        setMessage(error instanceof Error ? error.message : 'Promoted model runtime status refresh failed');
+        setRefreshError(error instanceof Error ? error.message : 'Promoted model runtime status refresh failed');
       }
     } finally {
       if (background) {
@@ -152,6 +154,7 @@ export const PromotedModelPanel: React.FC = () => {
           </div>
         )}
 
+        {refreshError && <div className="rounded border border-red-500/30 bg-red-950/10 px-3 py-2 text-[10px] text-red-300">LIVE STATUS REFRESH FAILED — {refreshError}</div>}
         {message && <div className="rounded border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-[10px] text-cyan-200">{message}</div>}
       </div>
     </>
