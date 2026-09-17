@@ -1,4 +1,6 @@
 import { CreativeOrchestrator, type CreativePlanStep } from '../../agents/CreativeOrchestrator';
+import { eventBus } from '../../core/EventBus';
+import { ProjectManager } from '../../project/ProjectManager';
 import type { MioSystemMode } from '../../types/core';
 import type { MioTool } from '../../types/tools';
 
@@ -19,6 +21,7 @@ export interface CreativeExecutionOutput {
     outputAssetId?: string;
   }>;
   outputAssetIds: string[];
+  primaryAssetId?: string;
 }
 
 export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExecutionOutput> = {
@@ -63,11 +66,22 @@ export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExec
     if (!completed) throw new Error(`${requestedMode} Creative Engine pipeline failed validation or execution`);
 
     const outputAssetIds = steps.flatMap((step) => step.outputAssetId ? [step.outputAssetId] : []);
+    const primaryAssetId = [...steps].reverse().find((step) => step.mode === requestedMode && step.outputAssetId)?.outputAssetId ?? outputAssetIds.at(-1);
+    if (primaryAssetId) {
+      const asset = ProjectManager.getProject().assets.find((candidate) => candidate.id === primaryAssetId);
+      if (asset) {
+        eventBus.emit('CREATIVE_ASSET_READY', { taskId: context.taskId, assetId: asset.id, assetType: asset.type, mode: requestedMode, name: asset.name });
+        eventBus.emit('SWITCH_MODE', requestedMode);
+        eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Creative handoff ${asset.id} → ${requestedMode} studio`, mode: requestedMode });
+      }
+    }
+
     return {
       mode: requestedMode,
       completed,
       steps: steps.map((step) => ({ id: step.id, mode: step.mode, status: step.status, outputAssetId: step.outputAssetId })),
       outputAssetIds,
+      primaryAssetId,
     };
   },
   validateOutput: (output) => output.completed === true && output.outputAssetIds.length > 0 && output.steps.every((step) => step.status === 'completed'),
