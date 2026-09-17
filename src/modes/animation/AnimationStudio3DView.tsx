@@ -1,17 +1,15 @@
 import React from 'react';
-import { AnimationStudioView } from './AnimationStudioView';
+import { AnimationNativeWorkspace } from './AnimationNativeWorkspace';
 
 /**
- * 3D Animation workspace entry point.
- *
- * The native WebGL viewport is intentionally no longer mounted as an overlay
- * here. Animation3DViewportBridge is now controlled and must be mounted by the
- * authoritative AnimationStudioView document/editor owner so there is only one
- * project and editor-state source of truth.
+ * 3D Animation Studio entry point.
+ * The native workspace owns exactly one creative document and one document-scoped
+ * AnimationEditorState provider. Legacy DOM viewport ownership is no longer part
+ * of the production entry path.
  */
 export const AnimationStudio3DView: React.FC = () => (
   <div className="relative h-full w-full overflow-hidden">
-    <AnimationStudioView />
+    <AnimationNativeWorkspace />
   </div>
 );
 
