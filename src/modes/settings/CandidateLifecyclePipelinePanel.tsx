@@ -36,7 +36,15 @@ function StageIcon({ state }: { state: CandidateLifecycleStageState }) {
   return <CircleDashed size={12} />;
 }
 
-function StageCard({ stage }: { stage: CandidateLifecycleStage }) {
+function StageCard({
+  stage,
+  candidateId,
+  runtimeModel,
+}: {
+  stage: CandidateLifecycleStage;
+  candidateId: string;
+  runtimeModel: string;
+}) {
   const navigable = Boolean(lifecycleSurfaceIdForLabel(stage.actionSurface));
   return (
     <div className={`rounded border p-2.5 space-y-1.5 ${stateClasses(stage.state)}`}>
@@ -52,10 +60,10 @@ function StageCard({ stage }: { stage: CandidateLifecycleStage }) {
           {navigable && (
             <button
               type="button"
-              onClick={() => navigateToCandidateLifecycleSurface(stage.actionSurface)}
+              onClick={() => navigateToCandidateLifecycleSurface(stage.actionSurface, candidateId, runtimeModel)}
               className="flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[8px] font-bold text-cyan-300 hover:bg-cyan-950/30"
             >
-              <ArrowDownToLine size={9} /> GO TO SURFACE
+              <ArrowDownToLine size={9} /> GO TO CANDIDATE
             </button>
           )}
         </div>
@@ -104,7 +112,7 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
       </div>
 
       <p className="text-[10px] leading-relaxed text-gray-500">
-        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass. <strong className="text-cyan-300">GO TO SURFACE</strong> only navigates within Settings and never executes the gate.
+        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass. <strong className="text-cyan-300">GO TO CANDIDATE</strong> only navigates/highlights a unique visible candidate card; ambiguous or missing matches fall back to the panel and never execute the gate.
       </p>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -134,7 +142,9 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
           )}
 
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {snapshot.stages.map((item) => <StageCard key={item.id} stage={item} />)}
+            {snapshot.stages.map((item) => (
+              <StageCard key={item.id} stage={item} candidateId={snapshot.candidateId} runtimeModel={snapshot.runtimeModel} />
+            ))}
           </div>
         </div>
       ))}
