@@ -1,5 +1,7 @@
+import { CompanionContinuity } from '../intelligence/CompanionContinuity';
 import { CompanionPromptAdapter } from '../intelligence/CompanionPromptAdapter';
 import { CompanionRuntimePolicy } from '../intelligence/CompanionRuntimePolicy';
+import type { ModelMessage } from '../types/models';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -43,6 +45,25 @@ export async function runCompanionPromptAdapterTests(): Promise<{ passed: number
     () => {
       assert(CompanionRuntimePolicy.shouldPersistAsRelationshipPreference('Mulai sekarang saya lebih suka kamu dengarkan dulu sebelum memberi solusi.'), 'explicit stable interaction preference may become a governed memory candidate');
       assert(!CompanionRuntimePolicy.shouldPersistAsRelationshipPreference('Aku capek hari ini.'), 'transient emotional episode must not become a relationship preference');
+    },
+    () => {
+      const history: ModelMessage[] = [
+        { role: 'user', content: 'Aku capek banget dan banyak pikiran.' },
+        { role: 'assistant', content: 'Aku dengarkan.' },
+      ];
+      const continuity = CompanionContinuity.fromRecentConversation('Iya, masih.', history);
+      assert(continuity.previousAssessment?.primaryEmotion === 'STRESS' || continuity.previousAssessment?.primaryEmotion === 'EXHAUSTION', 'short continuation may inherit only a recent ephemeral emotional hint');
+      assert(continuity.durable === false && !!continuity.continuationHint, 'continuity must remain explicitly ephemeral and non-memory');
+    },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku sedih banget.' }];
+      const continuity = CompanionContinuity.fromRecentConversation('Sekarang aku baik kok.', history);
+      assert(!continuity.previousAssessment && continuity.sourceTurns === 0, 'explicit recovery/reset must override prior emotional context');
+    },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku cemas tadi.' }];
+      const continuity = CompanionContinuity.fromRecentConversation('Tolong buat analisis ICAAP.', history);
+      assert(!continuity.previousAssessment, 'new explicit technical request must not inherit prior emotional context');
     },
   ];
 
