@@ -1,4 +1,4 @@
-import type { MioLocale, MioTranscriptionResult } from './MioVoiceProvider';
+import type { MioLocale, MioTranscriptionResult, MioVoiceProsodyHint } from './MioVoiceProvider';
 import { mioVoiceRuntimeV3, type MioVoiceRuntimeV3 } from './MioVoiceRuntimeV3';
 
 export type MioVoiceTurnState = 'IDLE' | 'USER_TURN' | 'THINKING' | 'MIO_TURN' | 'INTERRUPTING';
@@ -6,7 +6,7 @@ export type MioVoiceTurnListener = (state: MioVoiceTurnState) => void;
 
 export interface MioVoiceActivityEvent { active: boolean; level?: number; timestamp?: number; }
 export interface MioVoiceActivityDetector { readonly id: string; start(onActivity: (event: MioVoiceActivityEvent) => void, signal?: AbortSignal): Promise<void> | void; stop(): Promise<void> | void; }
-export interface MioVoiceTurnOptions { preferredProviderId?: string; autoInterruptOnVoiceActivity?: boolean; onVoiceActivityInterrupt?: (event: MioVoiceActivityEvent) => void | Promise<void>; }
+export interface MioVoiceTurnOptions { preferredProviderId?: string; autoInterruptOnVoiceActivity?: boolean; onVoiceActivityInterrupt?: (event: MioVoiceActivityEvent) => void | Promise<void>; prosody?: MioVoiceProsodyHint; }
 
 /** Coordinates conversational ownership above STT/TTS providers. */
 export class MioVoiceTurnManager {
@@ -33,7 +33,7 @@ export class MioVoiceTurnManager {
 
   async beginMioTurn(text: string, locale: MioLocale, options: MioVoiceTurnOptions = {}): Promise<void> {
     const generation = ++this.turnGeneration; await this.runtime.interrupt(); if (generation !== this.turnGeneration) return; this.setState('MIO_TURN');
-    try { await this.runtime.speak(text, locale, options.preferredProviderId); }
+    try { await this.runtime.speak(text, locale, options.preferredProviderId, options.prosody); }
     catch (error) { if (generation === this.turnGeneration) this.setState('IDLE'); throw error; }
     finally { if (generation === this.turnGeneration) this.setState('IDLE'); }
   }
