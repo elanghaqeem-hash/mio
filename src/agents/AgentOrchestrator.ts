@@ -65,6 +65,7 @@ export interface StructuredAgentResponse {
 }
 
 const defaultToolRouter = new ToolRouter(createDefaultToolRegistry());
+const CREATIVE_EXECUTION_MODES = new Set<MioSystemMode>(['3D', 'ANIMATION', 'MOTION_2D', 'GRAPHIC', 'DRAWING', 'PHOTO', 'SFX', 'MUSIC']);
 
 export class AgentOrchestrator {
   public static async processPrompt(prompt: string, conversation: ModelMessage[] = [], options: AgentPromptOptions = {}): Promise<StructuredAgentResponse> {
@@ -183,6 +184,37 @@ export class AgentOrchestrator {
       taskRuntime.completeStep(taskId, 'execute'); await taskScheduler.waitUntilRunnable(taskId);
       taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId); eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
       return this.withTask({ ...this.response(`Project inspection requested: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', 'project.inspect executed through ToolRouter.', result.validation, `Current project: ${result.data.name}. Active mode: ${result.data.activeMode}. Assets: ${result.data.assetCount}.`, ['Open Project workspace for details', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'project.inspect' }, taskId);
+    }
+
+    if (CREATIVE_EXECUTION_MODES.has(mode)) {
+      taskRuntime.startStep(taskId, 'execute');
+      const result = await defaultToolRouter.execute<{ mode: MioSystemMode; completed: boolean; outputAssetIds: string[]; steps: Array<{ id: string; mode: string; status: string; outputAssetId?: string }> }>(
+        'creative.execute',
+        { prompt: normalizedInput, requestedMode: mode },
+        executionContext,
+      );
+      if (!result.success || !result.data) {
+        if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId);
+        taskRuntime.fail(taskId, result.error ?? `${mode} Creative Engine execution failed`);
+        return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'creative.execute', result.error), taskId);
+      }
+      taskRuntime.completeStep(taskId, 'execute'); await taskScheduler.waitUntilRunnable(taskId);
+      taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId); eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId}: creative.execute produced ${result.data.outputAssetIds.length} validated asset(s) in ${mode}`, mode });
+      return this.withTask({
+        ...this.response(
+          `Creative directive analyzed: "${normalizedInput}"`,
+          plan,
+          'AUTHORIZED_BY_TOOL_GATE',
+          `creative.execute completed ${result.data.steps.length} native Creative Engine step(s).`,
+          result.validation,
+          `${mode} Creative Engine execution completed and persisted ${result.data.outputAssetIds.length} validated project asset(s).`,
+          [`Open ${mode} workspace to inspect or refine the generated asset`, 'Inspect execution lineage in Task Monitor'],
+          mode,
+          emotionalContext,
+        ),
+        toolId: 'creative.execute',
+      }, taskId);
     }
 
     if (mode === 'CHAT') {
