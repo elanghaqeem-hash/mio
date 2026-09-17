@@ -77,13 +77,7 @@ export const createStudioStateCommand = <T>(document: CreativeDocument, fileName
     commands: [
       ...deletes,
       ...creates,
-      {
-        type: 'document.update',
-        changes: {
-          metadata: { ...document.metadata, legacyManagedNodeIds: [...projected.rootNodeIds], legacyData: structuredClone(state) },
-          ...(projected.timeline ? { timeline: projected.timeline } : {}),
-        },
-      },
+      { type: 'document.update', changes: { metadata: { ...document.metadata, legacyManagedNodeIds: [...projected.rootNodeIds], legacyData: structuredClone(state) }, ...(projected.timeline ? { timeline: projected.timeline } : {}) } },
       { type: 'selection.set', nodeIds: selectedNodeId ? [selectedNodeId] : [], primaryNodeId: selectedNodeId },
     ],
   };
@@ -142,7 +136,7 @@ export const useCreativeStudioDocument = <T,>(fileName: string, initialState: T)
   }, [fileName, runtime, syncSnapshot]);
 
   useEffect(() => {
-    if (!studioMode) return;
+    if (!studioMode || status === 'LOADING' || status === 'ERROR') return;
     const applyHandoff = (handoff: CreativeAssetHandoff) => {
       if (handoff.mode !== studioMode) return;
       const asset = ProjectManager.getProject().assets.find((candidate) => candidate.id === handoff.assetId);
@@ -151,10 +145,10 @@ export const useCreativeStudioDocument = <T,>(fileName: string, initialState: T)
       creativeAssetHandoff.consume(studioMode);
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Loaded generated asset ${asset.name} into ${studioMode} studio`, mode: studioMode });
     };
-    const pending = creativeAssetHandoff.consume(studioMode);
-    if (pending) applyHandoff(pending);
+    const pending = creativeAssetHandoff.peek();
+    if (pending?.mode === studioMode) applyHandoff(pending);
     return eventBus.on<CreativeAssetHandoff>('CREATIVE_ASSET_READY', applyHandoff);
-  }, [setState, studioMode]);
+  }, [setState, status, studioMode]);
 
   const undo = useCallback(() => {
     const snapshot = runtime.kernel.undo('user');
