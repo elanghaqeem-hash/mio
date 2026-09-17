@@ -113,9 +113,21 @@ class TaskRuntimeController {
 
   public fail(taskId: string, error: string): RuntimeTask | undefined {
     const task = this.getMutable(taskId); if (!task || TERMINAL_STATES.has(task.status)) return task ? this.clone(task) : undefined;
-    const runningStep = task.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = error; runningStep.completedAt = Date.now(); if (!runningStep.resultBinding) runningStep.resultBinding = { kind: runningStep.id === 'execute' ? 'CONTROL' : 'VALIDATION', operationId: `runtime:${runningStep.id}`, outcome: 'FAILED', validationStatus: 'FAILED', recordedAt: Date.now() }; }
-    task.status = 'FAILED'; task.error = error; task.completedAt = Date.now(); task.updatedAt = task.completedAt; this.cancellationHandlers.delete(taskId);
-    this.recalculateProgress(task); this.emitTaskEvent(taskId, 'FAILED', error); this.publishSnapshot(); return this.clone(task);
+    const failedAt = Date.now();
+    const runningStep = task.steps.find((step) => step.status === 'RUNNING');
+    if (runningStep) {
+      runningStep.status = 'FAILED'; runningStep.error = error; runningStep.completedAt = failedAt;
+      if (!runningStep.resultBinding) runningStep.resultBinding = { kind: runningStep.id === 'execute' ? 'CONTROL' : 'VALIDATION', operationId: `runtime:${runningStep.id}`, outcome: 'FAILED', validationStatus: 'FAILED', recordedAt: failedAt };
+    }
+    task.steps.forEach((step) => {
+      if (step.status === 'PENDING') {
+        step.status = 'SKIPPED';
+        step.error = `Skipped because task failed${runningStep ? ` at ${runningStep.id}` : ''}`;
+        step.completedAt = failedAt;
+      }
+    });
+    task.status = 'FAILED'; task.error = error; task.completedAt = failedAt; task.updatedAt = failedAt; task.progress = 100; this.cancellationHandlers.delete(taskId);
+    this.emitTaskEvent(taskId, 'FAILED', error); this.publishSnapshot(); return this.clone(task);
   }
 
   public scheduleRetry(taskId: string): RuntimeTask | undefined {
@@ -161,6 +173,8 @@ class TaskRuntimeController {
     if (!TERMINAL_STATES.has(normalized.status)) {
       const recoveredAt = Date.now(); normalized.status = 'FAILED'; normalized.error = 'Execution interrupted by application/runtime restart. Explicit retry is required.'; normalized.completedAt = recoveredAt; normalized.updatedAt = recoveredAt;
       const runningStep = normalized.steps.find((step) => step.status === 'RUNNING'); if (runningStep) { runningStep.status = 'FAILED'; runningStep.error = 'Interrupted by runtime restart'; runningStep.completedAt = recoveredAt; if (!runningStep.resultBinding) runningStep.resultBinding = { kind: 'CONTROL', operationId: `runtime:${runningStep.id}`, outcome: 'FAILED', validationStatus: 'INTERRUPTED', recordedAt: recoveredAt }; }
+      normalized.steps.forEach((step) => { if (step.status === 'PENDING') { step.status = 'SKIPPED'; step.error = 'Skipped because execution was interrupted by runtime restart'; step.completedAt = recoveredAt; } });
+      normalized.progress = 100;
     }
     return normalized;
   }
