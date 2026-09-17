@@ -68,94 +68,9 @@ import { runCreativeWorkspaceIntegrationTests } from './creativeWorkspaceIntegra
 import { runCreativeEngine18Tests } from './creativeEngine18Tests';
 import { runAnimationRigMathTests } from './animationRigMathTests';
 import { runAnimationGestureStateTests } from './animationGestureStateTests';
+import { runAnimationEditorStateTests } from './animationEditorStateTests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
 import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
 
-const runners = [
-  runMioTestSuite,
-  async () => runResearchConflictTests(),
-  runToolRouterTests,
-  runModelRouterTests,
-  runMioLocalProviderTests,
-  runMioLocalBrowserAgentTests,
-  runLocalInferenceBackendTests,
-  runTrainingFoundationTests,
-  runTrainingBundleTests,
-  runTrainingRunHandoffTests,
-  runTrainingArtifactBindingTests,
-  runTrainingCandidateEvidencePackageTests,
-  runSignedCandidateEvidencePackageTests,
-  runTrainingCandidateRegistryTests,
-  runTrainingCandidateReviewTests,
-  runTrainingCandidateLabTests,
-  runCandidateLifecyclePipelineTests,
-  runCandidateLifecycleGuidedNavigationTests,
-  runCandidateLifecycleLiveRefreshTests,
-  runCandidateAttentionQueueTests,
-  runAdapterIntegrityTests,
-  runAdapterIntegrityReviewGateTests,
-  runSignedModelArtifactProvenanceTests,
-  runSignedProvenancePromotionGateTests,
-  runModelSignerTrustAuditTests,
-  runModelSignerTrustAuditChainTests,
-  runSignerAuditPortableBundleTests,
-  runModelPromotionTests,
-  runModelPromotionServiceTests,
-  runPromotedModelActivationTests,
-  runPostPromotionIntegrityActivationTests,
-  runAiProxyTests,
-  runResearchProxyTests,
-  runContextContinuityTests,
-  runModelContextAssemblerTests,
-  runSystemPreferencesTests,
-  runTaskRuntimeTests,
-  runTaskSchedulerTests,
-  runTaskIntegrityTests,
-  runResourceGovernanceTests,
-  runScopedAuthorizationTests,
-  runCapabilityGatewayTests,
-  runDesktopWorkspaceBridgeTests,
-  runDesktopBrowserBridgeTests,
-  runDesktopTrainingGatewayTests,
-  runDesktopTrainingHandoffIngestionTests,
-  runKnowledgeIngestionTests,
-  runProjectKnowledgeIndexTests,
-  runKnowledgeGovernanceWorkflowTests,
-  runKnowledgeHealthTests,
-  runKnowledgeCorroborationTests,
-  runMemoryGovernanceTests,
-  runKnowledgeLineageDiagnosticsTests,
-  runResearchKnowledgePromotionTests,
-  runResearchRevalidationTests,
-  runKnowledgeReviewInboxTests,
-  runEvidencePackageTests,
-  runCreativePipelineTests,
-  runSecurityPermissionCompletionTests,
-  runCreativeDocumentKernelTests,
-  runCreativeStudioIntegrationTests,
-  runCreative3DAnimationWorkspaceTests,
-  runCreativeDrawingGraphicWorkspaceTests,
-  runCreativePhotoWorkspaceTests,
-  runCreativeMotion2DWorkspaceTests,
-  runCreativeAudioWorkspaceTests,
-  runCreativeWorkspaceIntegrationTests,
-  runCreativeEngine18Tests,
-  runAnimationRigMathTests,
-  runAnimationGestureStateTests,
-  runEmotionalIntelligenceEngineTests,
-  runCompanionPromptAdapterTests,
-];
-
-async function main(): Promise<void> {
-  const results = [];
-  for (const run of runners) results.push(await run());
-  const passed = results.reduce((sum, result) => sum + result.passed, 0);
-  const total = results.reduce((sum, result) => sum + result.total, 0);
-  console.log(`TOTAL VALIDATION: ${passed}/${total}`);
-  if (passed !== total) process.exitCode = 1;
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+const runners = [runMioTestSuite,async()=>runResearchConflictTests(),runToolRouterTests,runModelRouterTests,runMioLocalProviderTests,runMioLocalBrowserAgentTests,runLocalInferenceBackendTests,runTrainingFoundationTests,runTrainingBundleTests,runTrainingRunHandoffTests,runTrainingArtifactBindingTests,runTrainingCandidateEvidencePackageTests,runSignedCandidateEvidencePackageTests,runTrainingCandidateRegistryTests,runTrainingCandidateReviewTests,runTrainingCandidateLabTests,runCandidateLifecyclePipelineTests,runCandidateLifecycleGuidedNavigationTests,runCandidateLifecycleLiveRefreshTests,runCandidateAttentionQueueTests,runAdapterIntegrityTests,runAdapterIntegrityReviewGateTests,runSignedModelArtifactProvenanceTests,runSignedProvenancePromotionGateTests,runModelSignerTrustAuditTests,runModelSignerTrustAuditChainTests,runSignerAuditPortableBundleTests,runModelPromotionTests,runModelPromotionServiceTests,runPromotedModelActivationTests,runPostPromotionIntegrityActivationTests,runAiProxyTests,runResearchProxyTests,runContextContinuityTests,runModelContextAssemblerTests,runSystemPreferencesTests,runTaskRuntimeTests,runTaskSchedulerTests,runTaskIntegrityTests,runResourceGovernanceTests,runScopedAuthorizationTests,runCapabilityGatewayTests,runDesktopWorkspaceBridgeTests,runDesktopBrowserBridgeTests,runDesktopTrainingGatewayTests,runDesktopTrainingHandoffIngestionTests,runKnowledgeIngestionTests,runProjectKnowledgeIndexTests,runKnowledgeGovernanceWorkflowTests,runKnowledgeHealthTests,runKnowledgeCorroborationTests,runMemoryGovernanceTests,runKnowledgeLineageDiagnosticsTests,runResearchKnowledgePromotionTests,runResearchRevalidationTests,runKnowledgeReviewInboxTests,runEvidencePackageTests,runCreativePipelineTests,runSecurityPermissionCompletionTests,runCreativeDocumentKernelTests,runCreativeStudioIntegrationTests,runCreative3DAnimationWorkspaceTests,runCreativeDrawingGraphicWorkspaceTests,runCreativePhotoWorkspaceTests,runCreativeMotion2DWorkspaceTests,runCreativeAudioWorkspaceTests,runCreativeWorkspaceIntegrationTests,runCreativeEngine18Tests,runAnimationRigMathTests,runAnimationGestureStateTests,runAnimationEditorStateTests,runEmotionalIntelligenceEngineTests,runCompanionPromptAdapterTests];
+async function main():Promise<void>{const results=[];for(const run of runners)results.push(await run());const passed=results.reduce((sum,result)=>sum+result.passed,0),total=results.reduce((sum,result)=>sum+result.total,0);console.log(`TOTAL VALIDATION: ${passed}/${total}`);if(passed!==total)process.exitCode=1}main().catch(error=>{console.error(error);process.exitCode=1});
