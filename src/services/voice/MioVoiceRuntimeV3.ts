@@ -1,12 +1,12 @@
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
 import { productionSynthesisVoiceProvider } from './ProductionSynthesisVoiceProvider';
-import type { MioLocale, MioTranscriptionResult, MioVoiceProvider, MioVoiceProviderCapability } from './MioVoiceProvider';
+import type { MioLocale, MioTranscriptionResult, MioVoiceProsodyHint, MioVoiceProvider, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
 export type MioVoiceRuntimeListener = (state: MioVoiceRuntimeState) => void;
 
-/** Provider-neutral runtime facade for Mio Voice V3 with V4 production TTS preference. */
+/** Provider-neutral runtime facade for Mio Voice V3 with V4 production TTS preference and bounded companion prosody. */
 export class MioVoiceRuntimeV3 {
   private state: MioVoiceRuntimeState = 'IDLE'; private listeners = new Set<MioVoiceRuntimeListener>(); private activeController: AbortController | null = null; private activeProviderId: string | null = null;
   constructor(private readonly registry: MioVoiceProviderRegistry = mioVoiceProviders) {}
@@ -23,17 +23,17 @@ export class MioVoiceRuntimeV3 {
     if (controller) this.settle(controller); else { this.activeProviderId = null; this.setState('IDLE'); }
   }
 
-  private async speakWithProvider(provider: MioVoiceProvider, text: string, locale: MioLocale, controller: AbortController): Promise<void> {
+  private async speakWithProvider(provider: MioVoiceProvider, text: string, locale: MioLocale, controller: AbortController, prosody?: MioVoiceProsodyHint): Promise<void> {
     this.activeProviderId = provider.id;
-    await provider.speak({ text, locale, signal: controller.signal });
+    await provider.speak({ text, locale, signal: controller.signal, prosody });
   }
 
-  async speak(text: string, locale: MioLocale, preferredProviderId = productionSynthesisVoiceProvider.id): Promise<void> {
+  async speak(text: string, locale: MioLocale, preferredProviderId = productionSynthesisVoiceProvider.id, prosody?: MioVoiceProsodyHint): Promise<void> {
     await this.interrupt();
     const provider = await this.select('TTS', preferredProviderId);
     const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
     try {
-      await this.speakWithProvider(provider, text, locale, controller);
+      await this.speakWithProvider(provider, text, locale, controller, prosody);
     } catch (error) {
       if (controller.signal.aborted) return;
       // A provider may pass readiness and still fail during synthesis/playback. Keep Mio audible by retrying once with device TTS.
@@ -41,7 +41,7 @@ export class MioVoiceRuntimeV3 {
         await Promise.allSettled([provider.stopSpeaking()]);
         const fallback = await this.registry.select('TTS', deviceVoiceProvider.id);
         if (fallback && fallback.provider.id !== provider.id && !controller.signal.aborted) {
-          await this.speakWithProvider(fallback.provider, text, locale, controller);
+          await this.speakWithProvider(fallback.provider, text, locale, controller, prosody);
           return;
         }
       }

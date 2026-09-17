@@ -1,6 +1,7 @@
 export type MioVoiceProfile = {
   id: string; locale: string; rate: number; pitch: number; volume: number; preferredVoiceHints: string[];
 };
+export type MioVoiceProsody = { rateMultiplier?: number; pitchDelta?: number; volumeMultiplier?: number };
 export type MioVoiceState = 'IDLE' | 'SPEAKING';
 export type MioVoiceListener = (state: MioVoiceState) => void;
 export type MioLanguage = { locale: string; label: string; shortLabel: string };
@@ -45,7 +46,6 @@ export function detectMioLocale(text: string, fallback = 'id-ID'): string {
   if (/\p{Script=Hangul}/u.test(value)) return 'ko-KR'; if (/\p{Script=Hiragana}|\p{Script=Katakana}/u.test(value)) return 'ja-JP';
   if (/\p{Script=Thai}/u.test(value)) return 'th-TH'; if (/\p{Script=Cyrillic}/u.test(value)) return 'ru-RU'; if (/\p{Script=Han}/u.test(value)) return 'zh-CN';
   const latin = scoreLatinLocale(value); if (latin) return latin;
-  // Short/ambiguous Latin utterances inherit the active session language instead of incorrectly flipping to English.
   const words = value.match(/[A-Za-zÀ-ž]+/g) ?? [];
   return words.length >= 4 ? 'en-US' : fallback;
 }
@@ -56,6 +56,8 @@ function chooseVoice(voices: SpeechSynthesisVoice[], locale: string, profile: Mi
     ?? voices.find((voice) => voice.lang.toLowerCase().startsWith(`${language}-`))
     ?? (language === 'id' ? voices.find((voice) => profile.preferredVoiceHints.some((hint) => `${voice.name} ${voice.lang}`.toLowerCase().includes(hint.toLowerCase()))) : undefined) ?? null;
 }
+
+function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)); }
 
 export class MioVoiceService {
   private profile: MioVoiceProfile; private runtimeInstalled = false; private nativeSpeak: ((utterance: SpeechSynthesisUtterance) => void) | null = null;
@@ -68,9 +70,12 @@ export class MioVoiceService {
   getRecognitionLocale() { if (this.preferredLocale !== 'auto') return this.preferredLocale; if (this.lastDetectedLocale) return this.lastDetectedLocale; if (typeof navigator !== 'undefined' && navigator.language) return navigator.language; return this.profile.locale; }
   subscribe(listener: MioVoiceListener): () => void { this.listeners.add(listener); listener(this.state); return () => { this.listeners.delete(listener); }; }
   private setState(state: MioVoiceState) { if (this.state === state) return; this.state = state; for (const listener of this.listeners) listener(state); }
-  private applyProfile(utterance: SpeechSynthesisUtterance, text = utterance.text, forcedLocale?: string) {
+  private applyProfile(utterance: SpeechSynthesisUtterance, text = utterance.text, forcedLocale?: string, prosody?: MioVoiceProsody) {
     const locale = forcedLocale && forcedLocale !== 'auto' ? forcedLocale : this.resolveLocale(text);
-    utterance.lang = locale; utterance.rate = this.profile.rate; utterance.pitch = this.profile.pitch; utterance.volume = this.profile.volume;
+    utterance.lang = locale;
+    utterance.rate = clamp(this.profile.rate * (prosody?.rateMultiplier ?? 1), 0.82, 1.08);
+    utterance.pitch = clamp(this.profile.pitch + (prosody?.pitchDelta ?? 0), 0.72, 0.92);
+    utterance.volume = clamp(this.profile.volume * (prosody?.volumeMultiplier ?? 1), 0.85, 1);
     const voice = chooseVoice(window.speechSynthesis.getVoices(), locale, this.profile); if (voice) utterance.voice = voice; return utterance;
   }
   private bindLifecycle(utterance: SpeechSynthesisUtterance) {
@@ -81,10 +86,10 @@ export class MioVoiceService {
   }
   installRuntime() { if (!this.isAvailable() || this.runtimeInstalled) return false; const synthesis = window.speechSynthesis; this.nativeSpeak = synthesis.speak.bind(synthesis); synthesis.speak = (utterance: SpeechSynthesisUtterance) => { this.nativeSpeak?.(this.bindLifecycle(this.applyProfile(utterance))); }; this.runtimeInstalled = true; return true; }
   stop() { if (!this.isAvailable()) return; window.speechSynthesis.cancel(); this.setState('IDLE'); }
-  speak(text: string, locale?: string) {
+  speak(text: string, locale?: string, prosody?: MioVoiceProsody) {
     if (!text.trim() || !this.isAvailable()) return false; this.stop();
     const forcedLocale = locale && locale !== 'auto' ? locale : undefined;
-    const utterance = this.bindLifecycle(this.applyProfile(new SpeechSynthesisUtterance(text.trim()), text, forcedLocale));
+    const utterance = this.bindLifecycle(this.applyProfile(new SpeechSynthesisUtterance(text.trim()), text, forcedLocale, prosody));
     if (forcedLocale) this.lastDetectedLocale = forcedLocale;
     if (this.nativeSpeak) this.nativeSpeak(utterance); else window.speechSynthesis.speak(utterance); return true;
   }

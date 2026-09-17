@@ -25,7 +25,7 @@ export class DeviceVoiceProvider implements MioVoiceProvider {
       const unsubscribe = mioVoice.subscribe((state) => { if (state === 'SPEAKING') speakingObserved = true; if (state === 'IDLE' && speakingObserved) finish(); });
       const abort = () => { mioVoice.stop(); finish(new DOMException('Voice request aborted.', 'AbortError')); };
       request.signal?.addEventListener('abort', abort, { once: true });
-      const started = mioVoice.speak(request.text, request.locale); if (!started) finish(new Error('Device speech synthesis is unavailable.')); else if (request.signal?.aborted) abort();
+      const started = mioVoice.speak(request.text, request.locale, request.prosody); if (!started) finish(new Error('Device speech synthesis is unavailable.')); else if (request.signal?.aborted) abort();
     });
   }
 
