@@ -10,7 +10,7 @@ export interface AnimationTrack { id:string; targetObjectId:string; property:'po
 export interface BonePose { position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; }
 export interface AnimationBone { id:string; name:string; parentId?:string; length:number; connected:boolean; ikFk:'IK'|'FK'; pose:BonePose; }
 export interface AnimationRig { id:string; name:string; objectId:string; bones:AnimationBone[]; }
-export interface AnimationConstraint { id:string; name:string; type:'IK'|'COPY_TRANSFORM'|'LIMIT_ROTATION'|'TRACK_TO'; targetId?:string; boneId?:string; influence:number; enabled:boolean; chainLength?:number; minRotation?:[number,number,number]; maxRotation?:[number,number,number]; }
+export interface AnimationConstraint { id:string; name:string; type:'IK'|'COPY_TRANSFORM'|'LIMIT_ROTATION'|'TRACK_TO'; targetId?:string; poleTargetId?:string; boneId?:string; influence:number; enabled:boolean; chainLength?:number; poleAngle?:number; minRotation?:[number,number,number]; maxRotation?:[number,number,number]; }
 export interface AnimationCameraShot { id:string; name:string; cameraObjectId:string; start:number; end:number; }
 export interface AnimationAction { id:string; name:string; trackIds:string[]; start:number; end:number; }
 export interface AnimationNLAStrip { id:string; actionId:string; start:number; end:number; actionStart:number; actionEnd:number; scale:number; repeat:number; blend:'REPLACE'|'ADD'|'SUBTRACT'|'MULTIPLY'; influence:number; muted:boolean; }

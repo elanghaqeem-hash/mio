@@ -89,11 +89,13 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   const world = evaluateRigWorldTransforms(rig, rigLocalPoses(rig, poses));
   const upperWorld = world.bones[upperBone.id];
   const targetWorld = world.bones[constraint.targetId];
+  const poleWorld = constraint.poleTargetId ? world.bones[constraint.poleTargetId] : undefined;
   if (!upperWorld || !targetWorld) return;
 
   const result = solveTwoBoneIK({
     root: upperWorld.head,
     target: targetWorld.head,
+    pole: poleWorld?.head,
     upperLength: upperBone.length,
     lowerLength: endBone.length,
   });
