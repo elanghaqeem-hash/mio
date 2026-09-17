@@ -2,6 +2,7 @@ import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAn
 import type { BoneTransformChannel } from './AutoKeyOperations';
 import { solveTwoBoneIK } from './IKSolver';
 import { aimBoneQuaternion } from './QuaternionAim';
+import { evaluateBezierSegment } from './BezierCurve';
 import {
   evaluateRigWorldTransforms,
   quaternionInverse,
@@ -44,6 +45,7 @@ export const evaluateTrack = (track: AnimationTrack, time: number): number => {
   const a = keys[right - 1];
   const b = keys[right];
   if (a.interpolation === 'step' || Math.abs(b.time - a.time) < 1e-9) return Number(a.value) || 0;
+  if (a.interpolation === 'bezier') return evaluateBezierSegment(a, b, time);
   let t = (time - a.time) / (b.time - a.time);
   if (a.interpolation === 'easeIn') t *= t;
   else if (a.interpolation === 'easeOut') t = 1 - (1 - t) * (1 - t);
