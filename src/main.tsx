@@ -9,6 +9,7 @@ import { executionLedger } from './security/ExecutionLedger';
 import { securityAuditLog } from './security/SecurityAuditLog';
 import { taskRuntime } from './orchestrator/TaskRuntime';
 import { systemPreferences } from './settings/SystemPreferences';
+import { installMioVoiceRuntime } from './services/MioVoiceService';
 
 interface ErrorBoundaryProps { children: ReactNode; }
 interface ErrorBoundaryState { hasError: boolean; error: Error | null; }
@@ -49,6 +50,10 @@ async function bootstrapMio(): Promise<void> {
     securityAuditLog.initialize(),
     taskRuntime.initialize(),
   ]);
+
+  // Centralize every browser speech output under Mio V2's distinct voice
+  // profile before the UI starts issuing utterances.
+  installMioVoiceRuntime();
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode><ErrorBoundary><App /></ErrorBoundary></StrictMode>,
