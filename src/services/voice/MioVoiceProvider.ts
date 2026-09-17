@@ -1,4 +1,4 @@
-import type { MioLocale } from '../MioVoiceService';
+export type MioLocale = string;
 
 export type MioVoiceProviderKind = 'DEVICE' | 'STREAMING';
 export type MioVoiceProviderCapability = 'TTS' | 'STT' | 'STREAMING_TTS' | 'STREAMING_STT' | 'INTERRUPT' | 'VAD';
