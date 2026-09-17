@@ -1,3 +1,4 @@
+import { httpSynthesisProvider } from './HttpSynthesisProvider';
 import { mioProsodyPlanner, type MioProsodyPlanner } from './MioProsodyPlanner';
 import type { MioSynthesisChunk, MioSynthesisProvider } from './MioSynthesisProvider';
 import { mioSynthesisProviders, type MioSynthesisRegistry } from './MioSynthesisRegistry';
@@ -54,4 +55,6 @@ export class MioSynthesisOrchestrator {
   }
 }
 
+// Browser only talks to Mio's same-origin gateway. Upstream TTS credentials remain server-side.
+mioSynthesisProviders.register(httpSynthesisProvider);
 export const mioSynthesisOrchestrator = new MioSynthesisOrchestrator();
