@@ -65,6 +65,14 @@ export async function runCompanionPromptAdapterTests(): Promise<{ passed: number
       const continuity = CompanionContinuity.fromRecentConversation('Tolong buat analisis ICAAP.', history);
       assert(!continuity.previousAssessment, 'new explicit technical request must not inherit prior emotional context');
     },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku sedih dan cuma ingin didengarkan.' }];
+      const prepared = CompanionPromptAdapter.prepareWithHistory('Iya, masih.', history);
+      const prompt = CompanionPromptAdapter.augmentSystemPrompt('BASE', prepared, prepared.continuity);
+      assert(prepared.continuity.durable === false, 'adapter continuity must never become durable state');
+      assert(prompt.includes('EPHEMERAL COMPANION CONTINUITY'), 'adapter may append a bounded continuity hint for an ambiguous continuation');
+      assert(prompt.includes('current message') || prompt.includes('current request'), 'continuity hint must explicitly preserve current-turn priority');
+    },
   ];
 
   let passed = 0;
