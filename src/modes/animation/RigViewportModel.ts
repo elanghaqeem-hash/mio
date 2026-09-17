@@ -1,0 +1,10 @@
+import type { AnimationRig, BonePose } from '../../types/creative';
+export interface BoneGizmo { id:string; name:string; parentId?:string; head:[number,number,number]; tail:[number,number,number]; selected:boolean; ikFk:'IK'|'FK'; }
+export interface RigViewportModel { bones:BoneGizmo[]; selectedBoneId?:string; }
+const rotateZ=(v:[number,number,number],angle:number):[number,number,number]=>{const c=Math.cos(angle),s=Math.sin(angle);return[v[0]*c-v[1]*s,v[0]*s+v[1]*c,v[2]]};
+export const buildRigViewportModel=(rig:AnimationRig,poses:Record<string,BonePose>,selectedBoneId?:string):RigViewportModel=>{
+ const worldTail=new Map<string,[number,number,number]>();const bones:BoneGizmo[]=[];const pending=[...rig.bones];let guard=0;
+ while(pending.length&&guard++<rig.bones.length*2){const bone=pending.shift()!;if(bone.parentId&&!worldTail.has(bone.parentId)){pending.push(bone);continue;}const pose=poses[bone.id]??bone.pose;const parentTail=bone.parentId?worldTail.get(bone.parentId):undefined;const head: [number,number,number]=parentTail&&bone.connected?[...parentTail]:[...pose.position];const direction=rotateZ([0,bone.length,0],pose.rotation[2]??0);const tail:[number,number,number]=[head[0]+direction[0],head[1]+direction[1],head[2]+direction[2]];worldTail.set(bone.id,tail);bones.push({id:bone.id,name:bone.name,parentId:bone.parentId,head,tail,selected:bone.id===selectedBoneId,ikFk:bone.ikFk});}
+ return{bones,selectedBoneId};
+};
+export const pickNearestBone=(model:RigViewportModel,point:[number,number],project:(p:[number,number,number])=>[number,number],threshold=16):string|undefined=>{let best:{id:string;distance:number}|undefined;for(const bone of model.bones){const a=project(bone.head),b=project(bone.tail),vx=b[0]-a[0],vy=b[1]-a[1],wx=point[0]-a[0],wy=point[1]-a[1],den=vx*vx+vy*vy,t=den?Math.max(0,Math.min(1,(wx*vx+wy*vy)/den)):0,dx=point[0]-(a[0]+vx*t),dy=point[1]-(a[1]+vy*t),distance=Math.hypot(dx,dy);if(distance<=threshold&&(!best||distance<best.distance))best={id:bone.id,distance};}return best?.id;};
