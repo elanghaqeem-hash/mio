@@ -1,6 +1,6 @@
 import type { MioAnimationProject } from '../../types/creative';
 import type { PoseControlState } from './PoseControlModel';
-import type { RigViewportProjectionOptions } from './RigViewportProjection';
+import type { RigViewportProjectionOptions, ViewportPoint } from './RigViewportProjection';
 import { resolveRigViewportBinding } from './RigViewportBinding';
 import { selectBoneAtViewportPoint } from './RigViewportSelectionController';
 import {
@@ -19,6 +19,8 @@ export interface NativePoseViewportState {
   session?: InteractivePoseSession;
 }
 
+const toViewportPoint = (point: PointerPoint): ViewportPoint => [point.x, point.y];
+
 export const selectNativePoseBone = (
   state: NativePoseViewportState,
   point: PointerPoint,
@@ -35,7 +37,7 @@ export const selectNativePoseBone = (
     state.control,
     binding.rig,
     binding.poses,
-    point,
+    toViewportPoint(point),
     projection,
     threshold,
   );
