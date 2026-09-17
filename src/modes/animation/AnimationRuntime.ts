@@ -1,0 +1,37 @@
+import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAnimationProject } from '../../types/creative';
+
+export interface EvaluatedAnimationState {
+  objectChannels: Record<string, Record<string, number>>;
+  bonePoses: Record<string, BonePose>;
+  activeShotId?: string;
+}
+
+const lerp = (a:number,b:number,t:number) => a+(b-a)*t;
+const ease = (t:number) => t*t*(3-2*t);
+
+export const evaluateTrack = (track:AnimationTrack,time:number):number => {
+  const keys=[...track.keyframes].sort((a,b)=>a.time-b.time);
+  if(!keys.length)return 0;if(time<=keys[0].time)return Number(keys[0].value)||0;if(time>=keys[keys.length-1].time)return Number(keys[keys.length-1].value)||0;
+  const right=keys.findIndex(k=>k.time>=time);const a=keys[right-1],b=keys[right];if(a.interpolation==='step')return Number(a.value)||0;
+  let t=(time-a.time)/(b.time-a.time);if(a.interpolation==='easeIn')t*=t;else if(a.interpolation==='easeOut')t=1-(1-t)*(1-t);else if(a.interpolation==='easeInOut')t=ease(t);
+  return lerp(Number(a.value)||0,Number(b.value)||0,t);
+};
+
+const clonePose=(pose:BonePose):BonePose=>({position:[...pose.position],rotation:[...pose.rotation],scale:[...pose.scale]});
+
+export const applyConstraints=(rigs:AnimationRig[],constraints:AnimationConstraint[]):Record<string,BonePose>=>{
+  const poses:Record<string,BonePose>={};for(const rig of rigs)for(const bone of rig.bones)poses[bone.id]=clonePose(bone.pose);
+  for(const c of constraints.filter(c=>c.enabled&&c.influence>0)){
+    if(!c.boneId||!poses[c.boneId])continue;const pose=poses[c.boneId];
+    if(c.type==='LIMIT_ROTATION')for(let i=0;i<3;i++){const min=c.minRotation?.[i]??-Infinity,max=c.maxRotation?.[i]??Infinity;pose.rotation[i]=Math.max(min,Math.min(max,pose.rotation[i]));}
+    if(c.type==='COPY_TRANSFORM'&&c.targetId&&poses[c.targetId]){const target=poses[c.targetId],w=Math.max(0,Math.min(1,c.influence));for(let i=0;i<3;i++){pose.position[i]=lerp(pose.position[i],target.position[i],w);pose.rotation[i]=lerp(pose.rotation[i],target.rotation[i],w);}}
+    // IK/TRACK_TO metadata is preserved for the viewport/native solver; deterministic full skeletal solve is a later runtime layer.
+  }
+  return poses;
+};
+
+export const evaluateAnimationProject=(project:MioAnimationProject,time:number):EvaluatedAnimationState=>{
+  const objectChannels:Record<string,Record<string,number>>={};for(const track of project.tracks){objectChannels[track.targetObjectId]??={};objectChannels[track.targetObjectId][track.property]=evaluateTrack(track,time);}
+  const activeShot=project.shots?.find(shot=>time>=shot.start&&time<shot.end)??project.shots?.find(shot=>time===shot.end&&shot.end===project.duration);
+  return {objectChannels,bonePoses:applyConstraints(project.rigs??[],project.constraints??[]),activeShotId:activeShot?.id};
+};
