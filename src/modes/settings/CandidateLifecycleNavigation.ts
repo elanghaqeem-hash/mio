@@ -27,6 +27,7 @@ const SURFACE_LABEL_TO_TARGET: Record<string, CandidateLifecycleNavigationTarget
 
 const CANDIDATE_CARD_SELECTOR = '.rounded-lg.border';
 const FOCUS_CLASSES = ['ring-2', 'ring-cyan-500/50', 'ring-offset-2', 'ring-offset-[#07090e]'] as const;
+const IDENTITY_BOUNDARY = /[\s·|,:;()\[\]{}]/;
 
 export function lifecycleNavigationTargetForSurface(surface?: string): CandidateLifecycleNavigationTarget | undefined {
   if (!surface) return undefined;
@@ -38,12 +39,26 @@ export function lifecycleSurfaceIdForLabel(surface?: string): string | undefined
   return target ? CANDIDATE_LIFECYCLE_SURFACE_IDS[target] : undefined;
 }
 
-export function selectUniqueCandidateTextIndex(texts: string[], runtimeModel?: string): number | undefined {
+export function textContainsBoundedRuntimeIdentity(text: string, runtimeModel?: string): boolean {
   const target = runtimeModel?.trim();
-  if (!target) return undefined;
+  if (!target) return false;
+  let from = 0;
+  while (from <= text.length - target.length) {
+    const start = text.indexOf(target, from);
+    if (start < 0) return false;
+    const end = start + target.length;
+    const beforeOk = start === 0 || IDENTITY_BOUNDARY.test(text[start - 1] ?? '');
+    const afterOk = end === text.length || IDENTITY_BOUNDARY.test(text[end] ?? '');
+    if (beforeOk && afterOk) return true;
+    from = start + 1;
+  }
+  return false;
+}
+
+export function selectUniqueCandidateTextIndex(texts: string[], runtimeModel?: string): number | undefined {
   const matches: number[] = [];
   for (let index = 0; index < texts.length; index++) {
-    if (texts[index]?.includes(target)) matches.push(index);
+    if (textContainsBoundedRuntimeIdentity(texts[index] ?? '', runtimeModel)) matches.push(index);
   }
   return matches.length === 1 ? matches[0] : undefined;
 }
