@@ -1,6 +1,7 @@
 import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAnimationProject } from '../../types/creative';
 import type { BoneTransformChannel } from './AutoKeyOperations';
-import { solveTwoBoneIK } from './IKSolver';
+import { solveTwoBoneIK, type Vec3 } from './IKSolver';
+import { evaluateRigWorldTransforms } from './RigTransformEvaluator';
 
 export interface EvaluatedAnimationState {
   objectChannels: Record<string, Record<string, number>>;
@@ -12,6 +13,18 @@ interface BoneTrackTarget { rigId: string; boneId: string; }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const ease = (t: number) => t * t * (3 - 2 * t);
 const clonePose = (pose: BonePose): BonePose => ({ position: [...pose.position], rotation: [...pose.rotation], scale: [...pose.scale] });
+const subtract = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const length = (value: Vec3) => Math.hypot(value[0], value[1], value[2]);
+
+const directionToWorldEuler = (from: Vec3, to: Vec3): Vec3 | undefined => {
+  const direction = subtract(to, from);
+  const magnitude = length(direction);
+  if (magnitude < 1e-9) return undefined;
+  const x = direction[0] / magnitude;
+  const y = direction[1] / magnitude;
+  const z = Math.max(-1, Math.min(1, direction[2] / magnitude));
+  return [Math.asin(z), 0, Math.atan2(-x, y)];
+};
 
 export const parseBoneTargetId = (targetObjectId: string): BoneTrackTarget | undefined => {
   if (!targetObjectId.startsWith('bone:')) return undefined;
@@ -61,17 +74,57 @@ export const evaluateBoneTracks = (project: MioAnimationProject, time: number): 
   return poses;
 };
 
+const rigLocalPoses = (rig: AnimationRig, poses: Record<string, BonePose>): Record<string, BonePose> => {
+  const local: Record<string, BonePose> = {};
+  for (const bone of rig.bones) local[bone.id] = poses[`${rig.id}:${bone.id}`] ?? bone.pose;
+  return local;
+};
+
+const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: Record<string, BonePose>) => {
+  if (!constraint.boneId || !constraint.targetId) return;
+  const endBone = rig.bones.find(bone => bone.id === constraint.boneId);
+  const upperBone = endBone?.parentId ? rig.bones.find(bone => bone.id === endBone.parentId) : undefined;
+  if (!endBone || !upperBone) return;
+
+  const world = evaluateRigWorldTransforms(rig, rigLocalPoses(rig, poses));
+  const upperWorld = world.bones[upperBone.id];
+  const targetWorld = world.bones[constraint.targetId];
+  if (!upperWorld || !targetWorld) return;
+
+  const result = solveTwoBoneIK({
+    root: upperWorld.head,
+    target: targetWorld.head,
+    upperLength: upperBone.length,
+    lowerLength: endBone.length,
+  });
+  const rootDirection = directionToWorldEuler(upperWorld.head, result.joint);
+  const endDirection = directionToWorldEuler(result.joint, result.end);
+  if (!rootDirection || !endDirection) return;
+
+  const upperKey = `${rig.id}:${upperBone.id}`;
+  const endKey = `${rig.id}:${endBone.id}`;
+  const upperPose = poses[upperKey];
+  const endPose = poses[endKey];
+  if (!upperPose || !endPose) return;
+  const upperParentRotation: Vec3 = upperBone.parentId ? world.bones[upperBone.parentId]?.rotation ?? [0, 0, 0] : [0, 0, 0];
+  const weight = Math.max(0, Math.min(1, constraint.influence));
+  for (let i = 0; i < 3; i++) {
+    const upperLocal = rootDirection[i] - upperParentRotation[i];
+    upperPose.rotation[i] = lerp(upperPose.rotation[i], upperLocal, weight);
+    const endLocal = endDirection[i] - rootDirection[i];
+    endPose.rotation[i] = lerp(endPose.rotation[i], endLocal, weight);
+  }
+};
+
 export const applyConstraints = (
   rigs: AnimationRig[],
   constraints: AnimationConstraint[],
   evaluatedPoses: Record<string, BonePose> = {},
 ): Record<string, BonePose> => {
   const poses: Record<string, BonePose> = {};
-  const bones = new Map<string, AnimationRig['bones'][number]>();
   for (const rig of rigs) for (const bone of rig.bones) {
     const key = `${rig.id}:${bone.id}`;
     poses[key] = clonePose(evaluatedPoses[key] ?? bone.pose);
-    bones.set(key, bone);
   }
   for (const rig of rigs) for (const constraint of constraints.filter(candidate => candidate.enabled && candidate.influence > 0)) {
     if (!constraint.boneId) continue;
@@ -92,19 +145,7 @@ export const applyConstraints = (
         pose.rotation[i] = lerp(pose.rotation[i], target.rotation[i], weight);
       }
     }
-    if (constraint.type === 'IK' && targetKey && poses[targetKey]) {
-      const endBone = bones.get(key);
-      const parentKey = endBone?.parentId ? `${rig.id}:${endBone.parentId}` : undefined;
-      const parent = parentKey ? bones.get(parentKey) : undefined;
-      if (endBone && parent && parentKey && poses[parentKey]) {
-        const result = solveTwoBoneIK({ root: poses[parentKey].position, target: poses[targetKey].position, upperLength: parent.length, lowerLength: endBone.length });
-        const weight = Math.max(0, Math.min(1, constraint.influence));
-        for (let i = 0; i < 3; i++) {
-          poses[parentKey].position[i] = lerp(poses[parentKey].position[i], result.joint[i], weight);
-          pose.position[i] = lerp(pose.position[i], result.end[i], weight);
-        }
-      }
-    }
+    if (constraint.type === 'IK') solveRigIK(rig, constraint, poses);
   }
   return poses;
 };
