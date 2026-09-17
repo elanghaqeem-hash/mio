@@ -21,6 +21,7 @@ const RULES: Rule[] = [
 ];
 const SOLUTION = /(?:tolong|bantu|help|gimana|bagaimana|apa yang harus|solusi|saran|advice|jalan keluar)/i;
 const PRESENCE = /(?:temani|dengerin|dengarkan|listen(?: to me)?|aku mau cerita|saya mau cerita|curhat|jangan kasih solusi|nggak perlu solusi|tidak perlu solusi|cuma ingin cerita|just want (?:you )?to listen|no advice)/i;
+const VALIDATION = /(?:wajar (?:nggak|gak|tidak)|normal (?:nggak|gak|tidak)|apa (?:aku|saya) berlebihan|apakah (?:aku|saya) berlebihan|perasaan(?:ku| saya) (?:wajar|normal)|is it (?:normal|reasonable) (?:that|to)|am i overreacting)/i;
 const PERSPECTIVE = /(?:menurutmu|menurut mio|perspektif|pendapatmu|apa aku salah|apa saya salah|lihat dari sisi lain|your perspective|what do you think)/i;
 const CELEBRATION = /(?:berhasil|lulus|menang|promosi|diterima|akhirnya selesai|good news|kabar baik)/i;
 const TECHNICAL_CONTEXT = /(?:stress test|load test|tensile stress|stress testing|uji stres|uji ketahanan|database stress|cpu stress)/i;
@@ -33,19 +34,21 @@ export class EmotionalIntelligenceEngine {
     if (!technicalOnly) for (const rule of RULES) if (rule.patterns.some((pattern) => pattern.test(text))) { emotions.push(rule.emotion); signals.push(`emotion:${rule.emotion}`); }
 
     const presenceRequested = PRESENCE.test(text);
+    const validationRequested = VALIDATION.test(text);
     const perspectiveRequested = PERSPECTIVE.test(text);
-    const solutionRequested = SOLUTION.test(text) && !presenceRequested;
+    const solutionRequested = SOLUTION.test(text) && !presenceRequested && !validationRequested;
     const celebrating = CELEBRATION.test(text) && emotions.some((emotion) => emotion === 'JOY' || emotion === 'PRIDE');
     let intent: CompanionIntent = 'GENERAL'; let strategy: CompanionStrategy = 'NORMAL';
     if (celebrating) { intent = 'CELEBRATING'; strategy = 'CELEBRATE_WITH_USER'; }
     else if (presenceRequested) { intent = 'SEEKING_PRESENCE'; strategy = 'LISTEN_FIRST'; }
+    else if (validationRequested) { intent = 'SEEKING_VALIDATION'; strategy = 'ACKNOWLEDGE_AND_LISTEN'; }
     else if (solutionRequested && emotions.length > 0) { intent = 'SEEKING_SOLUTION'; strategy = 'ACKNOWLEDGE_AND_SOLVE'; }
     else if (perspectiveRequested) { intent = 'SEEKING_PERSPECTIVE'; strategy = 'GENTLE_PERSPECTIVE'; }
     else if (emotions.length > 0) { intent = 'VENTING'; strategy = 'ACKNOWLEDGE_AND_LISTEN'; }
 
     const high = /(?:banget|sangat|really|extremely|parah|berat banget|nggak kuat|tidak kuat)/i.test(text);
     const intensity: EmotionalAssessment['intensity'] = high ? 'HIGH' : emotions.length ? 'MEDIUM' : 'LOW';
-    if (solutionRequested) signals.push('intent:solution'); if (presenceRequested) signals.push('intent:presence'); if (technicalOnly) signals.push('context:technical');
+    if (solutionRequested) signals.push('intent:solution'); if (presenceRequested) signals.push('intent:presence'); if (validationRequested) signals.push('intent:validation'); if (perspectiveRequested) signals.push('intent:perspective'); if (technicalOnly) signals.push('context:technical');
     return { primaryEmotion: emotions[0] ?? 'NEUTRAL', secondaryEmotions: emotions.slice(1), intensity, intent, strategy, solutionRequested, confidence: technicalOnly ? 0.9 : emotions.length > 0 || intent !== 'GENERAL' ? 0.8 : 0.45, signals };
   }
 
@@ -56,6 +59,7 @@ export class EmotionalIntelligenceEngine {
       'Treat this as a fallible conversational inference, never as a diagnosis or fact about the user.',
       'Be warm, natural, calm, and proportionate. Acknowledge emotion without exaggerating or mirroring distress theatrically.',
       'If the user mainly wants presence or to vent, listen first and do not force advice, productivity steps, or problem-solving.',
+      'If the user seeks emotional validation, acknowledge that the feeling can be understandable in context without automatically validating unverified beliefs, accusations, or conclusions.',
       'If the user explicitly asks for help or a solution, briefly acknowledge the feeling and then reason clearly with them.',
       'Offer perspective without automatic agreement. Respectfully challenge assumptions when evidence or reasoning warrants it.',
       'Preserve user agency: offer choices rather than pressure, commands, or emotional leverage.',
