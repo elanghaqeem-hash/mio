@@ -1,6 +1,6 @@
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
 import { productionSynthesisVoiceProvider } from './ProductionSynthesisVoiceProvider';
-import type { MioLocale, MioTranscriptionResult, MioVoiceProviderCapability } from './MioVoiceProvider';
+import type { MioLocale, MioTranscriptionResult, MioVoiceProvider, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
@@ -23,9 +23,30 @@ export class MioVoiceRuntimeV3 {
     if (controller) this.settle(controller); else { this.activeProviderId = null; this.setState('IDLE'); }
   }
 
+  private async speakWithProvider(provider: MioVoiceProvider, text: string, locale: MioLocale, controller: AbortController): Promise<void> {
+    this.activeProviderId = provider.id;
+    await provider.speak({ text, locale, signal: controller.signal });
+  }
+
   async speak(text: string, locale: MioLocale, preferredProviderId = productionSynthesisVoiceProvider.id): Promise<void> {
-    await this.interrupt(); const provider = await this.select('TTS', preferredProviderId); const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
-    try { await provider.speak({ text, locale, signal: controller.signal }); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
+    await this.interrupt();
+    const provider = await this.select('TTS', preferredProviderId);
+    const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
+    try {
+      await this.speakWithProvider(provider, text, locale, controller);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      // A provider may pass readiness and still fail during synthesis/playback. Keep Mio audible by retrying once with device TTS.
+      if (provider.id !== deviceVoiceProvider.id) {
+        await Promise.allSettled([provider.stopSpeaking()]);
+        const fallback = await this.registry.select('TTS', deviceVoiceProvider.id);
+        if (fallback && fallback.provider.id !== provider.id && !controller.signal.aborted) {
+          await this.speakWithProvider(fallback.provider, text, locale, controller);
+          return;
+        }
+      }
+      throw error;
+    } finally { this.settle(controller); }
   }
 
   async listen(locale: MioLocale, onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
