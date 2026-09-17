@@ -1,24 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import type { MioAnimationProject } from '../../types/creative';
-import { useCreativeStudioDocument } from '../shared/useCreativeStudioDocument';
+import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { Animation3DViewport } from './Animation3DViewport';
 
 const EMPTY_PROJECT: MioAnimationProject = {
-  id: 'mio-animation-empty',
-  name: 'MIO 3D Animation',
   duration: 10,
   fps: 24,
   currentTime: 0,
+  loop: true,
   tracks: [],
-  objects: [],
+  rigs: [],
 };
 
-/** Keeps the WebGL viewport on the same persisted .mioanim document as the legacy editor. */
+/**
+ * Keeps the WebGL viewport on the same persisted .mioanim document contract as
+ * AnimationStudioView. The viewport is a consumer of the evaluated animation
+ * runtime; authoring remains transactional through the canonical workspace.
+ */
 export const Animation3DViewportBridge: React.FC = () => {
-  const { document } = useCreativeStudioDocument<MioAnimationProject>('ANIMATION', EMPTY_PROJECT);
-  const project = document ?? EMPTY_PROJECT;
+  const workspace = useCreativeStudioDocument<MioAnimationProject>('MIO_3D_Animation.mioanim', EMPTY_PROJECT);
+  const project = workspace.state;
   const [selection, setSelection] = useState<{ rigId?: string; boneId?: string }>({});
-  const currentTime = useMemo(() => Number.isFinite(project.currentTime) ? project.currentTime : 0, [project.currentTime]);
+  const currentTime = useMemo(
+    () => Number.isFinite(project.currentTime) ? project.currentTime : 0,
+    [project.currentTime],
+  );
 
   return (
     <Animation3DViewport
