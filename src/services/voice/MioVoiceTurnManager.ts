@@ -94,6 +94,8 @@ export class MioVoiceTurnManager {
     } catch (error) {
       if (generation === this.turnGeneration) this.setState('IDLE');
       throw error;
+    } finally {
+      if (generation === this.turnGeneration) this.setState('IDLE');
     }
   }
 
