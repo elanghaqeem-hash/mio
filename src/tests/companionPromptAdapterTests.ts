@@ -72,6 +72,29 @@ export async function runCompanionPromptAdapterTests(): Promise<{ passed: number
       assert(prepared.continuity.durable === false, 'adapter continuity must never become durable state');
       assert(prompt.includes('EPHEMERAL COMPANION CONTINUITY'), 'adapter may append a bounded continuity hint for an ambiguous continuation');
       assert(prompt.includes('current message') || prompt.includes('current request'), 'continuity hint must explicitly preserve current-turn priority');
+      assert(prepared.allowDurableEmotionalMemory === false, 'production prepared context must prohibit automatic durable emotional memory');
+    },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku sedih dan cuma ingin didengarkan.' }];
+      const prepared = CompanionPromptAdapter.prepareWithHistory('Sekarang aku baik kok.', history);
+      const prompt = CompanionPromptAdapter.augmentSystemPrompt('BASE', prepared, prepared.continuity);
+      assert(prepared.continuity.sourceTurns === 0, 'explicit recovery must clear production continuity');
+      assert(!prompt.includes('EPHEMERAL COMPANION CONTINUITY'), 'recovery turn must not inject stale continuity into the model prompt');
+    },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku cemas dan banyak pikiran.' }];
+      const prepared = CompanionPromptAdapter.prepareWithHistory('Jalankan stress test ICAAP dan buat analisis likuiditas.', history);
+      const prompt = CompanionPromptAdapter.augmentSystemPrompt('BASE', prepared, prepared.continuity);
+      assert(prepared.assessment.primaryEmotion === 'NEUTRAL', 'new technical turn must remain emotionally neutral at production adapter boundary');
+      assert(prepared.continuity.sourceTurns === 0, 'new technical turn must not inherit prior emotional continuity');
+      assert(prompt === 'BASE', 'technical override must not receive companion or continuity prompt injection');
+    },
+    () => {
+      const history: ModelMessage[] = [{ role: 'user', content: 'Aku capek banget dan cuma ingin cerita.' }];
+      const prepared = CompanionPromptAdapter.prepareWithHistory('Iya, masih.', history);
+      assert(prepared.continuity.durable === false, 'continuity must never become a durable permission-bearing state');
+      assert(!('permission' in (prepared.continuity as unknown as Record<string, unknown>)), 'continuity object must not expose permission authority');
+      assert(!('grant' in (prepared.continuity as unknown as Record<string, unknown>)), 'continuity object must not expose authorization grants');
     },
   ];
 
