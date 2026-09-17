@@ -5,90 +5,32 @@ import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProv
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
 export type MioVoiceRuntimeListener = (state: MioVoiceRuntimeState) => void;
 
-/**
- * Provider-neutral runtime facade for Mio Voice V3.
- * It owns cancellation/turn boundaries and falls back through the registry.
- */
+/** Provider-neutral runtime facade for Mio Voice V3. */
 export class MioVoiceRuntimeV3 {
-  private state: MioVoiceRuntimeState = 'IDLE';
-  private listeners = new Set<MioVoiceRuntimeListener>();
-  private activeController: AbortController | null = null;
-  private activeProviderId: string | null = null;
-
+  private state: MioVoiceRuntimeState = 'IDLE'; private listeners = new Set<MioVoiceRuntimeListener>(); private activeController: AbortController | null = null; private activeProviderId: string | null = null;
   constructor(private readonly registry: MioVoiceProviderRegistry = mioVoiceProviders) {}
-
-  getState() { return this.state; }
-  getActiveProviderId() { return this.activeProviderId; }
-
-  subscribe(listener: MioVoiceRuntimeListener): () => void {
-    this.listeners.add(listener);
-    listener(this.state);
-    return () => { this.listeners.delete(listener); };
-  }
-
-  private setState(state: MioVoiceRuntimeState) {
-    if (this.state === state) return;
-    this.state = state;
-    for (const listener of this.listeners) listener(state);
-  }
-
-  private async select(capability: MioVoiceProviderCapability, preferredProviderId?: string) {
-    const selected = await this.registry.select(capability, preferredProviderId);
-    if (!selected) throw new Error(`No available Mio voice provider supports ${capability}.`);
-    return selected.provider;
-  }
-
-  private settle(controller: AbortController) {
-    if (this.activeController !== controller) return;
-    this.activeController = null;
-    this.activeProviderId = null;
-    this.setState('IDLE');
-  }
+  getState() { return this.state; } getActiveProviderId() { return this.activeProviderId; }
+  subscribe(listener: MioVoiceRuntimeListener): () => void { this.listeners.add(listener); listener(this.state); return () => { this.listeners.delete(listener); }; }
+  private setState(state: MioVoiceRuntimeState) { if (this.state === state) return; this.state = state; for (const listener of this.listeners) listener(state); }
+  private async select(capability: MioVoiceProviderCapability, preferredProviderId?: string) { const selected = await this.registry.select(capability, preferredProviderId); if (!selected) throw new Error(`No available Mio voice provider supports ${capability}.`); return selected.provider; }
+  private settle(controller: AbortController) { if (this.activeController !== controller) return; this.activeController = null; this.activeProviderId = null; this.setState('IDLE'); }
 
   async interrupt(): Promise<void> {
-    this.activeController?.abort();
-    this.activeController = null;
-    const provider = this.activeProviderId ? this.registry.get(this.activeProviderId) : undefined;
-    this.activeProviderId = null;
+    const controller = this.activeController; const provider = this.activeProviderId ? this.registry.get(this.activeProviderId) : undefined;
+    controller?.abort();
     await Promise.allSettled([provider?.stopSpeaking(), provider?.stopListening?.()]);
-    this.setState('IDLE');
+    if (controller) this.settle(controller); else { this.activeProviderId = null; this.setState('IDLE'); }
   }
 
   async speak(text: string, locale: MioLocale, preferredProviderId?: string): Promise<void> {
-    await this.interrupt();
-    const provider = await this.select('TTS', preferredProviderId);
-    const controller = new AbortController();
-    this.activeController = controller;
-    this.activeProviderId = provider.id;
-    this.setState('SPEAKING');
-    try {
-      await provider.speak({ text, locale, signal: controller.signal });
-    } catch (error) {
-      if (!controller.signal.aborted) throw error;
-    } finally {
-      this.settle(controller);
-    }
+    await this.interrupt(); const provider = await this.select('TTS', preferredProviderId); const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
+    try { await provider.speak({ text, locale, signal: controller.signal }); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
   }
 
-  async listen(
-    locale: MioLocale,
-    onResult: (result: MioTranscriptionResult) => void,
-    preferredProviderId?: string,
-  ): Promise<void> {
-    await this.interrupt();
-    const provider = await this.select('STT', preferredProviderId);
-    if (!provider.startListening) throw new Error(`Provider ${provider.id} does not implement STT.`);
-    const controller = new AbortController();
-    this.activeController = controller;
-    this.activeProviderId = provider.id;
-    this.setState('LISTENING');
-    try {
-      await provider.startListening({ locale, signal: controller.signal }, onResult);
-    } catch (error) {
-      if (!controller.signal.aborted) throw error;
-    } finally {
-      if (controller.signal.aborted) this.settle(controller);
-    }
+  async listen(locale: MioLocale, onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
+    await this.interrupt(); const provider = await this.select('STT', preferredProviderId); if (!provider.startListening) throw new Error(`Provider ${provider.id} does not implement STT.`);
+    const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('LISTENING');
+    try { await provider.startListening({ locale, signal: controller.signal }, onResult); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
   }
 }
 
