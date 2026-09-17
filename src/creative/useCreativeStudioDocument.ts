@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { eventBus } from '../core/EventBus';
+import { ProjectManager } from '../project/ProjectManager';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
+import type { MioSystemMode } from '../types/core';
 import type { CreativeCommand, CreativeDocument } from '../types/creativeDocument';
+import { creativeAssetHandoff, type CreativeAssetHandoff } from './CreativeAssetHandoff';
 import { createCreativeWorkspaceId, migrateLegacyCreativeDocument } from './CreativeDocumentFactory';
 import { CreativeDocumentKernel } from './CreativeDocumentKernel';
 import { CreativeAutosaveController, CreativeDocumentRepository } from './CreativeDocumentRepository';
@@ -47,6 +51,19 @@ const readLegacyState = <T>(document: CreativeDocument, fallback: T): T => {
   return value && typeof value === 'object' ? structuredClone(value) as T : fallback;
 };
 
+const modeForFile = (fileName: string): MioSystemMode | null => {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.mio3d')) return '3D';
+  if (lower.endsWith('.mioanim')) return 'ANIMATION';
+  if (lower.endsWith('.miomotion')) return 'MOTION_2D';
+  if (lower.endsWith('.mioart')) return 'GRAPHIC';
+  if (lower.endsWith('.miodraw')) return 'DRAWING';
+  if (lower.endsWith('.miophoto')) return 'PHOTO';
+  if (lower.endsWith('.miosfx')) return 'SFX';
+  if (lower.endsWith('.miomusic')) return 'MUSIC';
+  return null;
+};
+
 export const createStudioStateCommand = <T>(document: CreativeDocument, fileName: string, state: T): CreativeCommand => {
   const projected = migrateLegacyCreativeDocument(fileName, state, document.updatedAt, document.id);
   const recordedManagedIds = Array.isArray(document.metadata.legacyManagedNodeIds)
@@ -78,6 +95,7 @@ export const useCreativeStudioDocument = <T,>(fileName: string, initialState: T)
   const [state, setReactState] = useState<T>(() => runtime.state);
   const [status, setStatus] = useState<CreativeWorkspaceStatus>('LOADING');
   const [error, setError] = useState<string | null>(null);
+  const studioMode = modeForFile(fileName);
 
   const syncSnapshot = useCallback((snapshot: CreativeDocument, fallback: T, nextStatus: CreativeWorkspaceStatus) => {
     const legacyState = readLegacyState(snapshot, fallback);
@@ -122,6 +140,21 @@ export const useCreativeStudioDocument = <T,>(fileName: string, initialState: T)
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   }, [fileName, runtime, syncSnapshot]);
+
+  useEffect(() => {
+    if (!studioMode) return;
+    const applyHandoff = (handoff: CreativeAssetHandoff) => {
+      if (handoff.mode !== studioMode) return;
+      const asset = ProjectManager.getProject().assets.find((candidate) => candidate.id === handoff.assetId);
+      if (!asset || !asset.data || typeof asset.data !== 'object') return;
+      setState(structuredClone(asset.data) as T);
+      creativeAssetHandoff.consume(studioMode);
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Loaded generated asset ${asset.name} into ${studioMode} studio`, mode: studioMode });
+    };
+    const pending = creativeAssetHandoff.consume(studioMode);
+    if (pending) applyHandoff(pending);
+    return eventBus.on<CreativeAssetHandoff>('CREATIVE_ASSET_READY', applyHandoff);
+  }, [setState, studioMode]);
 
   const undo = useCallback(() => {
     const snapshot = runtime.kernel.undo('user');
