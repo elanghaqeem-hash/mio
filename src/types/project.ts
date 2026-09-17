@@ -10,6 +10,15 @@ export type KnowledgeSourcePriority = 'PRIMARY' | 'STANDARD' | 'LOW';
 export type KnowledgeConflictResolutionStatus = 'ACCEPTED_VARIANCE' | 'PREFER_SOURCE' | 'RESOLVED_BY_SUPERSESSION';
 export type KnowledgeGovernanceAction = 'REGISTERED' | 'INCLUDED' | 'EXCLUDED' | 'REVIEWED' | 'SUPERSEDED' | 'PRIORITY_CHANGED' | 'CORROBORATION_GROUP_CREATED' | 'CONFLICT_REVIEWED' | 'LINEAGE_UPDATED';
 
+export interface AssetLineage {
+  taskId?: string;
+  pipelineId?: string;
+  sourceAssetIds: string[];
+  generatedAt?: number;
+  firstOpenedAt?: number;
+  lastEditedAt?: number;
+}
+
 export interface KnowledgeSourceLineage {
   upstreamSourceKey?: string;
   derivedFromAssetIds: string[];
@@ -30,46 +39,10 @@ export interface KnowledgeSourceGovernanceRecord {
   updatedAt: number;
 }
 
-export interface KnowledgeCorroborationGroup {
-  id: string;
-  label: string;
-  assetIds: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface KnowledgeConflictResolution {
-  conflictKey: string;
-  status: KnowledgeConflictResolutionStatus;
-  note?: string;
-  preferredAssetId?: string;
-  reviewedAt: number;
-}
-
-export interface KnowledgeGovernanceEvent {
-  id: string;
-  assetId: string;
-  action: KnowledgeGovernanceAction;
-  timestamp: number;
-  trust?: KnowledgeSourceTrust;
-  priority?: KnowledgeSourcePriority;
-  included?: boolean;
-  note?: string;
-  freshUntil?: number;
-  replacementAssetId?: string;
-  conflictKey?: string;
-  upstreamSourceKey?: string;
-  derivedFromAssetIds?: string[];
-  actor: 'USER' | 'SYSTEM';
-}
-
-export interface KnowledgeGovernanceState {
-  sources: Record<string, KnowledgeSourceGovernanceRecord>;
-  corroborationGroups?: KnowledgeCorroborationGroup[];
-  conflictResolutions?: Record<string, KnowledgeConflictResolution>;
-  history: KnowledgeGovernanceEvent[];
-  updatedAt: number;
-}
+export interface KnowledgeCorroborationGroup { id: string; label: string; assetIds: string[]; createdAt: number; updatedAt: number; }
+export interface KnowledgeConflictResolution { conflictKey: string; status: KnowledgeConflictResolutionStatus; note?: string; preferredAssetId?: string; reviewedAt: number; }
+export interface KnowledgeGovernanceEvent { id: string; assetId: string; action: KnowledgeGovernanceAction; timestamp: number; trust?: KnowledgeSourceTrust; priority?: KnowledgeSourcePriority; included?: boolean; note?: string; freshUntil?: number; replacementAssetId?: string; conflictKey?: string; upstreamSourceKey?: string; derivedFromAssetIds?: string[]; actor: 'USER' | 'SYSTEM'; }
+export interface KnowledgeGovernanceState { sources: Record<string, KnowledgeSourceGovernanceRecord>; corroborationGroups?: KnowledgeCorroborationGroup[]; conflictResolutions?: Record<string, KnowledgeConflictResolution>; history: KnowledgeGovernanceEvent[]; updatedAt: number; }
 
 export interface ProjectAsset {
   id: string;
@@ -84,14 +57,10 @@ export interface ProjectAsset {
   data: any;
   verified: boolean;
   notes?: string;
+  lineage?: AssetLineage;
 }
 
-export interface ProjectVersion {
-  versionId: string;
-  timestamp: number;
-  description: string;
-  snapshot: string;
-}
+export interface ProjectVersion { versionId: string; timestamp: number; description: string; snapshot: string; }
 
 export interface MioProject {
   id: string;
