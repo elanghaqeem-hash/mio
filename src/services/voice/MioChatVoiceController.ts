@@ -19,10 +19,7 @@ export class MioChatVoiceController {
   setPreferredLocale(locale: string): void { mioVoice.setPreferredLocale(locale); }
   async capabilities() { return mioVoiceProviders.statuses(); }
 
-  /**
-   * Enables local energy-based barge-in. Permission is requested only when this
-   * method is called from a user-initiated voice flow; audio is never persisted.
-   */
+  /** Enables local energy-based barge-in. Audio is never persisted. */
   async enableAutomaticBargeIn(): Promise<void> {
     if (this.detachVad) return;
     if (this.vadStarting) return this.vadStarting;
@@ -59,6 +56,11 @@ export class MioChatVoiceController {
   async toggleListening(onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
     if (this.getState() === 'USER_TURN') { await this.stop(); return; }
     await this.startListening(onResult, preferredProviderId);
+    // Arm VAD only after the explicit STT session releases the microphone. This
+    // avoids competing captures on mobile Safari while ensuring subsequent Mio
+    // speech can be interrupted naturally. VAD failure must not break STT.
+    try { await this.enableAutomaticBargeIn(); }
+    catch (error) { console.warn('[Mio Voice] Automatic barge-in unavailable:', error); }
   }
 
   async dispose(): Promise<void> {
