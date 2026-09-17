@@ -1,4 +1,5 @@
 import { CreativeOrchestrator, type CreativePlanStep } from '../../agents/CreativeOrchestrator';
+import { creativeAssetHandoff } from '../../creative/CreativeAssetHandoff';
 import { eventBus } from '../../core/EventBus';
 import { ProjectManager } from '../../project/ProjectManager';
 import type { MioSystemMode } from '../../types/core';
@@ -45,17 +46,11 @@ export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExec
     const planned = CreativeOrchestrator.planCreativePipeline(input.prompt);
     let steps = planned;
 
-    // A single-mode Mission Control task must execute the routed studio rather than
-    // accidentally expanding into unrelated creative studios. Preserve dependencies
-    // only when they are part of the selected set.
     if (requestedMode !== 'GRAPHIC') {
       const selected = planned.filter((step) => step.mode === requestedMode);
       if (selected.length > 0) {
         const selectedIds = new Set(selected.map((step) => step.id));
-        steps = selected.map((step) => ({
-          ...step,
-          dependsOnStepIds: step.dependsOnStepIds.filter((id) => selectedIds.has(id)),
-        }));
+        steps = selected.map((step) => ({ ...step, dependsOnStepIds: step.dependsOnStepIds.filter((id) => selectedIds.has(id)) }));
       }
     }
 
@@ -70,7 +65,7 @@ export const creativeExecutionTool: MioTool<CreativeExecutionInput, CreativeExec
     if (primaryAssetId) {
       const asset = ProjectManager.getProject().assets.find((candidate) => candidate.id === primaryAssetId);
       if (asset) {
-        eventBus.emit('CREATIVE_ASSET_READY', { taskId: context.taskId, assetId: asset.id, assetType: asset.type, mode: requestedMode, name: asset.name });
+        creativeAssetHandoff.publish({ taskId: context.taskId, assetId: asset.id, assetType: asset.type, mode: requestedMode, name: asset.name });
         eventBus.emit('SWITCH_MODE', requestedMode);
         eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Creative handoff ${asset.id} → ${requestedMode} studio`, mode: requestedMode });
       }
