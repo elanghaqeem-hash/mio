@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, BadgeCheck, BrainCircuit, RefreshCw, Rocket } from 'lucide-react';
 import { systemPreferences } from '../../settings/SystemPreferences';
 import { MioModelManifest } from '../../training/ModelManifest';
@@ -9,26 +9,51 @@ import {
 import { CandidateAttentionQueuePanel } from './CandidateAttentionQueuePanel';
 import { CandidateLifecyclePipelinePanel } from './CandidateLifecyclePipelinePanel';
 import { CANDIDATE_LIFECYCLE_SURFACE_IDS } from './CandidateLifecycleNavigation';
+import { subscribeCandidateLifecycleRefresh } from './CandidateLifecycleRefreshCoordinator';
 import { ModelPromotionPanel } from './ModelPromotionPanel';
 
 export const PromotedModelPanel: React.FC = () => {
   const [status, setStatus] = useState<PromotedModelRuntimeStatus | null>(null);
   const [models, setModels] = useState<MioModelManifest[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [liveRefreshing, setLiveRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+  const backgroundSequence = useRef(0);
 
-  const refresh = useCallback(async () => {
-    const [nextStatus, promoted] = await Promise.all([
-      promotedModelActivationService.status(),
-      promotedModelActivationService.listPromoted(),
-    ]);
-    setStatus(nextStatus);
-    setModels(promoted);
+  const refresh = useCallback(async (background = false) => {
+    const requestId = ++requestSequence.current;
+    const backgroundId = background ? ++backgroundSequence.current : 0;
+    if (background) setLiveRefreshing(true);
+    else setRefreshing(true);
+    try {
+      const [nextStatus, promoted] = await Promise.all([
+        promotedModelActivationService.status(),
+        promotedModelActivationService.listPromoted(),
+      ]);
+      if (requestId === requestSequence.current) {
+        setStatus(nextStatus);
+        setModels(promoted);
+        setRefreshError(null);
+      }
+    } catch (error) {
+      if (requestId === requestSequence.current) {
+        setRefreshError(error instanceof Error ? error.message : 'Promoted model runtime status refresh failed');
+      }
+    } finally {
+      if (background) {
+        if (backgroundId === backgroundSequence.current) setLiveRefreshing(false);
+      } else {
+        setRefreshing(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
     void refresh();
-    return systemPreferences.subscribe(() => { void refresh(); });
+    return subscribeCandidateLifecycleRefresh(() => { void refresh(true); });
   }, [refresh]);
 
   const activate = async (manifest: MioModelManifest) => {
@@ -66,20 +91,21 @@ export const PromotedModelPanel: React.FC = () => {
       <CandidateAttentionQueuePanel />
       <CandidateLifecyclePipelinePanel />
       <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.FINAL_PROMOTION} className="scroll-mt-4 outline-none">
-        <ModelPromotionPanel onPromoted={refresh} />
+        <ModelPromotionPanel onPromoted={() => refresh()} />
       </section>
       <div id={CANDIDATE_LIFECYCLE_SURFACE_IDS.PROMOTED_RUNTIME} className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3 scroll-mt-4 outline-none">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-gray-300 font-bold flex items-center gap-2">
             <BrainCircuit size={14} className="text-cyan-400" /> MIO LOCAL MODEL LIFECYCLE
+            <span className="rounded border border-emerald-500/20 bg-emerald-950/10 px-1.5 py-0.5 text-[8px] text-emerald-300">LIVE SYNC</span>
           </span>
-          <button onClick={() => void refresh()} className="flex items-center gap-1.5 rounded border border-gray-700 px-2.5 py-1 text-[10px] text-gray-300 hover:border-cyan-500/50 hover:text-cyan-300">
-            <RefreshCw size={11} /> REFRESH
+          <button onClick={() => void refresh()} disabled={refreshing} className="flex items-center gap-1.5 rounded border border-gray-700 px-2.5 py-1 text-[10px] text-gray-300 hover:border-cyan-500/50 hover:text-cyan-300 disabled:opacity-50">
+            <RefreshCw size={11} className={refreshing || liveRefreshing ? 'animate-spin' : ''} /> REFRESH
           </button>
         </div>
 
         <p className="text-gray-500 text-[10px] leading-relaxed">
-          Only PROMOTED model manifests can be activated. Governed adapter candidates require a fresh post-promotion byte-integrity MATCH plus local runtime readiness. If signed provenance was bound at promotion, its exact evidence and current signer trust are also revalidated before MIO changes the active local model. Promotion and activation remain separate explicit actions.
+          Only PROMOTED model manifests can be activated. Governed adapter candidates require a fresh post-promotion byte-integrity MATCH plus local runtime readiness. If signed provenance was bound at promotion, its exact evidence and current signer trust are also revalidated before MIO changes the active local model. Promotion and activation remain separate explicit actions. Persisted lifecycle evidence and model-router preference changes refresh this status read-only; live runtime readiness is checked only during explicit activation.
         </p>
 
         <div className={`rounded-lg border px-3 py-2 text-[10px] ${stateClass}`}>
@@ -128,6 +154,7 @@ export const PromotedModelPanel: React.FC = () => {
           </div>
         )}
 
+        {refreshError && <div className="rounded border border-red-500/30 bg-red-950/10 px-3 py-2 text-[10px] text-red-300">LIVE STATUS REFRESH FAILED — {refreshError}</div>}
         {message && <div className="rounded border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-[10px] text-cyan-200">{message}</div>}
       </div>
     </>

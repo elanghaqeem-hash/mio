@@ -71,6 +71,18 @@ export async function runCandidateLifecycleLiveRefreshTests(): Promise<{ passed:
   assert(events.some((event) => event.operation === 'CLEAR_NAMESPACE' && event.key === undefined), 'Namespace clear emits no synthetic key or content');
   unsubscribeEvents();
 
+  let fanoutA = 0;
+  let fanoutB = 0;
+  let fanoutC = 0;
+  const unsubscribeFanoutA = subscribeStorageMutations(() => { fanoutA += 1; });
+  const unsubscribeFanoutB = subscribeStorageMutations(() => { fanoutB += 1; });
+  const unsubscribeFanoutC = subscribeStorageMutations(() => { fanoutC += 1; });
+  await observable.set('training', 'candidate:fanout', { marker: true });
+  assert(fanoutA === 1 && fanoutB === 1 && fanoutC === 1, 'One successful storage invalidation fans out independently to queue, pipeline, and runtime-status style subscribers');
+  unsubscribeFanoutA();
+  unsubscribeFanoutB();
+  unsubscribeFanoutC();
+
   const failedObservable = new ObservableStorageProvider(new FailingSetStorageProvider());
   let failedWriteEvents = 0;
   const unsubscribeFailed = subscribeStorageMutations(() => { failedWriteEvents += 1; });
