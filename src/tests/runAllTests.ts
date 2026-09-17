@@ -67,6 +67,7 @@ import { runCreativeAudioWorkspaceTests } from './creativeAudioWorkspaceTests';
 import { runCreativeWorkspaceIntegrationTests } from './creativeWorkspaceIntegrationTests';
 import { runCreativeEngine18Tests } from './creativeEngine18Tests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
+import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
 
 const runners = [
   runMioTestSuite,
@@ -138,6 +139,7 @@ const runners = [
   runCreativeWorkspaceIntegrationTests,
   runCreativeEngine18Tests,
   runEmotionalIntelligenceEngineTests,
+  runCompanionPromptAdapterTests,
 ];
 
 async function main(): Promise<void> {
