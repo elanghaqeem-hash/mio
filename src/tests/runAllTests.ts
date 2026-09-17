@@ -66,6 +66,7 @@ import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTe
 import { runCreativeAudioWorkspaceTests } from './creativeAudioWorkspaceTests';
 import { runCreativeWorkspaceIntegrationTests } from './creativeWorkspaceIntegrationTests';
 import { runCreativeEngine18Tests } from './creativeEngine18Tests';
+import { runAnimationRigMathTests } from './animationRigMathTests';
 
 const runners = [
   runMioTestSuite,
@@ -136,6 +137,7 @@ const runners = [
   runCreativeAudioWorkspaceTests,
   runCreativeWorkspaceIntegrationTests,
   runCreativeEngine18Tests,
+  runAnimationRigMathTests,
 ];
 
 async function main(): Promise<void> {
