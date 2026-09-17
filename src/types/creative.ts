@@ -5,7 +5,7 @@ export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,nu
 // 3D Animation Specification (.mioanim)
 export type AnimationInterpolation = 'linear'|'easeIn'|'easeOut'|'easeInOut'|'step';
 export type AnimationHandleType = 'AUTO'|'VECTOR'|'ALIGNED'|'FREE';
-export interface Keyframe { time:number; value:any; interpolation:AnimationInterpolation; handleType?:AnimationHandleType; handleLeft?:[number,number]; handleRight?:[number,number]; }
+export interface Keyframe { id?:string; time:number; value:any; interpolation:AnimationInterpolation; handleType?:AnimationHandleType; handleLeft?:[number,number]; handleRight?:[number,number]; }
 export interface AnimationTrack { id:string; targetObjectId:string; property:'position.x'|'position.y'|'position.z'|'rotation.x'|'rotation.y'|'rotation.z'|'scale'; keyframes:Keyframe[]; }
 export interface BonePose { position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; }
 export interface AnimationBone { id:string; name:string; parentId?:string; length:number; connected:boolean; ikFk:'IK'|'FK'; pose:BonePose; }
