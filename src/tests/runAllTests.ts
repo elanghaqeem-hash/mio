@@ -67,6 +67,7 @@ import { runCreativeAudioWorkspaceTests } from './creativeAudioWorkspaceTests';
 import { runCreativeWorkspaceIntegrationTests } from './creativeWorkspaceIntegrationTests';
 import { runCreativeEngine18Tests } from './creativeEngine18Tests';
 import { runAnimationRigMathTests } from './animationRigMathTests';
+import { runAnimationGestureStateTests } from './animationGestureStateTests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
 import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
 
@@ -140,6 +141,7 @@ const runners = [
   runCreativeWorkspaceIntegrationTests,
   runCreativeEngine18Tests,
   runAnimationRigMathTests,
+  runAnimationGestureStateTests,
   runEmotionalIntelligenceEngineTests,
   runCompanionPromptAdapterTests,
 ];
