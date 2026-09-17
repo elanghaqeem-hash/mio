@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, BadgeCheck, CircleDashed, RefreshCw, Route, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowDownToLine, BadgeCheck, CircleDashed, RefreshCw, Route, ShieldCheck } from 'lucide-react';
 import {
   candidateLifecyclePipelineService,
   type CandidateLifecyclePipelineSnapshot,
   type CandidateLifecycleStage,
   type CandidateLifecycleStageState,
 } from '../../training/CandidateLifecyclePipelineService';
+import {
+  lifecycleSurfaceIdForLabel,
+  navigateToCandidateLifecycleSurface,
+} from './CandidateLifecycleNavigation';
 
 const STATE_LABEL: Record<CandidateLifecycleStageState, string> = {
   COMPLETE: 'COMPLETE',
@@ -33,6 +37,7 @@ function StageIcon({ state }: { state: CandidateLifecycleStageState }) {
 }
 
 function StageCard({ stage }: { stage: CandidateLifecycleStage }) {
+  const navigable = Boolean(lifecycleSurfaceIdForLabel(stage.actionSurface));
   return (
     <div className={`rounded border p-2.5 space-y-1.5 ${stateClasses(stage.state)}`}>
       <div className="flex items-center justify-between gap-2">
@@ -41,9 +46,18 @@ function StageCard({ stage }: { stage: CandidateLifecycleStage }) {
       </div>
       <p className="text-[9px] leading-relaxed text-gray-400">{stage.detail}</p>
       {stage.actionLabel && (
-        <div className="rounded border border-white/5 bg-black/10 px-2 py-1.5 text-[9px]">
-          <span className="font-bold">Next:</span> {stage.actionLabel}
+        <div className="rounded border border-white/5 bg-black/10 px-2 py-1.5 text-[9px] space-y-1.5">
+          <div><span className="font-bold">Next:</span> {stage.actionLabel}</div>
           {stage.actionSurface && <span className="block text-gray-500">Surface: {stage.actionSurface}</span>}
+          {navigable && (
+            <button
+              type="button"
+              onClick={() => navigateToCandidateLifecycleSurface(stage.actionSurface)}
+              className="flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[8px] font-bold text-cyan-300 hover:bg-cyan-950/30"
+            >
+              <ArrowDownToLine size={9} /> GO TO SURFACE
+            </button>
+          )}
         </div>
       )}
       {stage.blockers && stage.blockers.length > 0 && (
@@ -90,7 +104,7 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
       </div>
 
       <p className="text-[10px] leading-relaxed text-gray-500">
-        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass.
+        Read-only operational map of the governed model lifecycle. It reuses the existing review/promotion evidence and never advances a lifecycle on refresh. <strong className="text-cyan-300">ACTION</strong> means run the named existing gate; it is not a pre-approval or guarantee that the gate will pass. <strong className="text-cyan-300">GO TO SURFACE</strong> only navigates within Settings and never executes the gate.
       </p>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -108,6 +122,7 @@ export const CandidateLifecyclePipelinePanel: React.FC = () => {
             <div>
               <div className="font-bold text-gray-200">{snapshot.displayName}</div>
               <div className="mt-1 text-[9px] text-gray-500"><code>{snapshot.runtimeModel}</code> · lifecycle <strong className="text-gray-300">{snapshot.lifecycle}</strong> · candidate <strong className="text-gray-300">{snapshot.candidateStatus}</strong></div>
+              <div className="mt-1 text-[8px] text-gray-600">Candidate ID: <code>{snapshot.candidateId}</code></div>
             </div>
             <div className={`rounded border px-2 py-1 text-[9px] font-bold ${snapshot.overallState === 'ACTIVE' ? 'border-emerald-500/30 text-emerald-300' : snapshot.overallState === 'BLOCKED' ? 'border-red-500/30 text-red-300' : snapshot.overallState === 'PROMOTED' ? 'border-violet-500/30 text-violet-300' : 'border-cyan-500/30 text-cyan-300'}`}>{snapshot.overallState}</div>
           </div>

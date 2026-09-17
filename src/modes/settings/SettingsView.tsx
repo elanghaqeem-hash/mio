@@ -14,6 +14,7 @@ import { TrainingArtifactBindingPanel } from './TrainingArtifactBindingPanel';
 import { TrainingCandidateEvidencePackagePanel } from './TrainingCandidateEvidencePackagePanel';
 import { TrainingCandidatePanel } from './TrainingCandidatePanel';
 import { TrainingRunHandoffPanel } from './TrainingRunHandoffPanel';
+import { CANDIDATE_LIFECYCLE_SURFACE_IDS } from './CandidateLifecycleNavigation';
 
 const CLOUD_PROVIDER_CONFIG = {
   openrouter: { label: 'OpenRouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', placeholder: 'openrouter/free or provider/model' },
@@ -195,13 +196,21 @@ export const SettingsView: React.FC = () => {
 
       <GovernedTrainingRunnerPanel />
       <TrainingRunHandoffPanel />
-      <TrainingArtifactBindingPanel />
+      <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.ARTIFACT_BINDING} className="scroll-mt-4 outline-none">
+        <TrainingArtifactBindingPanel />
+      </section>
       <TrainingCandidateEvidencePackagePanel />
       <SignedCandidateEvidencePanel />
-      <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
-      <ModelProvenancePanel />
-      <SignerAuditChainStatusPanel />
-      <TrainingCandidatePanel />
+      <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.CANDIDATE_LAB} className="scroll-mt-4 outline-none">
+        <ModelCandidateLabPanel backend={mioLocalBackend} endpoint={mioLocalEndpoint} />
+      </section>
+      <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.MODEL_PROVENANCE} className="scroll-mt-4 outline-none space-y-6">
+        <ModelProvenancePanel />
+        <SignerAuditChainStatusPanel />
+      </section>
+      <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.RELEASE_REVIEW} className="scroll-mt-4 outline-none">
+        <TrainingCandidatePanel />
+      </section>
       <PromotedModelPanel />
 
       <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">

@@ -7,6 +7,7 @@ import {
   promotedModelActivationService,
 } from '../../training/PromotedModelActivationService';
 import { CandidateLifecyclePipelinePanel } from './CandidateLifecyclePipelinePanel';
+import { CANDIDATE_LIFECYCLE_SURFACE_IDS } from './CandidateLifecycleNavigation';
 import { ModelPromotionPanel } from './ModelPromotionPanel';
 
 export const PromotedModelPanel: React.FC = () => {
@@ -62,8 +63,10 @@ export const PromotedModelPanel: React.FC = () => {
   return (
     <>
       <CandidateLifecyclePipelinePanel />
-      <ModelPromotionPanel onPromoted={refresh} />
-      <div className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3">
+      <section id={CANDIDATE_LIFECYCLE_SURFACE_IDS.FINAL_PROMOTION} className="scroll-mt-4 outline-none">
+        <ModelPromotionPanel onPromoted={refresh} />
+      </section>
+      <div id={CANDIDATE_LIFECYCLE_SURFACE_IDS.PROMOTED_RUNTIME} className="bg-[#0d121d] p-4 rounded-xl border border-gray-800 space-y-3 scroll-mt-4 outline-none">
         <div className="flex items-center justify-between gap-3">
           <span className="text-gray-300 font-bold flex items-center gap-2">
             <BrainCircuit size={14} className="text-cyan-400" /> MIO LOCAL MODEL LIFECYCLE
