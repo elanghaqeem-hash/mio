@@ -38,6 +38,13 @@ export class MioVoiceRuntimeV3 {
     return selected.provider;
   }
 
+  private settle(controller: AbortController) {
+    if (this.activeController !== controller) return;
+    this.activeController = null;
+    this.activeProviderId = null;
+    this.setState('IDLE');
+  }
+
   async interrupt(): Promise<void> {
     this.activeController?.abort();
     this.activeController = null;
@@ -58,6 +65,8 @@ export class MioVoiceRuntimeV3 {
       await provider.speak({ text, locale, signal: controller.signal });
     } catch (error) {
       if (!controller.signal.aborted) throw error;
+    } finally {
+      this.settle(controller);
     }
   }
 
@@ -76,12 +85,9 @@ export class MioVoiceRuntimeV3 {
     try {
       await provider.startListening({ locale, signal: controller.signal }, onResult);
     } catch (error) {
-      if (!controller.signal.aborted) {
-        this.activeController = null;
-        this.activeProviderId = null;
-        this.setState('IDLE');
-        throw error;
-      }
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      if (controller.signal.aborted) this.settle(controller);
     }
   }
 }
