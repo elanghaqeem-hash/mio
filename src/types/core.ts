@@ -4,6 +4,7 @@ export type MioCoreState =
   | 'THINKING'
   | 'PROCESSING'
   | 'EXECUTING'
+  | 'SPEAKING'
   | 'ONLINE'
   | 'OFFLINE'
   | 'CREATIVE'
