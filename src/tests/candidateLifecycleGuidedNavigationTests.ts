@@ -3,6 +3,7 @@ import {
   lifecycleNavigationTargetForSurface,
   lifecycleSurfaceIdForLabel,
   navigateToCandidateLifecycleSurface,
+  selectUniqueCandidateTextIndex,
 } from '../modes/settings/CandidateLifecycleNavigation';
 
 export async function runCandidateLifecycleGuidedNavigationTests(): Promise<{ passed: number; total: number }> {
@@ -31,9 +32,29 @@ export async function runCandidateLifecycleGuidedNavigationTests(): Promise<{ pa
   assert(ids.every((id) => /^mio-lifecycle-[a-z0-9-]+$/.test(id)), 'Lifecycle navigation target ids use stable bounded DOM identifiers');
   assert(lifecycleSurfaceIdForLabel('Native Model Candidate Lab') === CANDIDATE_LIFECYCLE_SURFACE_IDS.CANDIDATE_LAB, 'Surface label resolves to stable DOM anchor id');
 
+  assert(
+    selectUniqueCandidateTextIndex(['Mio-A · EXPERIMENTAL', 'Mio-B · RELEASE_CANDIDATE'], 'Mio-B') === 1,
+    'Deep focus selects the unique candidate card containing the requested runtime model',
+  );
+  assert(
+    selectUniqueCandidateTextIndex(['Mio-A · row 1', 'Mio-A · row 2'], 'Mio-A') === undefined,
+    'Deep focus refuses ambiguous duplicate runtime-model matches instead of guessing',
+  );
+  assert(
+    selectUniqueCandidateTextIndex(['Mio-A', 'Mio-B'], 'Mio-C') === undefined,
+    'Deep focus falls back when the requested runtime model is absent',
+  );
+  assert(
+    selectUniqueCandidateTextIndex(['Mio-A'], '   ') === undefined,
+    'Deep focus rejects blank runtime-model identity',
+  );
+
   const hadDocument = typeof document !== 'undefined';
   if (!hadDocument) {
-    assert(navigateToCandidateLifecycleSurface('Native Model Candidate Lab') === false, 'Navigation fails closed outside a browser DOM and performs no lifecycle action');
+    assert(
+      navigateToCandidateLifecycleSurface('Native Model Candidate Lab', 'candidate:test', 'Mio-Test') === false,
+      'Candidate deep-focus navigation fails closed outside a browser DOM and performs no lifecycle action',
+    );
   } else {
     assert(true, 'Browser DOM navigation is covered by build/runtime contract; Node test environment already provides document');
   }
