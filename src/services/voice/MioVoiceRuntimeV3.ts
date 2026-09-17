@@ -1,11 +1,12 @@
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
+import { productionSynthesisVoiceProvider } from './ProductionSynthesisVoiceProvider';
 import type { MioLocale, MioTranscriptionResult, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
 export type MioVoiceRuntimeState = 'IDLE' | 'LISTENING' | 'SPEAKING';
 export type MioVoiceRuntimeListener = (state: MioVoiceRuntimeState) => void;
 
-/** Provider-neutral runtime facade for Mio Voice V3. */
+/** Provider-neutral runtime facade for Mio Voice V3 with V4 production TTS preference. */
 export class MioVoiceRuntimeV3 {
   private state: MioVoiceRuntimeState = 'IDLE'; private listeners = new Set<MioVoiceRuntimeListener>(); private activeController: AbortController | null = null; private activeProviderId: string | null = null;
   constructor(private readonly registry: MioVoiceProviderRegistry = mioVoiceProviders) {}
@@ -22,7 +23,7 @@ export class MioVoiceRuntimeV3 {
     if (controller) this.settle(controller); else { this.activeProviderId = null; this.setState('IDLE'); }
   }
 
-  async speak(text: string, locale: MioLocale, preferredProviderId?: string): Promise<void> {
+  async speak(text: string, locale: MioLocale, preferredProviderId = productionSynthesisVoiceProvider.id): Promise<void> {
     await this.interrupt(); const provider = await this.select('TTS', preferredProviderId); const controller = new AbortController(); this.activeController = controller; this.activeProviderId = provider.id; this.setState('SPEAKING');
     try { await provider.speak({ text, locale, signal: controller.signal }); } catch (error) { if (!controller.signal.aborted) throw error; } finally { this.settle(controller); }
   }
@@ -34,5 +35,7 @@ export class MioVoiceRuntimeV3 {
   }
 }
 
+// Register production first so TTS prefers Mio's stable synthesis identity. Device speech remains fallback and STT provider.
+mioVoiceProviders.register(productionSynthesisVoiceProvider);
 mioVoiceProviders.register(deviceVoiceProvider);
 export const mioVoiceRuntimeV3 = new MioVoiceRuntimeV3();
