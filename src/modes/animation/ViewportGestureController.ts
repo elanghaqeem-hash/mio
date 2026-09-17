@@ -17,11 +17,11 @@ export class ViewportGestureController {
   reset(): void { this.state = createViewportGestureState(); }
 
   pointerDown(id: number, point: PointerPoint): void {
-    const previousMode = this.state.mode;
+    const previousMode = this.state.mode, previousPrimary = this.state.primaryId;
     const update = gesturePointerDown(this.state, id, point);
     this.state = update.state;
     if (update.enteredMulti) {
-      if (previousMode === 'SINGLE') this.callbacks.onSingleEnd?.(id, true);
+      if (previousMode === 'SINGLE' && previousPrimary !== undefined) this.callbacks.onSingleEnd?.(previousPrimary, true);
       this.callbacks.onMultiStart?.();
     } else if (this.state.mode === 'SINGLE') this.callbacks.onSingleStart?.(id, point);
   }
