@@ -9,13 +9,26 @@ export class CompanionRuntimePolicy {
     const active = assessment.primaryEmotion !== 'NEUTRAL' || assessment.intent !== 'GENERAL';
     return {
       assessment,
-      emotionalContext: active ? `${assessment.strategy}: ${assessment.primaryEmotion} (${assessment.intensity})` : undefined,
+      // Keep user-facing context human-readable and non-clinical. Detailed emotional
+      // assessment remains structured runtime metadata, not a diagnosis shown as fact.
+      emotionalContext: active ? this.modeLabel(assessment) : undefined,
       systemGuidance: EmotionalIntelligenceEngine.systemGuidance(assessment),
       voiceProsody: this.voiceProsody(assessment),
       // Emotional episodes are ephemeral. Stable communication preferences must go through
       // the existing governed MemoryPolicy/review flow rather than being inferred here.
       allowDurableEmotionalMemory: false,
     };
+  }
+
+  public static modeLabel(a: EmotionalAssessment): string {
+    switch (a.strategy) {
+      case 'LISTEN_FIRST':
+      case 'ACKNOWLEDGE_AND_LISTEN': return 'Mendengarkan';
+      case 'ACKNOWLEDGE_AND_SOLVE': return 'Mendengarkan lalu membantu mencari solusi';
+      case 'GENTLE_PERSPECTIVE': return 'Merefleksikan bersama';
+      case 'CELEBRATE_WITH_USER': return 'Merayakan bersama';
+      default: return 'Percakapan';
+    }
   }
 
   public static voiceProsody(a: EmotionalAssessment): CompanionVoiceProsody {
