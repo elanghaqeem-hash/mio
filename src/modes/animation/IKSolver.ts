@@ -43,14 +43,18 @@ export const solveTwoBoneIK = (input: TwoBoneIKInput): TwoBoneIKResult => {
   const maxReach = upper + lower;
   const minReach = Math.abs(upper - lower);
   const direction = normalize(delta, [1, 0, 0]);
-  const solvedDistance = Math.max(minReach + EPSILON, Math.min(maxReach - EPSILON, rawDistance));
+  const solvedDistance = Math.max(minReach, Math.min(maxReach, rawDistance));
 
   const poleVector = sub(input.pole ?? [input.root[0], input.root[1] + 1, input.root[2]], input.root);
   const rawNormal = cross(direction, poleVector);
   const normal = length(rawNormal) > EPSILON ? normalize(rawNormal, [0, 0, 1]) : perpendicular(direction);
   const bend = normalize(cross(normal, direction), perpendicular(direction));
 
-  const along = (upper * upper + solvedDistance * solvedDistance - lower * lower) / (2 * solvedDistance);
+  // At an exact zero-distance singularity (equal-length bones), use a tiny
+  // denominator only for the law-of-cosines calculation. The solved end point
+  // remains at the exact clamped reach boundary.
+  const geometryDistance = Math.max(EPSILON, solvedDistance);
+  const along = (upper * upper + geometryDistance * geometryDistance - lower * lower) / (2 * geometryDistance);
   const height = Math.sqrt(Math.max(0, upper * upper - along * along));
   const joint = add(add(input.root, mul(direction, along)), mul(bend, height));
   const end = add(input.root, mul(direction, solvedDistance));
