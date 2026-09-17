@@ -1,8 +1,8 @@
 import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAnimationProject } from '../../types/creative';
 import type { BoneTransformChannel } from './AutoKeyOperations';
-import { solveTwoBoneIK, type Vec3 } from './IKSolver';
+import { solveTwoBoneIK } from './IKSolver';
+import { aimBoneQuaternion } from './QuaternionAim';
 import {
-  eulerXYZToQuaternion,
   evaluateRigWorldTransforms,
   quaternionInverse,
   quaternionMultiply,
@@ -21,21 +21,8 @@ interface BoneTrackTarget { rigId: string; boneId: string; }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const ease = (t: number) => t * t * (3 - 2 * t);
 const clonePose = (pose: BonePose): BonePose => ({ position: [...pose.position], rotation: [...pose.rotation], scale: [...pose.scale] });
-const subtract = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const length = (value: Vec3) => Math.hypot(value[0], value[1], value[2]);
 
-const directionToWorldEuler = (from: Vec3, to: Vec3): Vec3 | undefined => {
-  const direction = subtract(to, from);
-  const magnitude = length(direction);
-  if (magnitude < 1e-9) return undefined;
-  const x = direction[0] / magnitude;
-  const y = direction[1] / magnitude;
-  const z = Math.max(-1, Math.min(1, direction[2] / magnitude));
-  return [Math.asin(z), 0, Math.atan2(-x, y)];
-};
-
-const localEulerFromWorld = (worldEuler: Vec3, parentWorld: Quat = [0, 0, 0, 1]): Vec3 => {
-  const worldQuaternion = eulerXYZToQuaternion(worldEuler);
+const localEulerFromWorldQuaternion = (worldQuaternion: Quat, parentWorld: Quat = [0, 0, 0, 1]): [number, number, number] => {
   const localQuaternion = quaternionNormalize(quaternionMultiply(quaternionInverse(parentWorld), worldQuaternion));
   return quaternionToEulerXYZ(localQuaternion);
 };
@@ -113,9 +100,9 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
     upperLength: upperBone.length,
     lowerLength: endBone.length,
   });
-  const rootDirection = directionToWorldEuler(upperWorld.head, result.joint);
-  const endDirection = directionToWorldEuler(result.joint, result.end);
-  if (!rootDirection || !endDirection) return;
+  const upperWorldQuaternion = aimBoneQuaternion(upperWorld.head, result.joint, constraint.poleAngle ?? 0);
+  const endWorldQuaternion = aimBoneQuaternion(result.joint, result.end, constraint.poleAngle ?? 0);
+  if (!upperWorldQuaternion || !endWorldQuaternion) return;
 
   const upperKey = `${rig.id}:${upperBone.id}`;
   const endKey = `${rig.id}:${endBone.id}`;
@@ -123,8 +110,8 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   const endPose = poses[endKey];
   if (!upperPose || !endPose) return;
   const parentWorld = upperBone.parentId ? world.bones[upperBone.parentId]?.quaternion : undefined;
-  const desiredUpperLocal = localEulerFromWorld(rootDirection, parentWorld);
-  const desiredEndLocal = localEulerFromWorld(endDirection, eulerXYZToQuaternion(rootDirection));
+  const desiredUpperLocal = localEulerFromWorldQuaternion(upperWorldQuaternion, parentWorld);
+  const desiredEndLocal = localEulerFromWorldQuaternion(endWorldQuaternion, upperWorldQuaternion);
   const weight = Math.max(0, Math.min(1, constraint.influence));
   for (let i = 0; i < 3; i++) {
     upperPose.rotation[i] = lerp(upperPose.rotation[i], desiredUpperLocal[i], weight);

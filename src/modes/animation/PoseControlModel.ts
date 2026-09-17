@@ -35,10 +35,20 @@ export const resolveSelectedBone = (
   return rig && bone ? { rig, bone } : undefined;
 };
 
-export const selectBone = (state: PoseControlState, rigId: string, boneId: string): PoseControlState => ({
-  ...state,
-  selection: { rigId, boneId },
-});
+export function selectBone(state: PoseControlState, selection: PoseSelection): PoseControlState;
+export function selectBone(state: PoseControlState, rigId: string, boneId: string): PoseControlState;
+export function selectBone(
+  state: PoseControlState,
+  selectionOrRigId: PoseSelection | string,
+  boneId?: string,
+): PoseControlState {
+  const selection = typeof selectionOrRigId === 'string'
+    ? { rigId: selectionOrRigId, boneId: boneId ?? '' }
+    : selectionOrRigId;
+
+  if (!selection.rigId || !selection.boneId) return state;
+  return { ...state, selection };
+}
 
 export const setPoseTool = (state: PoseControlState, tool: PoseTool): PoseControlState => ({ ...state, tool });
 export const setPoseAxis = (state: PoseControlState, axis: PoseAxis): PoseControlState => ({ ...state, axis });
