@@ -11,10 +11,18 @@ export interface MioVoiceProviderStatus {
   reason?: string;
 }
 
+/** Provider-neutral, bounded prosody hints. Providers may ignore unsupported hints. */
+export interface MioVoiceProsodyHint {
+  rateMultiplier?: number;
+  pitchDelta?: number;
+  volumeMultiplier?: number;
+}
+
 export interface MioSpeechRequest {
   text: string;
   locale: MioLocale;
   signal?: AbortSignal;
+  prosody?: MioVoiceProsodyHint;
 }
 
 export interface MioTranscriptionRequest {
