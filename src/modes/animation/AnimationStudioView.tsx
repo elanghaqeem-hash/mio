@@ -1,133 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Clock, Plus, Film, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Play, Pause, RotateCcw, Clock, Plus, Film, Trash2, Bone, Camera, KeyRound, Activity, Layers3, Move3D } from 'lucide-react';
 import { MioAnimationProject } from '../../types/creative';
 import { eventBus } from '../../core/EventBus';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-
 const runtimeTimestamp = () => Date.now();
-
-const INITIAL_ANIMATION_PROJECT: MioAnimationProject = {
-    duration: 5.0,
-    fps: 60,
-    currentTime: 0,
-    loop: true,
-    tracks: [
-      { id: 'track_locomotion_y', targetObjectId: 'Vanguard_Mech_Hull', property: 'position.y', keyframes: [
-        { time: 0, value: 0, interpolation: 'easeInOut' },
-        { time: 1.5, value: 0.8, interpolation: 'easeInOut' },
-        { time: 3.0, value: -0.2, interpolation: 'easeInOut' },
-        { time: 5.0, value: 0, interpolation: 'easeInOut' },
-      ] },
-      { id: 'track_thruster_rot', targetObjectId: 'Thruster_Pod_L', property: 'rotation.z', keyframes: [
-        { time: 0, value: 0, interpolation: 'linear' },
-        { time: 2.5, value: 0.45, interpolation: 'easeInOut' },
-        { time: 5.0, value: 0, interpolation: 'linear' },
-      ] },
-    ],
-};
-
+const INITIAL_ANIMATION_PROJECT: MioAnimationProject = { duration: 5, fps: 60, currentTime: 0, loop: true, tracks: [
+ { id:'track_root_y', targetObjectId:'Vanguard_Mech_Hull', property:'position.y', keyframes:[{time:0,value:0,interpolation:'easeInOut'},{time:1.5,value:.8,interpolation:'easeInOut'},{time:3,value:-.2,interpolation:'easeInOut'},{time:5,value:0,interpolation:'easeInOut'}]},
+ { id:'track_thruster_rot', targetObjectId:'Thruster_Pod_L', property:'rotation.z', keyframes:[{time:0,value:0,interpolation:'linear'},{time:2.5,value:.45,interpolation:'easeInOut'},{time:5,value:0,interpolation:'linear'}]}
+] };
+type EditorMode='DOPE_SHEET'|'GRAPH'|'CLIP';
 export const AnimationStudioView: React.FC = () => {
-  const workspace = useCreativeStudioDocument<MioAnimationProject>('MIO_Animation.mioanim', INITIAL_ANIMATION_PROJECT);
-  const { state: storedProject, setState: setAnimProject } = workspace;
-  const [currentTime, setCurrentTime] = useState(0);
-  const animProject = { ...storedProject, currentTime };
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [snapToFrames, setSnapToFrames] = useState(true);
-  const [selectedKeyframe, setSelectedKeyframe] = useState<{ trackId: string; index: number } | null>(null);
-  const selectedTrack = selectedKeyframe ? animProject.tracks.find((track) => track.id === selectedKeyframe.trackId) : undefined;
-  const selectedKeyframeData = selectedTrack && selectedKeyframe ? selectedTrack.keyframes[selectedKeyframe.index] : undefined;
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    let lastTime = performance.now();
-    let frameId = 0;
-    const tick = (now: number) => {
-      const delta = (now - lastTime) / 1000;
-      lastTime = now;
-      setCurrentTime((previous) => {
-        let nextTime = previous + delta;
-        if (nextTime > storedProject.duration) {
-          if (storedProject.loop) nextTime = 0;
-          else {
-            nextTime = storedProject.duration;
-            setIsPlaying(false);
-          }
-        }
-        return nextTime;
-      });
-      frameId = requestAnimationFrame(tick);
-    };
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, storedProject.duration, storedProject.loop]);
-
-  const handleScrub = (time: number) => setCurrentTime(Math.max(0, Math.min(storedProject.duration, time)));
-
-  const addKeyframeToTrack = (trackId: string) => {
-    const frameTime = snapToFrames ? Math.round(currentTime * storedProject.fps) / storedProject.fps : currentTime;
-    setSelectedKeyframe(null);
-    setAnimProject((previous) => ({
-      ...previous,
-      tracks: previous.tracks.map((track) => track.id === trackId
-        ? { ...track, keyframes: [...track.keyframes, { time: parseFloat(frameTime.toFixed(3)), value: 0.5, interpolation: 'easeInOut' as const }].sort((a, b) => a.time - b.time) }
-        : track),
-    }));
-    eventBus.emit('ACTIVITY_LOG', { timestamp: runtimeTimestamp(), message: `Added keyframe at ${animProject.currentTime.toFixed(2)}s to track ${trackId}`, mode: 'ANIMATION' });
-  };
-
-  const updateSelectedKeyframe = (changes: Partial<NonNullable<typeof selectedKeyframeData>>) => {
-    if (!selectedKeyframe) return;
-    setAnimProject((previous) => ({
-      ...previous,
-      tracks: previous.tracks.map((track) => track.id === selectedKeyframe.trackId
-        ? { ...track, keyframes: track.keyframes.map((keyframe, index) => index === selectedKeyframe.index ? { ...keyframe, ...changes } : keyframe) }
-        : track),
-    }));
-  };
-
-  const deleteSelectedKeyframe = () => {
-    if (!selectedKeyframe) return;
-    setAnimProject((previous) => ({
-      ...previous,
-      tracks: previous.tracks.map((track) => track.id === selectedKeyframe.trackId
-        ? { ...track, keyframes: track.keyframes.filter((_, index) => index !== selectedKeyframe.index) }
-        : track),
-    }));
-    setSelectedKeyframe(null);
-  };
-
-  const hoverVal = Math.sin((animProject.currentTime / animProject.duration) * Math.PI * 2) * 20;
-
-  return (
-    <div className="relative flex flex-col h-full w-full bg-[#07090e] font-mono text-xs overflow-hidden">
-      <CreativeWorkspaceToolbar workspace={workspace} />
-      <div className="flex-1 relative flex items-center justify-center border-b border-gray-800 bg-[#0a0e17] overflow-hidden">
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/90 px-3 py-1.5 rounded border border-cyan-500/30 text-cyan-300"><Film size={14} /><span>ANIMATION WORKSPACE // KINETIC PREVIEW</span><span className="text-amber-300 text-[10px] ml-2">LOCAL STRUCTURAL PREVIEW</span></div>
-        <div className="relative flex flex-col items-center justify-center p-8 rounded-2xl bg-cyan-950/20 border border-cyan-500/40 shadow-2xl shadow-cyan-500/10 transition-transform duration-75" style={{ transform: `translateY(${-hoverVal}px)` }}>
-          <div className="w-24 h-24 rounded-full border-2 border-cyan-400/80 flex items-center justify-center bg-cyan-500/10 cyan-glow"><div className="w-12 h-12 rounded-full bg-cyan-400 cyan-glow animate-pulse" /></div>
-          <div className="mt-4 text-center"><span className="text-cyan-300 font-bold block text-sm">Vanguard_Mech_Hull</span><span className="text-gray-400 text-[10px]">Pos Y: {(hoverVal / 20).toFixed(2)}m | Time: {animProject.currentTime.toFixed(2)}s</span></div>
-        </div>
-        <div className="absolute bottom-4 flex items-center gap-3 bg-[#0d121d]/90 backdrop-blur border border-gray-700 px-4 py-2 rounded-xl">
-          <button onClick={() => handleScrub(0)} className="p-1.5 hover:bg-gray-800 text-gray-300 rounded cursor-pointer" title="Reset"><RotateCcw size={16} /></button>
-          <button onClick={() => setIsPlaying((playing) => !playing)} className="p-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg font-bold shadow-md shadow-cyan-500/30 cursor-pointer">{isPlaying ? <Pause size={18} /> : <Play size={18} />}</button>
-          <div className="flex items-center gap-1.5 px-2 text-cyan-300"><Clock size={14} /><span className="text-sm font-bold">{animProject.currentTime.toFixed(2)}s</span><span className="text-gray-500">/ {animProject.duration.toFixed(1)}s</span></div>
-          <button onClick={() => setAnimProject((project) => ({ ...project, loop: !project.loop }))} className={`px-2 py-1 rounded text-[10px] border cursor-pointer ${animProject.loop ? 'bg-cyan-950 border-cyan-500 text-cyan-300' : 'border-gray-700 text-gray-500 hover:bg-gray-800'}`}>LOOP: {animProject.loop ? 'ON' : 'OFF'}</button>
-          <button onClick={() => setSnapToFrames((enabled) => !enabled)} className={`px-2 py-1 rounded text-[10px] border ${snapToFrames ? 'border-cyan-500 bg-cyan-950 text-cyan-300' : 'border-gray-700 text-gray-500'}`}>SNAP {snapToFrames ? 'ON' : 'OFF'}</button>
-        </div>
-      </div>
-
-      <div className="h-64 bg-[#0d121d] flex flex-col border-t border-gray-800">
-        <div className="h-8 bg-[#111726] border-b border-gray-800 flex items-center px-4"><span className="w-56 text-gray-400 font-bold text-[11px]">DOPE SHEET // {animProject.fps} FPS</span><div className="flex-1 relative h-full flex items-center"><input type="range" min="0" max={animProject.duration} step={snapToFrames ? 1 / animProject.fps : 0.001} value={animProject.currentTime} onChange={(event) => handleScrub(parseFloat(event.target.value))} className="w-full accent-cyan-400 h-1.5 bg-gray-800 rounded cursor-ew-resize" /></div></div>
-        <div className="flex min-h-0 flex-1"><div className="min-w-0 flex-1 overflow-y-auto">{animProject.tracks.map((track) => <div key={track.id} className="flex items-center h-14 border-b border-gray-800/80 hover:bg-gray-800/20 px-4">
-          <div className="w-56 pr-2"><span className="text-cyan-300 font-bold block truncate">{track.targetObjectId}</span><span className="text-[10px] text-gray-400 block">{track.property}</span></div>
-          <div className="flex-1 relative h-8 bg-[#090d15] rounded border border-gray-800/60 flex items-center px-2">
-            {track.keyframes.map((keyframe, index) => <button key={index} onClick={() => { setSelectedKeyframe({ trackId: track.id, index }); handleScrub(keyframe.time); }} style={{ left: `${(keyframe.time / animProject.duration) * 100}%` }} className={`absolute -translate-x-1/2 w-3 h-3 rotate-45 border shadow-sm cursor-pointer hover:scale-125 transition-transform ${selectedKeyframe?.trackId === track.id && selectedKeyframe.index === index ? 'z-20 scale-125 border-amber-100 bg-amber-400 shadow-amber-400' : 'border-white bg-cyan-400 shadow-cyan-400'}`} title={`Time: ${keyframe.time}s | Val: ${keyframe.value}`} />)}
-            <div style={{ left: `${(animProject.currentTime / animProject.duration) * 100}%` }} className="absolute top-0 bottom-0 w-0.5 bg-red-500 shadow-md shadow-red-500 z-10 pointer-events-none" />
-          </div>
-          <button onClick={() => addKeyframeToTrack(track.id)} className="ml-3 p-1.5 bg-gray-800 hover:bg-cyan-950 text-cyan-400 border border-gray-700 hover:border-cyan-500/40 rounded cursor-pointer" title="Add Keyframe at playhead"><Plus size={14} /></button>
-        </div>)}</div><div className="w-64 border-l border-gray-800 bg-[#0a0e17] p-3">{selectedKeyframeData ? <div className="space-y-2"><div className="flex items-center justify-between"><span className="font-bold text-cyan-300">KEYFRAME</span><button onClick={deleteSelectedKeyframe} className="text-red-400"><Trash2 size={13} /></button></div><label className="block text-gray-500">TIME<input type="number" min="0" max={animProject.duration} step={1 / animProject.fps} value={selectedKeyframeData.time} onChange={(event) => updateSelectedKeyframe({ time: Math.max(0, Math.min(animProject.duration, parseFloat(event.target.value) || 0)) })} className="mt-1 w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white" /></label><label className="block text-gray-500">VALUE<input type="number" step="0.05" value={typeof selectedKeyframeData.value === 'number' ? selectedKeyframeData.value : 0} onChange={(event) => updateSelectedKeyframe({ value: parseFloat(event.target.value) || 0 })} className="mt-1 w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white" /></label><label className="block text-gray-500">INTERPOLATION<select value={selectedKeyframeData.interpolation} onChange={(event) => updateSelectedKeyframe({ interpolation: event.target.value as typeof selectedKeyframeData.interpolation })} className="mt-1 w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white"><option value="linear">Linear</option><option value="easeIn">Ease In</option><option value="easeOut">Ease Out</option><option value="easeInOut">Ease In/Out</option><option value="step">Step</option></select></label></div> : <div className="text-gray-500">Select a keyframe to edit time, value, and interpolation.</div>}</div></div>
-      </div>
-    </div>
-  );
+ const workspace=useCreativeStudioDocument<MioAnimationProject>('MIO_3D_Animation.mioanim',INITIAL_ANIMATION_PROJECT); const {state:storedProject,setState:setAnimProject}=workspace;
+ const [currentTime,setCurrentTime]=useState(0); const [isPlaying,setIsPlaying]=useState(false); const [snapToFrames,setSnapToFrames]=useState(true); const [autoKey,setAutoKey]=useState(false); const [editorMode,setEditorMode]=useState<EditorMode>('DOPE_SHEET'); const [selectedObject,setSelectedObject]=useState('Vanguard_Mech_Hull'); const [selectedKeyframe,setSelectedKeyframe]=useState<{trackId:string;index:number}|null>(null);
+ const animProject={...storedProject,currentTime}; const selectedTrack=selectedKeyframe?animProject.tracks.find(t=>t.id===selectedKeyframe.trackId):undefined; const selectedKeyframeData=selectedTrack&&selectedKeyframe?selectedTrack.keyframes[selectedKeyframe.index]:undefined;
+ useEffect(()=>{if(!isPlaying)return;let last=performance.now(),id=0;const tick=(now:number)=>{const delta=(now-last)/1000;last=now;setCurrentTime(p=>{let n=p+delta;if(n>storedProject.duration){if(storedProject.loop)n=0;else{n=storedProject.duration;setIsPlaying(false)}}return n});id=requestAnimationFrame(tick)};id=requestAnimationFrame(tick);return()=>cancelAnimationFrame(id)},[isPlaying,storedProject.duration,storedProject.loop]);
+ const handleScrub=(time:number)=>setCurrentTime(Math.max(0,Math.min(storedProject.duration,time))); const frame=Math.round(currentTime*storedProject.fps);
+ const objects=useMemo(()=>Array.from(new Set(animProject.tracks.map(t=>t.targetObjectId))),[animProject.tracks]);
+ const addKeyframeToTrack=(trackId:string)=>{const t=snapToFrames?Math.round(currentTime*storedProject.fps)/storedProject.fps:currentTime;setAnimProject(p=>({...p,tracks:p.tracks.map(track=>track.id===trackId?{...track,keyframes:[...track.keyframes,{time:+t.toFixed(3),value:.5,interpolation:'easeInOut' as const}].sort((a,b)=>a.time-b.time)}:track)}));eventBus.emit('ACTIVITY_LOG',{timestamp:runtimeTimestamp(),message:`3D Animation Studio: inserted key at frame ${Math.round(t*storedProject.fps)}`,mode:'ANIMATION'});};
+ const updateSelectedKeyframe=(changes:Partial<NonNullable<typeof selectedKeyframeData>>)=>{if(!selectedKeyframe)return;setAnimProject(p=>({...p,tracks:p.tracks.map(track=>track.id===selectedKeyframe.trackId?{...track,keyframes:track.keyframes.map((k,i)=>i===selectedKeyframe.index?{...k,...changes}:k)}:track)}))};
+ const deleteSelectedKeyframe=()=>{if(!selectedKeyframe)return;setAnimProject(p=>({...p,tracks:p.tracks.map(track=>track.id===selectedKeyframe.trackId?{...track,keyframes:track.keyframes.filter((_,i)=>i!==selectedKeyframe.index)}:track)}));setSelectedKeyframe(null)};
+ const hover=Math.sin((currentTime/storedProject.duration)*Math.PI*2)*.35;
+ return <div className="flex h-full w-full flex-col overflow-hidden bg-[#16191d] font-mono text-xs text-gray-200">
+  <CreativeWorkspaceToolbar workspace={workspace}/>
+  <div className="flex h-9 items-center gap-2 border-b border-black bg-[#25292e] px-3"><Film size={14}/><b className="text-orange-300">3D ANIMATION STUDIO</b><span className="text-gray-500">Animation Workspace</span><div className="ml-auto flex gap-1"><button onClick={()=>setAutoKey(v=>!v)} className={`rounded px-2 py-1 ${autoKey?'bg-red-700 text-white':'bg-[#343a40] text-gray-300'}`}>● AUTO KEY</button><button onClick={()=>setSnapToFrames(v=>!v)} className={`rounded px-2 py-1 ${snapToFrames?'bg-blue-700':'bg-[#343a40]'}`}>SNAP</button></div></div>
+  <div className="flex min-h-0 flex-1">
+   <aside className="w-56 shrink-0 border-r border-black bg-[#202328]"><div className="border-b border-black px-3 py-2 font-bold text-gray-400">SCENE / ANIMATION SET</div>{objects.map(o=><button key={o} onClick={()=>setSelectedObject(o)} className={`flex w-full items-center gap-2 px-3 py-2 text-left ${selectedObject===o?'bg-orange-900/40 text-orange-200':'hover:bg-white/5'}`}><Bone size={13}/>{o}</button>)}<button className="flex w-full items-center gap-2 px-3 py-2 text-gray-400"><Camera size={13}/>Camera_Main</button><div className="mt-3 border-y border-black px-3 py-2 font-bold text-gray-500">CHANNELS</div>{animProject.tracks.filter(t=>t.targetObjectId===selectedObject).map(t=><div key={t.id} className="px-4 py-1 text-[10px] text-gray-400">↳ {t.property}</div>)}</aside>
+   <main className="relative flex min-w-0 flex-1 items-center justify-center bg-[#11151a]" style={{backgroundImage:'linear-gradient(#1d232a 1px,transparent 1px),linear-gradient(90deg,#1d232a 1px,transparent 1px)',backgroundSize:'32px 32px'}}><div className="absolute left-3 top-3 rounded bg-black/60 px-2 py-1 text-[10px] text-gray-300">PERSPECTIVE · POSE / OBJECT MODE · Frame {frame}</div><div className="absolute right-3 top-3 flex gap-1"><span className="rounded bg-black/60 px-2 py-1">GIZMO</span><span className="rounded bg-black/60 px-2 py-1">OVERLAYS</span></div><div className="relative h-52 w-40 transition-transform" style={{transform:`translateY(${-hover*70}px) rotate(${hover*4}deg)`}}><div className="absolute left-1/2 top-3 h-10 w-10 -translate-x-1/2 rounded-full border-2 border-orange-300 bg-[#303943]"/><div className="absolute left-1/2 top-14 h-24 w-16 -translate-x-1/2 rounded border-2 border-orange-300 bg-[#28313b]"/><div className="absolute left-[42px] top-16 h-24 w-1 origin-top rotate-12 bg-orange-300"/><div className="absolute right-[42px] top-16 h-24 w-1 origin-top -rotate-12 bg-orange-300"/><div className="absolute left-[66px] top-36 h-14 w-1 bg-orange-300"/><div className="absolute right-[66px] top-36 h-14 w-1 bg-orange-300"/><div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] text-orange-200">{selectedObject}</div></div><div className="absolute bottom-3 left-3 text-[10px] text-gray-500"><Move3D size={13} className="inline"/> Transform · Pose · Camera · IK-ready workspace</div></main>
+   <aside className="w-64 shrink-0 border-l border-black bg-[#202328] p-3"><div className="mb-3 font-bold text-gray-400">PROPERTIES</div><div className="space-y-2"><div className="rounded bg-[#171a1e] p-2"><b className="text-orange-200">{selectedObject}</b><div className="mt-2 grid grid-cols-3 gap-1 text-[10px]"><span>LOC X</span><span>Y</span><span>Z</span><span>0.00</span><span>{hover.toFixed(2)}</span><span>0.00</span></div></div>{selectedKeyframeData?<><label className="block text-gray-500">KEY TIME<input type="number" value={selectedKeyframeData.time} step={1/storedProject.fps} onChange={e=>updateSelectedKeyframe({time:+e.target.value})} className="mt-1 w-full bg-[#15191e] p-1 text-white"/></label><label className="block text-gray-500">VALUE<input type="number" value={typeof selectedKeyframeData.value==='number'?selectedKeyframeData.value:0} step=".05" onChange={e=>updateSelectedKeyframe({value:+e.target.value})} className="mt-1 w-full bg-[#15191e] p-1 text-white"/></label><label className="block text-gray-500">INTERPOLATION<select value={selectedKeyframeData.interpolation} onChange={e=>updateSelectedKeyframe({interpolation:e.target.value as any})} className="mt-1 w-full bg-[#15191e] p-1 text-white"><option value="linear">Linear</option><option value="easeInOut">Bezier / Ease</option><option value="step">Constant</option></select></label><button onClick={deleteSelectedKeyframe} className="flex items-center gap-1 text-red-400"><Trash2 size={12}/>Delete Key</button></>:<div className="text-gray-600">Select a keyframe for channel controls.</div>}</div></aside>
+  </div>
+  <section className="h-72 border-t border-black bg-[#1c2025]"><div className="flex h-9 items-center border-b border-black px-2"><div className="flex gap-1">{([['DOPE_SHEET','Dope Sheet',KeyRound],['GRAPH','Graph Editor',Activity],['CLIP','Action / NLA',Layers3]] as const).map(([id,label,Icon])=><button key={id} onClick={()=>setEditorMode(id)} className={`flex items-center gap-1 rounded px-2 py-1 ${editorMode===id?'bg-[#414850] text-white':'text-gray-500'}`}><Icon size={12}/>{label}</button>)}</div><div className="ml-auto flex items-center gap-2"><button onClick={()=>handleScrub(0)}><RotateCcw size={14}/></button><button onClick={()=>setIsPlaying(v=>!v)} className="rounded bg-orange-600 p-1.5 text-black">{isPlaying?<Pause size={15}/>:<Play size={15}/>}</button><Clock size={12}/><b>{frame}</b><span className="text-gray-600">/{Math.round(storedProject.duration*storedProject.fps)}</span></div></div>
+   <div className="flex h-[calc(100%-36px)]"><div className="w-56 shrink-0 border-r border-black p-2 text-gray-500">{editorMode==='DOPE_SHEET'?'OBJECT / BONE CHANNELS':editorMode==='GRAPH'?'F-CURVES':'ACTION TRACKS'}{animProject.tracks.map(t=><div key={t.id} className="mt-2 truncate text-[10px] text-gray-400">{t.targetObjectId} · {t.property}</div>)}</div><div className="relative flex-1 overflow-hidden bg-[#12161b]">{editorMode==='GRAPH'?<svg className="h-full w-full" viewBox="0 0 1000 220" preserveAspectRatio="none">{animProject.tracks.map((t,ti)=><polyline key={t.id} fill="none" stroke={ti%2?'#60a5fa':'#f59e0b'} strokeWidth="2" points={t.keyframes.map(k=>`${(k.time/storedProject.duration)*1000},${110-(Number(k.value)||0)*70}`).join(' ')}/>)}</svg>:editorMode==='CLIP'?<div className="space-y-3 p-4">{objects.map((o,i)=><div key={o} className="relative h-10 rounded bg-[#262c32]"><div className="absolute inset-y-1 rounded bg-orange-800/70 px-3 py-2 text-[10px]" style={{left:`${5+i*8}%`,right:`${10+i*5}%`}}>Action · {o}</div></div>)}</div>:<div>{animProject.tracks.map(track=><div key={track.id} className="relative h-12 border-b border-black/50">{track.keyframes.map((k,i)=><button key={i} onClick={()=>{setSelectedKeyframe({trackId:track.id,index:i});handleScrub(k.time)}} className="absolute top-4 h-3 w-3 -translate-x-1/2 rotate-45 bg-orange-400" style={{left:`${(k.time/storedProject.duration)*100}%`}}/>)}<button onClick={()=>addKeyframeToTrack(track.id)} className="absolute right-2 top-3 rounded bg-[#343a40] p-1"><Plus size={12}/></button></div>)}</div>}<div className="pointer-events-none absolute inset-y-0 w-px bg-red-500" style={{left:`${(currentTime/storedProject.duration)*100}%`}}/></div></div>
+  </section>
+ </div>;
 };
