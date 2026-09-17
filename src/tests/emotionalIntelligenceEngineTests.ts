@@ -1,3 +1,4 @@
+import { CompanionPromptAdapter } from '../intelligence/CompanionPromptAdapter';
 import { EmotionalIntelligenceEngine } from '../intelligence/EmotionalIntelligenceEngine';
 import { CompanionRuntimePolicy } from '../intelligence/CompanionRuntimePolicy';
 
@@ -25,6 +26,17 @@ export async function runEmotionalIntelligenceEngineTests(): Promise<{ passed: n
   assert(runtime.voiceProsody.rateMultiplier >= 0.9 && runtime.voiceProsody.rateMultiplier <= 1.1, 'Voice adaptation remains subtle and bounded');
   assert(CompanionRuntimePolicy.shouldPersistAsRelationshipPreference('Mulai sekarang ingat, saya lebih suka didengarkan dulu sebelum solusi.'), 'Explicit stable preference can enter governed memory review');
   assert(!CompanionRuntimePolicy.shouldPersistAsRelationshipPreference('Hari ini aku sedih banget.'), 'Transient emotion is not a relationship-memory candidate');
+
+  const adapterListen = CompanionPromptAdapter.prepare('Mio, aku lelah. Temani dan dengarkan dulu.');
+  const basePrompt = 'You are MIO. Follow safety policy.';
+  const augmentedPrompt = CompanionPromptAdapter.augmentSystemPrompt(basePrompt, adapterListen);
+  assert(CompanionPromptAdapter.coreState(adapterListen) === 'EMOTIONAL SUPPORT', 'Adapter activates emotional-support core state only for companion context');
+  assert(augmentedPrompt.startsWith(basePrompt) && augmentedPrompt.length > basePrompt.length, 'Adapter appends bounded companion guidance without replacing base policy');
+
+  const adapterTechnical = CompanionPromptAdapter.prepare('Jalankan stress test ICAAP dan buat analisis sensitivitas modal.');
+  assert(CompanionPromptAdapter.coreState(adapterTechnical) === 'THINKING', 'Adapter keeps technical stress testing in normal thinking state');
+  assert(CompanionPromptAdapter.augmentSystemPrompt(basePrompt, adapterTechnical) === basePrompt, 'Neutral technical prompts do not alter the system prompt');
+
   const guidance = EmotionalIntelligenceEngine.systemGuidance(listenId);
   assert(guidance.includes('never as a diagnosis') && guidance.includes('do not force advice'), 'Guidance avoids diagnosis and unwanted advice');
   assert(guidance.includes('Never encourage emotional dependency') && guidance.includes('Never claim to have human feelings'), 'Guidance protects agency and AI identity');
