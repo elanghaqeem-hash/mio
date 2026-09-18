@@ -52,6 +52,7 @@ export const SFXStudioView: React.FC = () => {
   const [automationParameter, setAutomationParameter] = useState<SFXAutomatableParameter>('filterCutoff');
   const automationLanes: SFXAutomationLane[] = patch.automationLanes ?? [];
   const [selectedAutomationTime, setSelectedAutomationTime] = useState<number | null>(null);
+  const automationPointSequenceRef = useRef(0);
   const draggingAutomationTimeRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const automationCanvasRef = useRef<HTMLDivElement | null>(null);
@@ -109,7 +110,7 @@ export const SFXStudioView: React.FC = () => {
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
 
   const addAutomationPoint = (time: number, value: number) => {
-    const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { time, value }] }, patch.duration);
+    const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { id: `automation_${Date.now()}_${automationPointSequenceRef.current++}`, time, value }] }, patch.duration);
     setPatch((current) => ({ ...current, automationLanes: [...(current.automationLanes ?? []).filter((candidate) => !(candidate.layerId === selectedLayerId && candidate.parameter === automationParameter)), lane] }));
   };
 
