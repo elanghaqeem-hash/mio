@@ -5,7 +5,7 @@ import { evaluateMotionKeyframes, snapMotionTime } from '../../creative/MotionWo
 import { legacyMotionProjectToV2 } from '../../creative/motion/legacyAdapter';
 import { MotionWorkspaceController } from '../../creative/motion/workspaceController';
 import { motionFrameToSeconds, motionSecondsToFrame } from '../../creative/motion/runtime';
-import { snapTimelineFrame, toggleTimelineSelection } from '../../creative/motion/timeline';
+import { moveSelectedKeyframes, snapTimelineFrame, toggleTimelineSelection } from '../../creative/motion/timeline';
 import { deleteMotionKeyframe, moveMotionKeyframe, setMotionKeyframeInterpolation, upsertMotionKeyframe } from '../../creative/GraphicMotionWorkspace';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { ExportManager } from '../../project/ExportManager';
@@ -94,21 +94,23 @@ export const Motion2DStudioView: React.FC = () => {
     setCurrentTime(motionFrameToSeconds(controller.snapshot().playback.frame,compositionV2.fps));
   };
   const dragKey=(event:React.PointerEvent<HTMLButtonElement>,trackId:string,keyId:string)=>{
-    event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setSelectedKeyId(keyId);
-    const row=event.currentTarget.parentElement; if(!row)return;
-    const rect=row.getBoundingClientRect(); let pendingFrame:number|null=null;
-    const resolveFrame=(clientX:number)=>{
-      const ratio=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
-      const rawFrame=Math.round(ratio*(compositionV2.durationFrames-1));
-      if(!snap)return rawFrame;
-      const targets=project.tracks.flatMap(track=>track.keyframes.filter(key=>key.id!==keyId).map(key=>({frame:motionSecondsToFrame(key.time,project.fps),kind:'keyframe' as const,priority:2})));
-      return snapTimelineFrame(rawFrame,targets,1);
+    event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
+    const groupIds=selectedKeyIds.includes(keyId)?selectedKeyIds:[keyId]; if(!selectedKeyIds.includes(keyId)){setSelectedKeyIds([keyId]);setSelectedKeyId(keyId);}
+    const row=event.currentTarget.parentElement; if(!row)return; const rect=row.getBoundingClientRect();
+    const source=project.tracks.find(track=>track.id===trackId); const moving=source?.keyframes.find(key=>key.id===keyId); if(!source||!moving)return;
+    const selectedFrames=project.tracks.flatMap(track=>track.keyframes.filter(key=>groupIds.includes(key.id)).map(key=>({id:key.id,frame:motionSecondsToFrame(key.time,project.fps)})));
+    const originalAnchor=motionSecondsToFrame(moving.time,project.fps);
+    const otherTargets=project.tracks.flatMap(track=>track.keyframes.filter(key=>!groupIds.includes(key.id)).map(key=>({frame:motionSecondsToFrame(key.time,project.fps),kind:'keyframe' as const,priority:2})));
+    let pendingDelta=0;
+    const move=(clientX:number)=>{
+      const ratio=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width)); const rawFrame=Math.round(ratio*(compositionV2.durationFrames-1));
+      const anchor=snap?snapTimelineFrame(rawFrame,otherTargets,1):rawFrame; const requestedDelta=anchor-originalAnchor;
+      const moved=moveSelectedKeyframes(selectedFrames,groupIds,requestedDelta,0,compositionV2.durationFrames-1);
+      const movedAnchor=moved.find(key=>key.id===keyId)?.frame??originalAnchor; pendingDelta=movedAnchor-originalAnchor;
+      setCurrentTime(motionFrameToSeconds(movedAnchor,project.fps));
     };
-    const onMove=(e:PointerEvent)=>{pendingFrame=resolveFrame(e.clientX);setCurrentTime(motionFrameToSeconds(pendingFrame,project.fps));};
-    const onUp=()=>{
-      window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp);
-      if(pendingFrame!==null)setProject(previous=>moveMotionKeyframe(previous,trackId,keyId,motionFrameToSeconds(pendingFrame!,project.fps)));
-    };
+    const onMove=(e:PointerEvent)=>move(e.clientX);
+    const onUp=()=>{ if(pendingDelta!==0)setProject(previous=>({...previous,tracks:previous.tracks.map(track=>({...track,keyframes:track.keyframes.map(key=>groupIds.includes(key.id)?{...key,time:motionFrameToSeconds(motionSecondsToFrame(key.time,project.fps)+pendingDelta,project.fps)}:key).sort((a,b)=>a.time-b.time)}))})); window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); };
     window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp,{once:true});
   };
   const tracks = project.tracks.filter((track) => track.nodeId === selectedId);
