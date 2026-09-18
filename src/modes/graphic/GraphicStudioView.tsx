@@ -5,7 +5,7 @@ import { ExportManager } from '../../project/ExportManager';
 import { eventBus } from '../../core/EventBus';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { alignGraphicLayers, beginGraphicDrag, beginGraphicResize, beginGraphicRotation, beginGraphicGroupResize, deleteGraphicLayers, distributeGraphicLayers, duplicateGraphicLayers, hitTestGraphicLayers, nudgeGraphicLayers, setGraphicLayerOrder, toggleGraphicSelection, updateGraphicDrag, updateGraphicResize, updateGraphicRotation, updateGraphicGroupResize, getGraphicSelectionBounds, type GraphicDragSession, type GraphicResizeHandle, type GraphicResizeSession, type GraphicRotationSession, type GraphicGroupResizeSession } from '../../creative/GraphicMotionWorkspace';
+import { alignGraphicLayers, beginGraphicDrag, beginGraphicResize, beginGraphicRotation, beginGraphicGroupResize, deleteGraphicLayers, distributeGraphicLayers, duplicateGraphicLayers, hitTestGraphicLayers, nudgeGraphicLayers, setGraphicLayerOrder, toggleGraphicSelection, updateGraphicDrag, updateGraphicResize, updateGraphicRotation, updateGraphicGroupResize, getGraphicSelectionBounds, snapGraphicPointToSmartGuides, type GraphicSmartGuide, type GraphicDragSession, type GraphicResizeHandle, type GraphicResizeSession, type GraphicRotationSession, type GraphicGroupResizeSession } from '../../creative/GraphicMotionWorkspace';
 
 const activityTimestamp = () => Date.now();
 
@@ -27,6 +27,7 @@ export const GraphicStudioView: React.FC = () => {
   const { state: documentData, setState: setDocumentData } = workspace;
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>(['layer_title']);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [smartGuides, setSmartGuides] = useState<GraphicSmartGuide[]>([]);
   const dragSessionRef = useRef<GraphicDragSession | null>(null);
   const resizeSessionRef = useRef<GraphicResizeSession | null>(null);
   const rotationSessionRef = useRef<GraphicRotationSession | null>(null);
@@ -51,12 +52,13 @@ export const GraphicStudioView: React.FC = () => {
   const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
     if(groupResizeSessionRef.current){const s=groupResizeSessionRef.current;setDocumentData(previous=>updateGraphicGroupResize(previous,s,point,event.shiftKey));return;}
+    if(dragSessionRef.current&&snapEnabled){const snapped=snapGraphicPointToSmartGuides(documentData,point,selectedLayerIds,6);setSmartGuides(snapped.guides);setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,snapped.point));return;}
     if(rotationSessionRef.current){setDocumentData(previous=>updateGraphicRotation(previous,rotationSessionRef.current!,point,event.shiftKey?15:0));return;}
     if(resizeSessionRef.current){setDocumentData(previous=>updateGraphicResize(previous,resizeSessionRef.current!,point,event.shiftKey));return;}
     if(!dragSessionRef.current)return;
     setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,point));
   };
-  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; resizeSessionRef.current=null; rotationSessionRef.current=null; groupResizeSessionRef.current=null; if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
+  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; resizeSessionRef.current=null; rotationSessionRef.current=null; groupResizeSessionRef.current=null; setSmartGuides([]); if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
   useEffect(()=>{const handler=(event:KeyboardEvent)=>{if(!selectedLayerIds.length||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return; const step=event.shiftKey?10:1; const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0; const dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0; event.preventDefault();setDocumentData(previous=>nudgeGraphicLayers(previous,selectedLayerIds,dx,dy));};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[selectedLayerIds,setDocumentData]);
 
   useEffect(() => {
@@ -98,9 +100,10 @@ export const GraphicStudioView: React.FC = () => {
       }
       ctx.restore();
     }
+    for(const guide of smartGuides){ctx.save();ctx.strokeStyle='#f472b6';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();if(guide.axis==='x'){ctx.moveTo(guide.value,0);ctx.lineTo(guide.value,canvas.height);}else{ctx.moveTo(0,guide.value);ctx.lineTo(canvas.width,guide.value);}ctx.stroke();ctx.restore();}
     const groupBounds=selectedLayerIds.length>1?getGraphicSelectionBounds(documentData,selectedLayerIds):null;
     if(groupBounds){ctx.save();ctx.strokeStyle='#38bdf8';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);ctx.strokeRect(groupBounds.left,groupBounds.top,groupBounds.width,groupBounds.height);ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';ctx.strokeStyle='#0284c7';for(const [hx,hy] of [[groupBounds.left,groupBounds.top],[groupBounds.centerX,groupBounds.top],[groupBounds.right,groupBounds.top],[groupBounds.right,groupBounds.centerY],[groupBounds.right,groupBounds.bottom],[groupBounds.centerX,groupBounds.bottom],[groupBounds.left,groupBounds.bottom],[groupBounds.left,groupBounds.centerY]]){ctx.fillRect(hx-5,hy-5,10,10);ctx.strokeRect(hx-5,hy-5,10,10);}ctx.restore();}
-  }, [documentData, selectedLayerIds]);
+  }, [documentData, selectedLayerIds, smartGuides]);
 
   const updateSelectedLayer = (updates: Partial<GraphicLayer>) => {
     if (!selectedLayerId) return;
