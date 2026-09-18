@@ -1,4 +1,4 @@
-import { resolveMioVoiceSession, voiceSessionRequired, type MioVoiceSessionEnv } from './_session';
+import { resolveMioVoiceSession, voiceSessionRequired, voiceSessionVerificationConfigured, type MioVoiceSessionEnv } from './_session';
 
 interface Env extends MioVoiceSessionEnv {
   MIO_TTS_ENDPOINT?: string;
@@ -119,21 +119,28 @@ async function readJsonBody(request: Request): Promise<SynthesisRequest | Respon
   }
 }
 
+function gatewayReady(env: Env): boolean {
+  const providerReady = configured(env) && Boolean(safeProviderEndpoint(env));
+  const sessionReady = !voiceSessionRequired(env) || voiceSessionVerificationConfigured(env);
+  return providerReady && sessionReady;
+}
+
 export function onRequestHead(context: PagesContext): Response {
-  return new Response(null, { status: configured(context.env) && safeProviderEndpoint(context.env) ? 204 : 503, headers: securityHeaders() });
+  return new Response(null, { status: gatewayReady(context.env) ? 204 : 503, headers: securityHeaders() });
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
-  const ready = configured(context.env) && Boolean(safeProviderEndpoint(context.env));
+  const ready = gatewayReady(context.env);
   return json({
     service: 'mio-voice-v4-synthesis',
-    engine: 'v4.3',
+    engine: 'v4.4',
     ready,
     voiceConfigured: Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
     modelConfigured: Boolean(context.env.MIO_TTS_MODEL?.trim()),
     accessProtectionConfigured: Boolean(context.env.MIO_VOICE_GATEWAY_TOKEN?.trim()),
     allowedOriginsConfigured: Boolean(context.env.MIO_VOICE_ALLOWED_ORIGINS?.trim()),
     sessionRequired: voiceSessionRequired(context.env),
+    sessionVerificationConfigured: voiceSessionVerificationConfigured(context.env),
     detail: ready ? 'Server-side licensed synthesis gateway is configured.' : 'Production synthesis is not configured; Mio will use its device voice fallback.',
     authority: 'readiness only; no provider secret or voice enrollment data is exposed',
   }, ready ? 200 : 503);
@@ -142,7 +149,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 export async function onRequestPost(context: PagesContext): Promise<Response> {
   if (!requestOriginAllowed(context.request, context.env)) return json({ error: 'This origin is not allowed to request synthesis.' }, 403);
   if (!authorized(context.request, context.env)) return json({ error: 'Synthesis gateway authorization failed.' }, 401);
-  const session = resolveMioVoiceSession(context.request);
+  const session = await resolveMioVoiceSession(context.request, context.env);
   if (voiceSessionRequired(context.env) && !session) return json({ error: 'Authenticated Mio session is required for synthesis.' }, 401);
   const endpoint = safeProviderEndpoint(context.env);
   if (!configured(context.env) || !endpoint) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
@@ -181,7 +188,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!/^audio\/(mpeg|wav|x-wav|ogg)(?:;|$)/i.test(contentType)) return json({ error: 'Licensed synthesis provider returned an unsupported media type' }, 502);
     return new Response(upstream.body, {
       status: 200,
-      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.3', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
+      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.4', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
     });
   } catch {
     const aborted = controller.signal.aborted;
