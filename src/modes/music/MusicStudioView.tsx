@@ -42,9 +42,19 @@ export const MusicStudioView: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const pianoRollRef = useRef<HTMLDivElement | null>(null);
+  const draggingNoteRef = useRef<{id:string;startX:number;startY:number;originStep:number;originPitch:number}|null>(null);
   const activeTrack = project.tracks.find((track) => track.id === activeTrackId);
   const selectedNote = activeTrack?.notes.find((note) => note.id === selectedNoteId);
   const pitchRange = [76, 74, 72, 71, 69, 67, 65, 64, 62, 60, 57, 55, 53, 52, 48, 45];
+  const moveNoteFromPointer = (clientX:number, clientY:number) => {
+    const drag=draggingNoteRef.current, rect=pianoRollRef.current?.getBoundingClientRect(); if(!drag||!rect||!activeTrack)return;
+    const deltaSteps=Math.round((clientX-drag.startX)/(rect.width/project.totalSteps));
+    const rowHeight=rect.height/pitchRange.length; const deltaRows=Math.round((clientY-drag.startY)/rowHeight);
+    const originIndex=pitchRange.indexOf(drag.originPitch); const targetPitch=pitchRange[Math.max(0,Math.min(pitchRange.length-1,originIndex+deltaRows))]??drag.originPitch;
+    setProject(current=>({...current,tracks:current.tracks.map(track=>track.id===activeTrackId?{...track,notes:track.notes.map(note=>note.id===drag.id?moveNote(note,deltaSteps,targetPitch-drag.originPitch,current.totalSteps):note)}:track)}));
+  };
+
   const midiNoteNames: Record<number, string> = { 76: 'E5', 74: 'D5', 72: 'C5', 71: 'B4', 69: 'A4', 67: 'G4', 65: 'F4', 64: 'E4', 62: 'D4', 60: 'C4', 57: 'A3', 55: 'G3', 53: 'F3', 52: 'E3', 48: 'C3', 45: 'A2' };
 
   useEffect(() => {
@@ -169,10 +179,10 @@ export const MusicStudioView: React.FC = () => {
 
         <div className="flex-1 bg-[#090d16] rounded-xl border border-gray-800 flex overflow-hidden">
           <div className="w-16 bg-[#0c111c] border-r border-gray-800 flex flex-col">{pitchRange.map((pitch) => <div key={pitch} className="flex-1 flex items-center justify-end pr-2 border-b border-gray-800/40 font-bold text-[10px] text-gray-300">{midiNoteNames[pitch] || pitch}</div>)}</div>
-          <div className="flex-1 flex flex-col overflow-x-auto">{pitchRange.map((pitch) => <div key={pitch} className="flex-1 flex border-b border-gray-800/40">{Array.from({ length: project.totalSteps }).map((_, stepIndex) => {
+          <div ref={pianoRollRef} className="flex-1 flex flex-col overflow-x-auto touch-none">{pitchRange.map((pitch) => <div key={pitch} className="flex-1 flex border-b border-gray-800/40">{Array.from({ length: project.totalSteps }).map((_, stepIndex) => {
             const hasNote = activeTrack?.notes.some((note) => note.pitch === pitch && note.startStep === stepIndex);
             const isCurrent = currentStep === stepIndex && isPlaying;
-            return <div key={stepIndex} onClick={() => handleCellClick(pitch, stepIndex)} className={`flex-1 border-r border-gray-800/40 cursor-pointer transition relative ${stepIndex % 4 === 0 ? 'border-r-gray-700' : ''} ${isCurrent ? 'bg-cyan-500/20' : hasNote ? 'bg-cyan-500' : 'hover:bg-gray-800/40'}`}>{hasNote && <div className="absolute inset-0 bg-cyan-400 border border-white rounded shadow-sm shadow-cyan-400" />}</div>;
+            return <div key={stepIndex} onClick={() => handleCellClick(pitch, stepIndex)} className={`flex-1 border-r border-gray-800/40 cursor-pointer transition relative ${stepIndex % 4 === 0 ? 'border-r-gray-700' : ''} ${isCurrent ? 'bg-cyan-500/20' : hasNote ? 'bg-cyan-500' : 'hover:bg-gray-800/40'}`}>{hasNote && (()=>{const note=activeTrack?.notes.find(candidate=>candidate.pitch===pitch&&candidate.startStep===stepIndex);return note?<button aria-label={`Note ${midiNoteNames[pitch]||pitch} step ${stepIndex}`} onPointerDown={(event)=>{event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);setSelectedNoteId(note.id);draggingNoteRef.current={id:note.id,startX:event.clientX,startY:event.clientY,originStep:note.startStep,originPitch:note.pitch};}} onPointerMove={(event)=>{if(draggingNoteRef.current?.id===note.id)moveNoteFromPointer(event.clientX,event.clientY);}} onPointerUp={()=>{draggingNoteRef.current=null;}} onPointerCancel={()=>{draggingNoteRef.current=null;}} className="absolute inset-0 bg-cyan-400 border border-white rounded shadow-sm shadow-cyan-400 touch-none" />:null;})()}</div>;
           })}</div>)}</div>
         </div>
       </div>
