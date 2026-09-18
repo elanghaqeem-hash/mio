@@ -22,6 +22,7 @@ import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from 
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
+import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -240,19 +241,12 @@ export const Studio3DView: React.FC = () => {
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
     if (!hit || hit.faceIndex == null) {
-      if (!event.shiftKey) setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
+      if (!event.shiftKey) setMeshSelection(clearMeshSelection('face'));
       return;
     }
     const faceId = faceIdFromTriangleIndex(projection, hit.faceIndex);
     if (!faceId) return;
-    setMeshSelection((previous) => {
-      const additive = event.shiftKey;
-      const alreadySelected = previous.faceIds.includes(faceId);
-      const faceIds = additive
-        ? alreadySelected ? previous.faceIds.filter((id) => id !== faceId) : [...previous.faceIds, faceId]
-        : [faceId];
-      return { mode: 'face', vertexIds: [], edgeIds: [], faceIds };
-    });
+    setMeshSelection((previous) => toggleFaceSelection(previous, faceId, event.shiftKey));
   };
 
   const enterEditMode = () => {
