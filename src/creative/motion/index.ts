@@ -8,3 +8,4 @@ export * from "./legacyAdapter";
 export * from "./runtime";
 export * from "./timeline";
 export * from "./viewport";
+export * from "./workspaceController";
