@@ -11,6 +11,7 @@ export interface MioAudioPlaybackTelemetry {
   appendCount: number;
   rebufferCount: number;
   maxObservedBufferAheadMs: number;
+  prebufferTargetChunks: number;
 }
 
 const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
@@ -22,6 +23,7 @@ const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
   appendCount: 0,
   rebufferCount: 0,
   maxObservedBufferAheadMs: 0,
+  prebufferTargetChunks: 1,
 });
 
 /**
@@ -82,6 +84,9 @@ export class MioStreamingAudioPlayer {
     let rebufferCount = 0;
     let maxObservedBufferAheadMs = 0;
     let hasStarted = false;
+    // Start conservatively with two encoded chunks when available. This bounded
+    // prebuffer trades a small amount of latency for fewer immediate underruns.
+    const prebufferTargetChunks = 2;
     const updateBufferTelemetry = () => {
       if (!audio.buffered.length) return;
       const end = audio.buffered.end(audio.buffered.length - 1);
@@ -112,9 +117,20 @@ export class MioStreamingAudioPlayer {
         sourceBuffer.appendBuffer(data.slice().buffer);
       });
 
-      await append(first.data);
-      bytes += first.data.byteLength;
+      let current = first;
+      await append(current.data);
+      bytes += current.data.byteLength;
       appendCount += 1;
+      while (!current.final && appendCount < prebufferTargetChunks) {
+        const next = await iterator.next();
+        if (next.done) break;
+        current = next.value;
+        if (current.data.byteLength) {
+          await append(current.data);
+          bytes += current.data.byteLength;
+          appendCount += 1;
+        }
+      }
       const playbackStartedAt = performance.now();
       await audio.play();
       this.lastTelemetry = {
@@ -126,11 +142,11 @@ export class MioStreamingAudioPlayer {
         appendCount,
         rebufferCount,
         maxObservedBufferAheadMs,
+        prebufferTargetChunks,
       };
       hasStarted = true;
       updateBufferTelemetry();
 
-      let current = first;
       while (!current.final) {
         if (signal?.aborted || generation !== this.generation) throw new DOMException('Playback aborted.', 'AbortError');
         const next = await iterator.next();
@@ -198,6 +214,7 @@ export class MioStreamingAudioPlayer {
         appendCount,
         rebufferCount: 0,
         maxObservedBufferAheadMs: 0,
+        prebufferTargetChunks: 0,
       };
       await this.waitForEnd(audio, generation, signal);
     } finally {
