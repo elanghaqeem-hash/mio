@@ -1,8 +1,7 @@
-import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, SFXLayer, SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
+import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, MusicClip, MusicArrangement, SFXLayer, SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
 export type { SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
 
-export interface MusicClip { id:string; trackId:string; name:string; startStep:number; lengthSteps:number; sourceStartStep:number; loop:boolean; }
-export interface MusicArrangement { totalSteps:number; clips:MusicClip[]; }
+export type { MusicClip, MusicArrangement } from '../types/creative';
 export interface MusicMeter { peak:number; rms:number; db:number; }
 export const musicStepDuration = (tempo: number): number => 60 / Math.max(20, tempo) / 4;
 export const audibleMusicTracks = (tracks: MusicTrack[]): MusicTrack[] => { const soloed=tracks.filter(t=>t.solo&&!t.mute); return soloed.length?soloed:tracks.filter(t=>!t.mute); };
