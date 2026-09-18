@@ -26,13 +26,18 @@ export function mergeLegacyPositionTrack(project: MioMotionProject, layerId: str
   const x = legacyTrackToV2(project, layerId, "x", fallbackX);
   const y = legacyTrackToV2(project, layerId, "y", fallbackY);
   const frames = [...new Set([...x.keyframes.map((key) => key.frame), ...y.keyframes.map((key) => key.frame)])].sort((a, b) => a - b);
+  const exactAt = (track: MotionTrack<number>, frame: number) => track.keyframes.find((key) => key.frame === frame);
   const sample = (track: MotionTrack<number>, frame: number): number => evaluateTrack(track, frame);
   return {
     id: `track_${layerId}_position`,
     property: "position",
     defaultValue: [fallbackX, fallbackY] as const,
     keyframes: frames.map((frame) => {
-      const source = x.keyframes.find((key) => key.frame === frame) ?? y.keyframes.find((key) => key.frame === frame);
+      const exactX = exactAt(x, frame);
+      const exactY = exactAt(y, frame);
+      // Deterministic merge policy: X interpolation wins when both axes key the same frame;
+      // otherwise the axis that owns the exact key defines temporal interpolation.
+      const source = exactX ?? exactY;
       return { id: `key_${layerId}_position_${frame}`, frame, value: [sample(x, frame), sample(y, frame)] as const, interpolation: source?.interpolation ?? { type: "linear" } };
     }),
   };
