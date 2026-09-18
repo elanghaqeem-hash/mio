@@ -101,6 +101,7 @@ import { runAnimationQuaternionBlendTests } from './animationQuaternionBlendTest
 import { runAnimationIKFKSemanticsTests } from './animationIKFKSemanticsTests';
 import { runAnimationIKFKSwitchTests } from './animationIKFKSwitchTests';
 import { runAnimationFABRIKTests } from './animationFABRIKTests';
+import { runAnimationIKAuthoringTests } from './animationIKAuthoringTests';
 import { runAnimationIKChainSemanticsTests } from './animationIKChainSemanticsTests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
 import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
