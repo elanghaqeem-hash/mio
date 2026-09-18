@@ -32,7 +32,10 @@ export interface MotionTrack { id:string;nodeId:string;property:MotionProperty;k
 export interface MotionLayer { id:string;name:string;type:'shape'|'text';visible:boolean;locked:boolean;x:number;y:number;width:number;height:number;scale:number;rotation:number;opacity:number;fill:string;text?:string;fontSize?:number;borderRadius?:number; }
 export interface MioMotionProject { width:number;height:number;backgroundColor:string;duration:number;fps:number;currentTime:number;loop:boolean;layers:MotionLayer[];tracks:MotionTrack[]; }
 export interface SFXLayer { id:string;name:string;type:'transient'|'oscillator'|'noise'|'sub_harmonic';waveType:OscillatorType;baseFrequency:number;frequencySweep:number;attack:number;decay:number;sustain:number;release:number;filterCutoff:number;filterResonance:number;distortion:number;delayTime:number;delayFeedback:number;reverbMix:number;volume:number; }
-export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[]; }
+export interface SFXAutomationPoint { time:number; value:number; }
+export type SFXAutomatableParameter = 'baseFrequency'|'frequencySweep'|'filterCutoff'|'filterResonance'|'distortion'|'delayTime'|'delayFeedback'|'reverbMix'|'volume';
+export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; points:SFXAutomationPoint[]; }
+export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
 export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[]; }
 export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[]; }
