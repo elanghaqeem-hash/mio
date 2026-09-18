@@ -88,9 +88,11 @@ export const GraphicStudioView: React.FC = () => {
         if (layer.stroke) { ctx.strokeStyle = layer.stroke; ctx.lineWidth = layer.strokeWidth || 1; ctx.stroke(); }
       } else if (layer.type === 'text') {
         ctx.fillStyle = layer.fill || '#ffffff';
-        ctx.font = `bold ${layer.fontSize || 16}px ${layer.fontFamily || 'monospace'}`;
+        ctx.font = `${layer.fontStyle || 'normal'} ${layer.fontWeight || 400} ${layer.fontSize || 16}px ${layer.fontFamily || 'monospace'}`;
         ctx.textBaseline = 'top';
-        ctx.fillText(layer.text || '', layer.x, layer.y);
+        ctx.textAlign = layer.textAlign || 'left';
+        const lineHeight=(layer.lineHeight || 1.2)*(layer.fontSize || 16), anchorX=layer.textAlign==='center'?layer.x+layer.width/2:layer.textAlign==='right'?layer.x+layer.width:layer.x;
+        (layer.text || '').split('\\n').forEach((line,index)=>ctx.fillText(line,anchorX,layer.y+index*lineHeight));
       }
       if (selectedLayerIds.includes(layer.id)) {
         ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
