@@ -1,4 +1,4 @@
-import { beginGraphicResize, deleteMotionKeyframe, graphicToMotionProject, moveMotionKeyframe, setMotionKeyframeInterpolation, updateGraphicResize, beginGraphicRotation, updateGraphicRotation, hitTestGraphicLayers, getGraphicSelectionBounds, beginGraphicGroupResize, updateGraphicGroupResize, snapGraphicPointToSmartGuides, upsertMotionKeyframe } from '../creative/GraphicMotionWorkspace';
+import { beginGraphicResize, deleteMotionKeyframe, graphicToMotionProject, moveMotionKeyframe, setMotionKeyframeInterpolation, updateGraphicResize, beginGraphicRotation, updateGraphicRotation, hitTestGraphicLayers, getGraphicSelectionBounds, beginGraphicGroupResize, updateGraphicGroupResize, snapGraphicPointToSmartGuides, snapGraphicDragToSmartGuides, beginGraphicDrag, upsertMotionKeyframe } from '../creative/GraphicMotionWorkspace';
 import type { MioGraphicDocument } from '../types/creative';
 
 interface Result { name:string; passed:boolean; error?:string }
@@ -16,6 +16,10 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
    const doc=graphic(),session=beginGraphicResize(doc,'card','se',{x:300,y:200}); assert(session,'resize session missing');
    const resized=updateGraphicResize(doc,session!,{x:400,y:250},true); const layer=resized.layers[0];
    assert(layer.width===300&&layer.height===150,'proportional resize incorrect');
+ }));
+ results.push(await test('Graphic resize follows rotated local axes',()=>{
+   const doc={...graphic(),layers:graphic().layers.map(layer=>layer.id==='card'?{...layer,rotation:90}:layer)}; const session=beginGraphicResize(doc,'card','e',{x:200,y:0}); assert(session,'rotated resize session missing');
+   const resized=updateGraphicResize(doc,session!,{x:200,y:50}); const layer=resized.layers[0]; assert(layer.width>200,'world vertical drag should grow 90-degree layer local width'); assert(layer.rotation===90,'resize must preserve rotation');
  }));
  results.push(await test('Graphic handoff creates editable motion layers',()=>{
    const motion=graphicToMotionProject(graphic(),8,24); assert(motion.layers.length===2,'layer handoff incomplete'); assert(motion.duration===8&&motion.fps===24,'motion settings incorrect');
@@ -35,6 +39,11 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
    const resized=updateGraphicGroupResize(rotated,session!,{x:session!.bounds.right+40,y:session!.bounds.bottom+20}); assert(resized.layers.find(layer=>layer.id==='card')?.rotation===37,'member rotation changed during group resize');
    const aspect=beginGraphicGroupResize(multi,['card','card2'],'se'); assert(aspect,'aspect session missing'); const aspectResult=updateGraphicGroupResize(multi,aspect!,{x:aspect!.bounds.right+80,y:aspect!.bounds.bottom+10},true); const bounds=getGraphicSelectionBounds(aspectResult,['card','card2']);
    assert(bounds&&Math.abs(bounds.width/bounds.height-aspect!.bounds.width/aspect!.bounds.height)<0.05,'aspect ratio drifted during Shift group resize');
+ }));
+ results.push(await test('Graphic smart guides snap moving selection geometry rather than pointer',()=>{
+   const doc=graphic(); const session=beginGraphicDrag(doc,['card'],{x:150,y:150},8,false); const snapped=snapGraphicDragToSmartGuides(doc,session,{x:350,y:150},6);
+   assert(snapped.pointer.x===350,'pointer should remain stable when selection center is already aligned'); assert(snapped.guides.some(guide=>guide.axis==='x'&&guide.value===400),'canvas center guide missing');
+   const near=snapGraphicDragToSmartGuides(doc,session,{x:347,y:150},6); assert(near.pointer.x===350,'selection-aware snap should correct pointer by nearest geometry delta');
  }));
  for(const result of results)console.log(`${result.passed?'✓':'✗'} [${result.passed?'PASS':'FAIL'}] ${result.name}${result.error?` — ${result.error}`:''}`);
  return{passed:results.filter(result=>result.passed).length,total:results.length};
