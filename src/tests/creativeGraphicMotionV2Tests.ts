@@ -17,6 +17,10 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
    const resized=updateGraphicResize(doc,session!,{x:400,y:250},true); const layer=resized.layers[0];
    assert(layer.width===300&&layer.height===150,'proportional resize incorrect');
  }));
+ results.push(await test('Graphic resize follows rotated local axes',()=>{
+   const doc={...graphic(),layers:graphic().layers.map(layer=>layer.id==='card'?{...layer,rotation:90}:layer)}; const session=beginGraphicResize(doc,'card','e',{x:200,y:0}); assert(session,'rotated resize session missing');
+   const resized=updateGraphicResize(doc,session!,{x:200,y:50}); const layer=resized.layers[0]; assert(layer.width>200,'world vertical drag should grow 90-degree layer local width'); assert(layer.rotation===90,'resize must preserve rotation');
+ }));
  results.push(await test('Graphic handoff creates editable motion layers',()=>{
    const motion=graphicToMotionProject(graphic(),8,24); assert(motion.layers.length===2,'layer handoff incomplete'); assert(motion.duration===8&&motion.fps===24,'motion settings incorrect');
  }));
