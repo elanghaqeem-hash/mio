@@ -5,7 +5,7 @@ import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { audibleMusicTracks, musicStepDuration, estimateTrackMeter, quantizeNoteEvent, transposeNotes, moveNote, resizeNote, moveMusicClip, resizeMusicClip, toggleMusicClipLoop } from '../../creative/AudioWorkspace';
+import { audibleMusicTracks, musicStepDuration, estimateTrackMeter, quantizeNoteEvent, transposeNotes, moveNote, resizeNote, moveMusicClip, resizeMusicClip, toggleMusicClipLoop, notesForClip } from '../../creative/AudioWorkspace';
 import { ExportManager } from '../../project/ExportManager';
 
 const INITIAL_MUSIC_PROJECT: MioMusicProject = {
@@ -75,12 +75,14 @@ export const MusicStudioView: React.FC = () => {
     const stepDurationMs = musicStepDuration(project.tempo) * 1000;
     const timer = window.setInterval(() => {
       setCurrentStep((previous) => {
-        const next = (previous + 1) % project.totalSteps;
+        const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
+        const next = (previous + 1) % runtimeSteps;
         const ctx = audioCtxRef.current;
         if (ctx?.state === 'running') {
           const now = ctx.currentTime;
           for (const track of audibleMusicTracks(project.tracks)) {
-            for (const note of track.notes.filter((candidate) => candidate.startStep === next)) {
+            const runtimeNotes = project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes;
+            for (const note of runtimeNotes.filter((candidate) => candidate.startStep === next)) {
               const oscillator = ctx.createOscillator();
               const gain = ctx.createGain();
               const panner = ctx.createStereoPanner();
@@ -162,8 +164,8 @@ export const MusicStudioView: React.FC = () => {
   };
 
   const exportWav = async () => {
-    const stepDuration = musicStepDuration(project.tempo); const length = Math.ceil(44100 * project.totalSteps * stepDuration); const offline = new OfflineAudioContext(2, length, 44100);
-    for (const track of audibleMusicTracks(project.tracks)) for (const note of track.notes) {
+    const stepDuration = musicStepDuration(project.tempo); const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps; const length = Math.ceil(44100 * runtimeSteps * stepDuration); const offline = new OfflineAudioContext(2, length, 44100);
+    for (const track of audibleMusicTracks(project.tracks)) for (const note of (project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes)) {
       const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
       oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
       gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, track.volume * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime(track.pan, start);
