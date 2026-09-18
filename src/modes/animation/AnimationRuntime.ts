@@ -3,6 +3,7 @@ import type { BoneTransformChannel } from './AutoKeyOperations';
 import { solveTwoBoneIK } from './IKSolver';
 import { aimBoneQuaternion } from './QuaternionAim';
 import { evaluateBezierSegment } from './BezierCurve';
+import { evaluateNLAChannels } from './AnimationNLAEvaluator';
 import {
   evaluateRigWorldTransforms,
   quaternionInverse,
@@ -64,7 +65,7 @@ const applyBoneChannel = (pose: BonePose, channel: BoneTransformChannel, value: 
   pose[group][axis === 'x' ? 0 : axis === 'y' ? 1 : 2] = value;
 };
 
-export const evaluateBoneTracks = (project: MioAnimationProject, time: number): Record<string, BonePose> => {
+export const evaluateBoneTracks = (project: MioAnimationProject, time: number, values?: Map<string,{track:AnimationTrack;value:number}>): Record<string, BonePose> => {
   const poses: Record<string, BonePose> = {};
   for (const rig of project.rigs ?? []) for (const bone of rig.bones) poses[`${rig.id}:${bone.id}`] = clonePose(bone.pose);
   for (const track of project.tracks) {
@@ -72,7 +73,7 @@ export const evaluateBoneTracks = (project: MioAnimationProject, time: number): 
     if (!target) continue;
     const pose = poses[`${target.rigId}:${target.boneId}`];
     const channel = channelFromTrack(track);
-    if (pose && channel) applyBoneChannel(pose, channel, evaluateTrack(track, time));
+    if (pose && channel) applyBoneChannel(pose, channel, values?.get(track.id)?.value ?? evaluateTrack(track, time));
   }
   return poses;
 };
@@ -157,12 +158,13 @@ export const applyConstraints = (
 
 export const evaluateAnimationProject = (project: MioAnimationProject, time: number): EvaluatedAnimationState => {
   const objectChannels: Record<string, Record<string, number>> = {};
+  const nlaValues = evaluateNLAChannels(project, time);
   for (const track of project.tracks) {
     if (parseBoneTargetId(track.targetObjectId)) continue;
     objectChannels[track.targetObjectId] ??= {};
-    objectChannels[track.targetObjectId][track.property] = evaluateTrack(track, time);
+    objectChannels[track.targetObjectId][track.property] = nlaValues.get(track.id)?.value ?? evaluateTrack(track, time);
   }
-  const evaluatedBonePoses = evaluateBoneTracks(project, time);
+  const evaluatedBonePoses = evaluateBoneTracks(project, time, nlaValues);
   const activeShot = project.shots?.find(shot => time >= shot.start && time < shot.end)
     ?? project.shots?.find(shot => time === shot.end && shot.end === project.duration);
   return {
