@@ -10,11 +10,21 @@ export function validateMotionDocument(document: MotionDocument): void {
     if (composition.width <= 0 || composition.height <= 0) throw new Error("Composition dimensions must be positive");
     if (composition.fps <= 0 || !Number.isFinite(composition.fps)) throw new Error("Composition FPS must be positive");
     if (!Number.isInteger(composition.durationFrames) || composition.durationFrames <= 0) throw new Error("Duration must use positive integer frames");
+    const [workStart, workEnd] = composition.workArea;
+    if (!Number.isInteger(workStart) || !Number.isInteger(workEnd) || workStart < 0 || workEnd < workStart || workEnd >= composition.durationFrames) {
+      throw new Error(`Invalid composition work area: ${composition.id}`);
+    }
+    const markerIds = new Set<string>();
+    for (const marker of composition.markers ?? []) {
+      if (!marker.id || markerIds.has(marker.id)) throw new Error(`Invalid or duplicate marker id: ${marker.id}`);
+      markerIds.add(marker.id);
+      if (!Number.isInteger(marker.frame) || marker.frame < 0 || marker.frame >= composition.durationFrames) throw new Error(`Invalid marker frame: ${marker.id}`);
+    }
 
     const layerIds = new Set(composition.layers.map((layer) => layer.id));
     if (layerIds.size !== composition.layers.length) throw new Error(`Duplicate layer id in composition: ${composition.id}`);
     for (const layer of composition.layers) {
-      if (!Number.isInteger(layer.inFrame) || !Number.isInteger(layer.outFrame) || layer.inFrame > layer.outFrame) {
+      if (!Number.isInteger(layer.inFrame) || !Number.isInteger(layer.outFrame) || layer.inFrame < 0 || layer.outFrame >= composition.durationFrames || layer.inFrame > layer.outFrame) {
         throw new Error(`Invalid layer frame range: ${layer.id}`);
       }
       if (layer.parentId && !layerIds.has(layer.parentId)) throw new Error(`Missing parent layer: ${layer.parentId}`);
