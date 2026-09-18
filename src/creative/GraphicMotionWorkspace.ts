@@ -95,28 +95,23 @@ export const nudgeGraphicLayers=(document:MioGraphicDocument,ids:string[],dx:num
 
 
 export type GraphicResizeHandle='nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w';
-export interface GraphicResizeSession { id:string; handle:GraphicResizeHandle; start:Point2D; origin:{x:number;y:number;width:number;height:number}; aspectRatio:number; }
+export interface GraphicResizeSession { id:string; handle:GraphicResizeHandle; start:Point2D; origin:{x:number;y:number;width:number;height:number;rotation:number}; center:Point2D; localStart:Point2D; aspectRatio:number; }
 
+const rotateGraphicVector=(point:Point2D,center:Point2D,degrees:number):Point2D=>{const r=degrees*Math.PI/180,dx=point.x-center.x,dy=point.y-center.y,cos=Math.cos(r),sin=Math.sin(r);return{x:center.x+dx*cos-dy*sin,y:center.y+dx*sin+dy*cos};};
 export const beginGraphicResize=(document:MioGraphicDocument,id:string,handle:GraphicResizeHandle,start:Point2D):GraphicResizeSession|null=>{
-  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null;
-  return {id,handle,start,origin:{x:layer.x,y:layer.y,width:layer.width,height:layer.height},aspectRatio:layer.width/Math.max(1,layer.height)};
+  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null; const rotation=layer.rotation??0,center={x:layer.x+layer.width/2,y:layer.y+layer.height/2};
+  return {id,handle,start,center,localStart:rotateGraphicVector(start,center,-rotation),origin:{x:layer.x,y:layer.y,width:layer.width,height:layer.height,rotation},aspectRatio:layer.width/Math.max(1,layer.height)};
 };
 
 export const updateGraphicResize=(document:MioGraphicDocument,session:GraphicResizeSession,pointer:Point2D,keepAspect=false,minSize=4):MioGraphicDocument=>{
-  const dx=pointer.x-session.start.x,dy=pointer.y-session.start.y; const o=session.origin;
-  let x=o.x,y=o.y,width=o.width,height=o.height;
-  if(session.handle.includes('e')) width=Math.max(minSize,o.width+dx);
-  if(session.handle.includes('s')) height=Math.max(minSize,o.height+dy);
-  if(session.handle.includes('w')){width=Math.max(minSize,o.width-dx);x=o.x+o.width-width;}
-  if(session.handle.includes('n')){height=Math.max(minSize,o.height-dy);y=o.y+o.height-height;}
-  if(keepAspect){
-    const horizontal=session.handle==='e'||session.handle==='w';
-    if(horizontal) height=Math.max(minSize,width/session.aspectRatio);
-    else width=Math.max(minSize,height*session.aspectRatio);
-    if(session.handle.includes('w'))x=o.x+o.width-width;
-    if(session.handle.includes('n'))y=o.y+o.height-height;
-  }
-  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,x,y,width,height}:layer)};
+  const local=rotateGraphicVector(pointer,session.center,-session.origin.rotation),dx=local.x-session.localStart.x,dy=local.y-session.localStart.y,o=session.origin;
+  let left=o.x,right=o.x+o.width,top=o.y,bottom=o.y+o.height;
+  if(session.handle.includes('e'))right=Math.max(left+minSize,right+dx); if(session.handle.includes('w'))left=Math.min(right-minSize,left+dx);
+  if(session.handle.includes('s'))bottom=Math.max(top+minSize,bottom+dy); if(session.handle.includes('n'))top=Math.min(bottom-minSize,top+dy);
+  let width=right-left,height=bottom-top;
+  if(keepAspect){const horizontal=session.handle==='e'||session.handle==='w'; if(horizontal)height=Math.max(minSize,width/session.aspectRatio);else width=Math.max(minSize,height*session.aspectRatio); if(session.handle.includes('w'))left=right-width;else right=left+width;if(session.handle.includes('n'))top=bottom-height;else bottom=top+height;}
+  const localCenter={x:(left+right)/2,y:(top+bottom)/2},worldCenter=rotateGraphicVector(localCenter,session.center,o.rotation); width=right-left;height=bottom-top;
+  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,x:worldCenter.x-width/2,y:worldCenter.y-height/2,width,height}:layer)};
 };
 
 export const duplicateGraphicLayers=(document:MioGraphicDocument,ids:string[],offset=16):{document:MioGraphicDocument;ids:string[]}=>{
