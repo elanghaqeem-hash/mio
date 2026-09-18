@@ -1,5 +1,11 @@
 // 3D Scene Specification (.mio3d)
-export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; proceduralParams?:Record<string,number|string>; }
+export type MioMeshSelectionMode='vertex'|'edge'|'face';
+export interface MioMeshVertex { id:string; position:[number,number,number]; }
+export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:number; }
+export interface MioMeshEdge { id:string; vertexIds:[string,string]; faceIds:string[]; }
+export interface MioMeshData { vertices:MioMeshVertex[]; faces:MioMeshFace[]; }
+export interface MioMeshSelection { mode:MioMeshSelectionMode; vertexIds:string[]; edgeIds:string[]; faceIds:string[]; }
+export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; proceduralParams?:Record<string,number|string>; }
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
@@ -17,7 +23,9 @@ export interface AnimationNLAStrip { id:string; actionId:string; start:number; e
 export interface MioAnimationProject { duration:number; fps:number; tracks:AnimationTrack[]; currentTime:number; loop:boolean; rigs?:AnimationRig[]; constraints?:AnimationConstraint[]; shots?:AnimationCameraShot[]; actions?:AnimationAction[]; nlaStrips?:AnimationNLAStrip[]; playbackRange?:[number,number]; timeScale?:number; }
 
 // Graphic Document Specification (.mioart)
-export interface GraphicLayer { id:string; name:string; type:'vector'|'shape'|'text'|'raster'; visible:boolean; locked:boolean; opacity:number; x:number; y:number; width:number; height:number; fill?:string; stroke?:string; strokeWidth?:number; text?:string; fontSize?:number; fontFamily?:string; fontWeight?:number|string; fontStyle?:'normal'|'italic'; textAlign?:'left'|'center'|'right'; lineHeight?:number; shapeType?:'rectangle'|'circle'|'polygon'|'line'|'star'; rotation?:number; }
+export interface GraphicPathPoint { id:string; x:number; y:number; inX?:number; inY?:number; outX?:number; outY?:number; nodeType?:'corner'|'smooth'; }
+export interface GraphicPath { points:GraphicPathPoint[]; closed:boolean; }
+export interface GraphicLayer { id:string; name:string; type:'vector'|'shape'|'text'|'raster'; visible:boolean; locked:boolean; opacity:number; x:number; y:number; width:number; height:number; fill?:string; stroke?:string; strokeWidth?:number; text?:string; fontSize?:number; fontFamily?:string; fontWeight?:number|string; fontStyle?:'normal'|'italic'; textAlign?:'left'|'center'|'right'; lineHeight?:number; shapeType?:'rectangle'|'circle'|'polygon'|'line'|'star'; path?:GraphicPath; rotation?:number; }
 export interface MioGraphicDocument { width:number; height:number; backgroundColor:string; layers:GraphicLayer[]; selectedLayerId?:string; }
 export interface DrawingPoint { x:number; y:number; pressure:number }
 export interface DrawingStroke { id:string; points:DrawingPoint[]; color:string; size:number; opacity:number; blendMode:'normal'|'multiply'|'screen'|'erase'; }
@@ -38,7 +46,13 @@ export type SFXAutomationInterpolation = 'linear'|'step'|'smooth';
 export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; interpolation?:SFXAutomationInterpolation; points:SFXAutomationPoint[]; }
 export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
-export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[]; }
+export interface MusicInsertEffect { id:string;type:'gain'|'lowpass'|'delay';enabled:boolean;amount:number;mix?:number;feedback?:number;resonance?:number; }
+export type MusicAutomationParameter = 'volume'|'pan'|'sendLevel'|'effectAmount'|'effectMix'|'effectFeedback'|'effectResonance';
+export interface MusicAutomationPoint { id?:string;step:number;value:number; }
+export interface MusicAutomationLane { id:string;trackId:string;parameter:MusicAutomationParameter;targetId?:string;interpolation?:'linear'|'step'|'smooth';points:MusicAutomationPoint[]; }
+export interface MusicTrackSend { busId:string;level:number;enabled:boolean; }
+export interface MusicReturnBus { id:string;name:string;effect:MusicInsertEffect;volume:number; }
+export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[];effects?:MusicInsertEffect[];sends?:MusicTrackSend[]; }
 export interface MusicClip { id:string;trackId:string;name:string;startStep:number;lengthSteps:number;sourceStartStep:number;loop:boolean; }
 export interface MusicArrangement { totalSteps:number;clips:MusicClip[]; }
-export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[];arrangement?:MusicArrangement; }
+export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[];arrangement?:MusicArrangement;returnBuses?:MusicReturnBus[];automationLanes?:MusicAutomationLane[]; }
