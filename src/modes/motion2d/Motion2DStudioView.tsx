@@ -5,6 +5,7 @@ import { evaluateMotionKeyframes, snapMotionTime } from '../../creative/MotionWo
 import { legacyMotionProjectToV2 } from '../../creative/motion/legacyAdapter';
 import { MotionWorkspaceController } from '../../creative/motion/workspaceController';
 import { motionFrameToSeconds, motionSecondsToFrame } from '../../creative/motion/runtime';
+import { snapTimelineFrame } from '../../creative/motion/timeline';
 import { deleteMotionKeyframe, moveMotionKeyframe, setMotionKeyframeInterpolation, upsertMotionKeyframe } from '../../creative/GraphicMotionWorkspace';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { ExportManager } from '../../project/ExportManager';
@@ -76,7 +77,15 @@ export const Motion2DStudioView: React.FC = () => {
   const moveSelectedKey=(time:number)=>{ if(!selectedKeyId||!selectedKey)return; setProject(previous=>moveMotionKeyframe(previous,selectedKey.track.id,selectedKeyId,time)); setCurrentTime(snap?snapMotionTime(time,project.fps):time); };
   const deleteSelectedKey=()=>{ if(!selectedKeyId||!selectedKey)return; setProject(previous=>deleteMotionKeyframe(previous,selectedKey.track.id,selectedKeyId)); setSelectedKeyId(null); };
   const setSelectedInterpolation=(interpolation:'linear'|'step'|'easeIn'|'easeOut'|'easeInOut')=>{ if(!selectedKeyId||!selectedKey)return; setProject(previous=>setMotionKeyframeInterpolation(previous,selectedKey.track.id,selectedKeyId,interpolation)); };
-  const timelineTimeFromPointer=(event:React.PointerEvent<HTMLDivElement>)=>{ const rect=event.currentTarget.getBoundingClientRect(); const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)); const raw=ratio*project.duration; return snap?snapMotionTime(raw,project.fps):Number(raw.toFixed(3)); };
+  const timelineFrameFromPointer=(event:React.PointerEvent<HTMLDivElement>)=>{
+    const rect=event.currentTarget.getBoundingClientRect();
+    const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+    const rawFrame=Math.round(ratio*(compositionV2.durationFrames-1));
+    if(!snap) return rawFrame;
+    const targets=project.tracks.flatMap(track=>track.keyframes.map(key=>({frame:motionSecondsToFrame(key.time,project.fps),kind:'keyframe' as const,priority:2})));
+    return snapTimelineFrame(rawFrame,targets,1);
+  };
+  const timelineTimeFromPointer=(event:React.PointerEvent<HTMLDivElement>)=>motionFrameToSeconds(timelineFrameFromPointer(event),project.fps);
   const scrubTimeline=(event:React.PointerEvent<HTMLDivElement>)=>{
     const time=timelineTimeFromPointer(event);
     const controller=new MotionWorkspaceController(motionV2);
