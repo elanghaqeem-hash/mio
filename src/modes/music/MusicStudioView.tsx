@@ -68,6 +68,8 @@ export const MusicStudioView: React.FC = () => {
 
   const midiNoteNames = Object.fromEntries(Array.from({length:128},(_,pitch)=>{const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];return [pitch,`${names[pitch%12]}${Math.floor(pitch/12)-1}`];})) as Record<number,string>;
 
+  const connectTrackEffects = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode) => { let node=input; for(const effect of track.effects??[]){ if(!effect.enabled)continue; if(effect.type==='gain'){const gain=ctx.createGain();gain.gain.value=0.5+effect.amount;node.connect(gain);node=gain;} else if(effect.type==='lowpass'){const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=200+effect.amount*19800;node.connect(filter);node=filter;} else if(effect.type==='delay'){const delay=ctx.createDelay(1);delay.delayTime.value=effect.amount*0.5;node.connect(delay);node=delay;} } node.connect(destination); };
+
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
@@ -93,7 +95,7 @@ export const MusicStudioView: React.FC = () => {
               gain.gain.setValueAtTime(0.001, now);
               gain.gain.exponentialRampToValueAtTime(track.volume * note.velocity * 0.3, now + 0.02);
               gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
-              panner.pan.setValueAtTime(track.pan, now); oscillator.connect(gain); gain.connect(panner); panner.connect(ctx.destination); oscillator.start(now); oscillator.stop(now + durationSec);
+              panner.pan.setValueAtTime(track.pan, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination); oscillator.start(now); oscillator.stop(now + durationSec);
             }
           }
         }
@@ -172,7 +174,7 @@ export const MusicStudioView: React.FC = () => {
       const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
       oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
       gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, track.volume * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime(track.pan, start);
-      oscillator.connect(gain); gain.connect(panner); panner.connect(offline.destination); oscillator.start(start); oscillator.stop(start + duration);
+      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); oscillator.start(start); oscillator.stop(start + duration);
     }
     await ExportManager.exportAudioAsWAV(await offline.startRendering(), 'MIO_Music_Project.wav', 'MUSIC');
   };
