@@ -15,7 +15,7 @@ export const compilePhotoTransaction=(document:CreativeDocument,transaction:Phot
   working=sandbox.execute({actor:transaction.metadata.source==='manual'?'user':'agent',command:compiled});
   return compiled;
  });
- return {id:transaction.id,timestamp:transaction.timestamp,actor:transaction.metadata.source==='manual'?'user':'ai',command:{type:'batch',commands}};
+ return {id:transaction.id,timestamp:transaction.timestamp,actor:transaction.metadata.source==='manual'?'user':'agent',command:{type:'batch',commands}};
 };
 
 export class PhotoTransactionEngine {
