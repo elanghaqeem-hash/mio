@@ -94,17 +94,20 @@ export const Motion2DStudioView: React.FC = () => {
   };
   const dragKey=(event:React.PointerEvent<HTMLButtonElement>,trackId:string,keyId:string)=>{
     event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setSelectedKeyId(keyId);
-    const row=event.currentTarget.parentElement; if(!row)return; const rect=row.getBoundingClientRect();
-    const source=project.tracks.find(track=>track.id===trackId); const moving=source?.keyframes.find(key=>key.id===keyId); if(!source||!moving)return;
-    const otherTargets=project.tracks.flatMap(track=>track.keyframes.filter(key=>key.id!==keyId).map(key=>({frame:motionSecondsToFrame(key.time,project.fps),kind:'keyframe' as const,priority:2})));
-    let pendingFrame=motionSecondsToFrame(moving.time,project.fps);
-    const move=(clientX:number)=>{
-      const ratio=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width)); const rawFrame=Math.round(ratio*(compositionV2.durationFrames-1));
-      pendingFrame=snap?snapTimelineFrame(rawFrame,otherTargets,1):rawFrame;
-      setCurrentTime(motionFrameToSeconds(pendingFrame,project.fps));
+    const row=event.currentTarget.parentElement; if(!row)return;
+    const rect=row.getBoundingClientRect(); let pendingFrame:number|null=null;
+    const resolveFrame=(clientX:number)=>{
+      const ratio=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+      const rawFrame=Math.round(ratio*(compositionV2.durationFrames-1));
+      if(!snap)return rawFrame;
+      const targets=project.tracks.flatMap(track=>track.keyframes.filter(key=>key.id!==keyId).map(key=>({frame:motionSecondsToFrame(key.time,project.fps),kind:'keyframe' as const,priority:2})));
+      return snapTimelineFrame(rawFrame,targets,1);
     };
-    const onMove=(e:PointerEvent)=>move(e.clientX);
-    const onUp=()=>{ setProject(previous=>moveMotionKeyframe(previous,trackId,keyId,motionFrameToSeconds(pendingFrame,project.fps))); window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); };
+    const onMove=(e:PointerEvent)=>{pendingFrame=resolveFrame(e.clientX);setCurrentTime(motionFrameToSeconds(pendingFrame,project.fps));};
+    const onUp=()=>{
+      window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp);
+      if(pendingFrame!==null)setProject(previous=>moveMotionKeyframe(previous,trackId,keyId,motionFrameToSeconds(pendingFrame!,project.fps)));
+    };
     window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp,{once:true});
   };
   const tracks = project.tracks.filter((track) => track.nodeId === selectedId);
