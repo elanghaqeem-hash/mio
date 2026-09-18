@@ -143,3 +143,19 @@ export const moveMotionKeyframe=(project:MioMotionProject,trackId:string,keyId:s
 export const setMotionKeyframeInterpolation=(project:MioMotionProject,trackId:string,keyId:string,interpolation:import('../types/creative').AnimationInterpolation):MioMotionProject=>({...project,tracks:project.tracks.map(track=>track.id===trackId?{...track,keyframes:track.keyframes.map(key=>key.id===keyId?{...key,interpolation}:key)}:track)});
 
 const snapMotionProjectTime=(time:number,fps:number)=>Number((Math.round(time*fps)/fps).toFixed(3));
+
+
+export const graphicSelectionBounds=(document:MioGraphicDocument,ids:string[])=>{
+  const layers=document.layers.filter(layer=>ids.includes(layer.id)&&layer.visible); if(!layers.length)return null;
+  const boxes=layers.map(bounds); const left=Math.min(...boxes.map(b=>b.left)),top=Math.min(...boxes.map(b=>b.top)),right=Math.max(...boxes.map(b=>b.right)),bottom=Math.max(...boxes.map(b=>b.bottom));
+  return {left,top,right,bottom,width:right-left,height:bottom-top,centerX:(left+right)/2,centerY:(top+bottom)/2};
+};
+
+export const rotateGraphicLayer=(document:MioGraphicDocument,id:string,degrees:number,snapDegrees=0):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>{
+  if(layer.id!==id||layer.locked)return layer; const rotation=snapDegrees>0?Math.round(degrees/snapDegrees)*snapDegrees:degrees; return {...layer,rotation:Number(rotation.toFixed(2))};
+})});
+
+export const resizeGraphicSelection=(document:MioGraphicDocument,ids:string[],origin:{left:number;top:number;width:number;height:number},next:{left:number;top:number;width:number;height:number}):MioGraphicDocument=>{
+  const sx=next.width/Math.max(1,origin.width),sy=next.height/Math.max(1,origin.height);
+  return {...document,layers:document.layers.map(layer=>ids.includes(layer.id)&&!layer.locked?{...layer,x:next.left+(layer.x-origin.left)*sx,y:next.top+(layer.y-origin.top)*sy,width:Math.max(4,layer.width*sx),height:Math.max(4,layer.height*sy)}:layer)};
+};
