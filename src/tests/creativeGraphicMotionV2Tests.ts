@@ -27,6 +27,15 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
    assert(motion.tracks[0].keyframes[0].time===2.033,'keyframe move did not snap'); motion=setMotionKeyframeInterpolation(motion,track.id,key.id,'easeOut');
    assert(motion.tracks[0].keyframes[0].interpolation==='easeOut','interpolation edit failed'); motion=deleteMotionKeyframe(motion,track.id,key.id); assert(motion.tracks.length===0,'keyframe delete failed');
  }));
+ results.push(await test('Graphic group transforms preserve lock rotation and aspect invariants',()=>{
+   const base=graphic(); const multi={...base,layers:[...base.layers,{...base.layers[0],id:'card2',x:420,y:180,rotation:0}]};
+   const locked={...multi,layers:multi.layers.map(layer=>layer.id==='card2'?{...layer,locked:true}:layer)};
+   assert(beginGraphicGroupResize(locked,['card','card2'])===null,'group resize should reject fewer than two unlocked members');
+   const rotated={...multi,layers:multi.layers.map(layer=>layer.id==='card'?{...layer,rotation:37}:layer)}; const session=beginGraphicGroupResize(rotated,['card','card2'],'se'); assert(session,'rotated group session missing');
+   const resized=updateGraphicGroupResize(rotated,session!,{x:session!.bounds.right+40,y:session!.bounds.bottom+20}); assert(resized.layers.find(layer=>layer.id==='card')?.rotation===37,'member rotation changed during group resize');
+   const aspect=beginGraphicGroupResize(multi,['card','card2'],'se'); assert(aspect,'aspect session missing'); const aspectResult=updateGraphicGroupResize(multi,aspect!,{x:aspect!.bounds.right+80,y:aspect!.bounds.bottom+10},true); const bounds=getGraphicSelectionBounds(aspectResult,['card','card2']);
+   assert(bounds&&Math.abs(bounds.width/bounds.height-aspect!.bounds.width/aspect!.bounds.height)<0.05,'aspect ratio drifted during Shift group resize');
+ }));
  for(const result of results)console.log(`${result.passed?'✓':'✗'} [${result.passed?'PASS':'FAIL'}] ${result.name}${result.error?` — ${result.error}`:''}`);
  return{passed:results.filter(result=>result.passed).length,total:results.length};
 }
