@@ -26,7 +26,9 @@ export class DrawingStrokeSession {
   public constructor(id: string, layer: DrawingLayer, firstSample: DrawingInputSample, style: DrawingStrokeStyle, options: DrawingStrokeSessionOptions = {}) {
     if (!id) throw new Error('DRAWING_STROKE_ID_REQUIRED');
     if (layer.locked) throw new Error('DRAWING_LAYER_LOCKED');
-    if (!Number.isFinite(style.size) || style.size <= 0 || !Number.isFinite(style.opacity) || style.opacity < 0 || style.opacity > 1) throw new Error('DRAWING_STROKE_STYLE_INVALID');
+    const styleValidation = validateDrawingStroke({ id, points: [{ x: 0, y: 0, pressure: 1 }], ...style });
+    const styleErrors = styleValidation.errors.filter(error => error.code !== 'EMPTY_STROKE');
+    if (styleErrors.length) throw new Error(`DRAWING_STROKE_STYLE_INVALID: ${styleErrors.map(error => error.code).join(',')}`);
     const normalized = normalizeDrawingInput(firstSample, options.input);
     this.id = id;
     this.layerId = layer.id;
