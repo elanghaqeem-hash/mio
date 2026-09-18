@@ -12,6 +12,7 @@ export interface PoseControlState {
   tool: PoseTool;
   axis: PoseAxis;
   autoKey: boolean;
+  orientation?: 'WORLD' | 'LOCAL';
 }
 
 export interface SelectedBoneContext {
@@ -23,6 +24,7 @@ export const DEFAULT_POSE_CONTROL_STATE: PoseControlState = {
   tool: 'ROTATE',
   axis: 'z',
   autoKey: false,
+  orientation: 'LOCAL',
 };
 
 export const resolveSelectedBone = (
