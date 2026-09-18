@@ -51,7 +51,7 @@ export const MusicStudioView: React.FC = () => {
   const resizingNoteRef = useRef<{id:string;startX:number;originDuration:number}|null>(null);
   const activeTrack = project.tracks.find((track) => track.id === activeTrackId);
   const selectedNote = activeTrack?.notes.find((note) => note.id === selectedNoteId);
-  const pitchRange = [76, 74, 72, 71, 69, 67, 65, 64, 62, 60, 57, 55, 53, 52, 48, 45];
+  const pitchRange = Array.from({ length: 49 }, (_, index) => 84 - index);
   const moveNoteFromPointer = (clientX:number, clientY:number) => {
     const drag=draggingNoteRef.current, rect=pianoRollRef.current?.getBoundingClientRect(); if(!drag||!rect||!activeTrack)return;
     const deltaSteps=Math.round((clientX-drag.startX)/(rect.width/project.totalSteps));
@@ -198,8 +198,8 @@ export const MusicStudioView: React.FC = () => {
         </div>
 
         <div className="flex-1 bg-[#090d16] rounded-xl border border-gray-800 flex overflow-hidden">
-          <div className="w-16 bg-[#0c111c] border-r border-gray-800 flex flex-col">{pitchRange.map((pitch) => <div key={pitch} className="flex-1 flex items-center justify-end pr-2 border-b border-gray-800/40 font-bold text-[10px] text-gray-300">{midiNoteNames[pitch] || pitch}</div>)}</div>
-          <div ref={pianoRollRef} className="flex-1 flex flex-col overflow-x-auto touch-none">{pitchRange.map((pitch) => <div key={pitch} className="flex-1 flex border-b border-gray-800/40">{Array.from({ length: project.totalSteps }).map((_, stepIndex) => {
+          <div className="w-16 bg-[#0c111c] border-r border-gray-800 flex flex-col">{pitchRange.map((pitch) => <div key={pitch} className="h-6 shrink-0 flex items-center justify-end pr-2 border-b border-gray-800/40 font-bold text-[10px] text-gray-300">{midiNoteNames[pitch] || pitch}</div>)}</div>
+          <div ref={pianoRollRef} className="flex-1 flex flex-col overflow-auto touch-none">{pitchRange.map((pitch) => <div key={pitch} className="h-6 shrink-0 flex border-b border-gray-800/40">{Array.from({ length: project.totalSteps }).map((_, stepIndex) => {
             const hasNote = activeTrack?.notes.some((note) => note.pitch === pitch && note.startStep === stepIndex);
             const pianoStep = currentStep % project.totalSteps;
             const isCurrent = pianoStep === stepIndex;
