@@ -5,7 +5,7 @@ import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { audibleMusicTracks, musicStepDuration, estimateTrackMeter, quantizeNoteEvent, transposeNotes, moveNote, resizeNote, moveMusicClip, resizeMusicClip, toggleMusicClipLoop, duplicateMusicClip, splitMusicClip, notesForClip } from '../../creative/AudioWorkspace';
+import { audibleMusicTracks, musicStepDuration, estimateTrackMeter, quantizeNoteEvent, transposeNotes, moveNote, resizeNote, moveMusicClip, resizeMusicClip, toggleMusicClipLoop, duplicateMusicClip, splitMusicClip, notesForClip, evaluateMusicAutomationLane } from '../../creative/AudioWorkspace';
 import { ExportManager } from '../../project/ExportManager';
 
 const INITIAL_MUSIC_PROJECT: MioMusicProject = {
@@ -68,9 +68,11 @@ export const MusicStudioView: React.FC = () => {
 
   const midiNoteNames = Object.fromEntries(Array.from({length:128},(_,pitch)=>{const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];return [pitch,`${names[pitch%12]}${Math.floor(pitch/12)-1}`];})) as Record<number,string>;
 
+  const automationValue = (trackId:string, parameter:string, step:number, targetId?:string) => { const lane=project.automationLanes?.find(candidate=>candidate.trackId===trackId&&candidate.parameter===parameter&&candidate.targetId===targetId); return lane?evaluateMusicAutomationLane(lane,step):undefined; };
+
   const connectTrackEffects = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode) => { let node=input; for(const effect of track.effects??[]){ if(!effect.enabled)continue; if(effect.type==='gain'){const gain=ctx.createGain();gain.gain.value=0.5+effect.amount;node.connect(gain);node=gain;} else if(effect.type==='lowpass'){const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=200+effect.amount*19800;filter.Q.value=(effect.resonance??0)*20;node.connect(filter);node=filter;} else if(effect.type==='delay'){const dry=ctx.createGain(),wet=ctx.createGain(),delay=ctx.createDelay(1),feedback=ctx.createGain(),sum=ctx.createGain(),mix=effect.mix??0.35;dry.gain.value=1-mix;wet.gain.value=mix;delay.delayTime.value=effect.amount*0.5;feedback.gain.value=Math.min(0.9,effect.feedback??0.25);node.connect(dry);dry.connect(sum);node.connect(delay);delay.connect(wet);wet.connect(sum);delay.connect(feedback);feedback.connect(delay);node=sum;} } node.connect(destination); };
 
-  const connectReturnSends = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode) => { for(const send of track.sends??[]){ if(!send.enabled||send.level<=0)continue; const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId); if(!bus)continue; const sendGain=ctx.createGain(),returnGain=ctx.createGain(); sendGain.gain.value=send.level; returnGain.gain.value=bus.volume; input.connect(sendGain); connectTrackEffects(ctx,sendGain,{...track,effects:[bus.effect]},returnGain); returnGain.connect(destination); } };
+  const connectReturnSends = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode, step:number) => { for(const send of track.sends??[]){ const automatedLevel=automationValue(track.id,'sendLevel',step,send.busId)??send.level; if(!send.enabled||automatedLevel<=0)continue; const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId); if(!bus)continue; const sendGain=ctx.createGain(),returnGain=ctx.createGain(); sendGain.gain.value=automatedLevel; returnGain.gain.value=bus.volume; input.connect(sendGain); connectTrackEffects(ctx,sendGain,{...track,effects:[bus.effect]},returnGain); returnGain.connect(destination); } };
 
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -95,9 +97,9 @@ export const MusicStudioView: React.FC = () => {
               oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
               const durationSec = note.durationSteps * musicStepDuration(project.tempo);
               gain.gain.setValueAtTime(0.001, now);
-              gain.gain.exponentialRampToValueAtTime(track.volume * note.velocity * 0.3, now + 0.02);
+              gain.gain.exponentialRampToValueAtTime((automationValue(track.id,'volume',next)??track.volume) * note.velocity * 0.3, now + 0.02);
               gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
-              panner.pan.setValueAtTime(track.pan, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination); connectReturnSends(ctx,panner,track,ctx.destination); oscillator.start(now); oscillator.stop(now + durationSec);
+              panner.pan.setValueAtTime((automationValue(track.id,'pan',next)??((track.pan+1)/2))*2-1, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination); connectReturnSends(ctx,panner,track,ctx.destination,next); oscillator.start(now); oscillator.stop(now + durationSec);
             }
           }
         }
@@ -175,8 +177,8 @@ export const MusicStudioView: React.FC = () => {
     for (const track of audibleMusicTracks(project.tracks)) for (const note of (project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes)) {
       const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
       oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
-      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, track.volume * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime(track.pan, start);
-      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); connectReturnSends(offline,panner,track,offline.destination); oscillator.start(start); oscillator.stop(start + duration);
+      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, (automationValue(track.id,'volume',note.startStep)??track.volume) * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime((automationValue(track.id,'pan',note.startStep)??((track.pan+1)/2))*2-1, start);
+      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); connectReturnSends(offline,panner,track,offline.destination,note.startStep); oscillator.start(start); oscillator.stop(start + duration);
     }
     await ExportManager.exportAudioAsWAV(await offline.startRendering(), 'MIO_Music_Project.wav', 'MUSIC');
   };
