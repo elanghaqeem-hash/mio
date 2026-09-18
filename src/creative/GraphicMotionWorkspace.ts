@@ -192,6 +192,18 @@ export const updateGraphicGroupResize=(document:MioGraphicDocument,session:Graph
 };
 
 
+
+export interface GraphicDragSmartSnapResult { pointer:Point2D; guides:GraphicSmartGuide[]; delta:Point2D; }
+export const snapGraphicDragToSmartGuides=(document:MioGraphicDocument,session:GraphicDragSession,pointer:Point2D,tolerance=6):GraphicDragSmartSnapResult=>{
+  const movingIds=session.ids.filter(id=>session.origins[id]); const startBounds=getGraphicSelectionBounds(document,movingIds); if(!startBounds)return {pointer,guides:[],delta:{x:0,y:0}};
+  const rawDx=pointer.x-session.start.x,rawDy=pointer.y-session.start.y;
+  const xCandidates:GraphicSmartGuide[]=[{axis:'x',value:0,source:'canvas'},{axis:'x',value:document.width/2,source:'canvas'},{axis:'x',value:document.width,source:'canvas'}];
+  const yCandidates:GraphicSmartGuide[]=[{axis:'y',value:0,source:'canvas'},{axis:'y',value:document.height/2,source:'canvas'},{axis:'y',value:document.height,source:'canvas'}];
+  for(const layer of document.layers){if(!layer.visible||movingIds.includes(layer.id))continue;const b=getGraphicSelectionBounds(document,[layer.id]);if(!b)continue;xCandidates.push({axis:'x',value:b.left,source:'layer'},{axis:'x',value:b.centerX,source:'layer'},{axis:'x',value:b.right,source:'layer'});yCandidates.push({axis:'y',value:b.top,source:'layer'},{axis:'y',value:b.centerY,source:'layer'},{axis:'y',value:b.bottom,source:'layer'});}
+  const choose=(anchors:number[],candidates:GraphicSmartGuide[])=>anchors.flatMap(anchor=>candidates.map(guide=>({guide,adjustment:guide.value-anchor,distance:Math.abs(guide.value-anchor)}))).filter(item=>item.distance<=tolerance).sort((a,b)=>a.distance-b.distance||a.guide.value-b.guide.value)[0];
+  const sx=choose([startBounds.left+rawDx,startBounds.centerX+rawDx,startBounds.right+rawDx],xCandidates),sy=choose([startBounds.top+rawDy,startBounds.centerY+rawDy,startBounds.bottom+rawDy],yCandidates);
+  const dx=sx?.adjustment??0,dy=sy?.adjustment??0; return {pointer:{x:pointer.x+dx,y:pointer.y+dy},guides:[sx?.guide,sy?.guide].filter(Boolean) as GraphicSmartGuide[],delta:{x:dx,y:dy}};
+};
 export interface GraphicSmartGuide { axis:'x'|'y'; value:number; source:'canvas'|'layer'; }
 export interface GraphicSmartSnapResult { point:Point2D; guides:GraphicSmartGuide[]; }
 export const snapGraphicPointToSmartGuides=(document:MioGraphicDocument,point:Point2D,excludeIds:string[]=[],tolerance=6):GraphicSmartSnapResult=>{
