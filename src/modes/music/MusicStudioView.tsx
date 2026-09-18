@@ -52,6 +52,7 @@ export const MusicStudioView: React.FC = () => {
   const clipResizeRef = useRef<{id:string;startX:number;originLength:number}|null>(null);
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const trackChannelRef=useRef<Map<string,{input:GainNode;panner:StereoPannerNode;output:GainNode}>>(new Map());
   const pianoRollRef = useRef<HTMLDivElement | null>(null);
   const draggingNoteRef = useRef<{id:string;startX:number;startY:number;originStep:number;originPitch:number}|null>(null);
   const resizingNoteRef = useRef<{id:string;startX:number;originDuration:number}|null>(null);
@@ -83,6 +84,9 @@ export const MusicStudioView: React.FC = () => {
 
   const connectReturnSends = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode, step:number) => { for(const send of track.sends??[]){ const automatedLevel=automationValue(track.id,'sendLevel',step,send.busId)??send.level; if(!send.enabled||automatedLevel<=0)continue; const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId); if(!bus)continue; const sendGain=ctx.createGain(),returnGain=ctx.createGain(); sendGain.gain.value=automatedLevel; returnGain.gain.value=bus.volume; input.connect(sendGain); connectTrackEffects(ctx,sendGain,{...track,effects:[bus.effect]},returnGain,step); returnGain.connect(destination); } };
 
+  const ensureLiveTrackChannel=(ctx:AudioContext,track:MusicTrack)=>{const existing=trackChannelRef.current.get(track.id);if(existing)return existing;const input=ctx.createGain(),panner=ctx.createStereoPanner(),output=ctx.createGain();input.connect(panner);panner.connect(output);output.connect(ctx.destination);trackChannelRef.current.set(track.id,{input,panner,output});return {input,panner,output};};
+  const clearLiveTrackChannels=()=>{for(const channel of trackChannelRef.current.values()){try{channel.input.disconnect();channel.panner.disconnect();channel.output.disconnect();}catch{/* already disconnected */}}trackChannelRef.current.clear();};
+
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
@@ -101,14 +105,14 @@ export const MusicStudioView: React.FC = () => {
             for (const note of runtimeNotes.filter((candidate) => candidate.startStep === next)) {
               const oscillator = ctx.createOscillator();
               const gain = ctx.createGain();
-              const panner = ctx.createStereoPanner();
+              const channel=ensureLiveTrackChannel(ctx,track);
               oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), now);
               oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
               const durationSec = note.durationSteps * musicStepDuration(project.tempo);
               gain.gain.setValueAtTime(0.001, now);
               gain.gain.exponentialRampToValueAtTime((automationValue(track.id,'volume',next)??track.volume) * note.velocity * 0.3, now + 0.02);
               gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
-              panner.pan.setValueAtTime((automationValue(track.id,'pan',next)??((track.pan+1)/2))*2-1, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination,next); connectReturnSends(ctx,panner,track,ctx.destination,next); oscillator.start(now); oscillator.stop(now + durationSec);
+              channel.panner.pan.setValueAtTime((automationValue(track.id,'pan',next)??((track.pan+1)/2))*2-1, now); oscillator.connect(gain); gain.connect(channel.input); oscillator.start(now); oscillator.stop(now + durationSec);
             }
           }
         }
