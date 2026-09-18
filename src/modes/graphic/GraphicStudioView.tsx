@@ -61,7 +61,7 @@ export const GraphicStudioView: React.FC = () => {
     if(!dragSessionRef.current)return;
     setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,point));
   };
-  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; activeBezierHandle=null; resizeSessionRef.current=null; rotationSessionRef.current=null; groupResizeSessionRef.current=null; setSmartGuides([]); if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
+  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; setActiveBezierHandle(null); resizeSessionRef.current=null; rotationSessionRef.current=null; groupResizeSessionRef.current=null; setSmartGuides([]); if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
   useEffect(()=>{const handler=(event:KeyboardEvent)=>{if(!selectedLayerIds.length||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return; const step=event.shiftKey?10:1; const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0; const dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0; event.preventDefault();setDocumentData(previous=>nudgeGraphicLayers(previous,selectedLayerIds,dx,dy));};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[selectedLayerIds,setDocumentData]);
 
   useEffect(() => {
