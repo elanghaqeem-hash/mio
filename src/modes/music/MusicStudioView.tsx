@@ -44,9 +44,6 @@ export const MusicStudioView: React.FC = () => {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [automationParameter,setAutomationParameter]=useState<'volume'|'pan'|'sendLevel'|'effectAmount'|'effectMix'|'effectFeedback'|'effectResonance'>('volume');
   const [automationTargetId,setAutomationTargetId]=useState<string>('');
-  const automationNeedsTarget=automationParameter!=='volume'&&automationParameter!=='pan';
-  const automationTargets=automationParameter==='sendLevel'?(activeTrack?.sends??[]).map(send=>({id:send.busId,label:project.returnBuses?.find(bus=>bus.id===send.busId)?.name??send.busId})):(activeTrack?.effects??[]).map(effect=>({id:effect.id,label:`${effect.type.toUpperCase()} · ${effect.id.slice(-6)}`}));
-  const resolvedAutomationTargetId=automationNeedsTarget?(automationTargets.some(target=>target.id===automationTargetId)?automationTargetId:(automationTargets[0]?.id??'')):undefined;
   const [selectedAutomationPointId,setSelectedAutomationPointId]=useState<string|null>(null);
   const automationEditorRef=useRef<HTMLDivElement|null>(null);
   const automationDragRef=useRef<{id:string;startX:number;startY:number;originStep:number;originValue:number}|null>(null);
@@ -58,6 +55,9 @@ export const MusicStudioView: React.FC = () => {
   const draggingNoteRef = useRef<{id:string;startX:number;startY:number;originStep:number;originPitch:number}|null>(null);
   const resizingNoteRef = useRef<{id:string;startX:number;originDuration:number}|null>(null);
   const activeTrack = project.tracks.find((track) => track.id === activeTrackId);
+  const automationNeedsTarget=automationParameter!=='volume'&&automationParameter!=='pan';
+  const automationTargets=automationParameter==='sendLevel'?(activeTrack?.sends??[]).map(send=>({id:send.busId,label:project.returnBuses?.find(bus=>bus.id===send.busId)?.name??send.busId})):(activeTrack?.effects??[]).map(effect=>({id:effect.id,label:`${effect.type.toUpperCase()} · ${effect.id.slice(-6)}`}));
+  const resolvedAutomationTargetId=automationNeedsTarget?(automationTargets.some(target=>target.id===automationTargetId)?automationTargetId:(automationTargets[0]?.id??'')):undefined;
   const selectedNote = activeTrack?.notes.find((note) => note.id === selectedNoteId);
   const pitchRange = Array.from({ length: 49 }, (_, index) => 84 - index);
   const moveNoteFromPointer = (clientX:number, clientY:number) => {
