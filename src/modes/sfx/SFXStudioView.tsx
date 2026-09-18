@@ -228,6 +228,7 @@ export const SFXStudioView: React.FC = () => {
     if (!context || !analyser) return;
     if (context.state === 'suspended') await context.resume();
     const normalized=normalizeSFXPatch(patch);
+    const renderDuration=Math.max(normalized.duration,...(normalized.sampleRegions??[]).map(region=>region.timelineStart+regionTimelineDuration(region)),0.01);
     const missing=[...new Set((normalized.sampleRegions??[]).filter(region=>!getRuntimeSample(region.assetId)).map(region=>region.assetId))];
     if(missing.length){setSampleError(`SFX sample relink required before playback: ${missing.join(', ')}`);return;}
     setSampleError(null);
@@ -235,23 +236,25 @@ export const SFXStudioView: React.FC = () => {
     master.gain.setValueAtTime(0.7, context.currentTime);
     master.connect(analyser);
     analyser.connect(context.destination);
-    normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart);});
+    normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, renderDuration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart);});
     eventBus.emit('CORE_STATE_CHANGE', 'SFX MODE');
     window.setTimeout(() => {
       if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
       master.disconnect();
       analyser.disconnect();
-    }, patch.duration * 1000 + 100);
+    }, renderDuration * 1000 + 100);
   };
 
   const exportWav = async () => {
     setSampleError(null);
     try {
-    const offline = new OfflineAudioContext(1, Math.ceil(44100 * patch.duration), 44100);
+    const normalized=normalizeSFXPatch(patch);
+    const renderDuration=Math.max(normalized.duration,...(normalized.sampleRegions??[]).map(region=>region.timelineStart+regionTimelineDuration(region)),0.01);
+    const offline = new OfflineAudioContext(1, Math.ceil(44100 * renderDuration), 44100);
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
     master.connect(offline.destination);
-    const normalized=normalizeSFXPatch(patch);normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, normalized.duration));
+    normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, renderDuration));
     const missing:string[]=[];normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(!entry){missing.push(region.assetId);return;}scheduleSFXSampleRegion(offline,entry.decoded,region,master,region.timelineStart);});if(missing.length){const message=`SFX sample relink required before export: ${[...new Set(missing)].join(', ')}`;setSampleError(message);return;}
     ExportManager.exportAudioAsWAV(await offline.startRendering(), `${patch.name}.wav`);
     } catch(error) { setSampleError(error instanceof Error?error.message:'Unable to export SFX audio'); }
