@@ -52,8 +52,12 @@ export const copyKeyframes = <T extends { id: string; frame: number }>(keyframes
 
 export const pasteKeyframes = <T extends { id: string; frame: number }>(
   keyframes: readonly T[], clipboard: readonly KeyframeClipboardItem<Omit<T, "id" | "frame">>[], targetFrame: number, idFactory: (sourceId: string, index: number) => string,
-): T[] => [...keyframes, ...clipboard.map((item, index) => ({ ...item.value, id: idFactory(item.sourceId, index), frame: Math.max(0, Math.round(targetFrame + item.offset)) } as T))]
-  .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id));
+): T[] => {
+  const pasted = clipboard.map((item, index) => ({ ...item.value, id: idFactory(item.sourceId, index), frame: Math.max(0, Math.round(targetFrame + item.offset)) } as T));
+  const pastedFrames = new Set(pasted.map((key) => key.frame));
+  return [...keyframes.filter((key) => !pastedFrames.has(key.frame)), ...pasted]
+    .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id));
+};
 
 export const trimLayerRange = (inFrame: number, outFrame: number, edge: "in" | "out", frame: number): readonly [number, number] =>
   edge === "in" ? [Math.min(Math.round(frame), outFrame), outFrame] : [inFrame, Math.max(inFrame, Math.round(frame))];
