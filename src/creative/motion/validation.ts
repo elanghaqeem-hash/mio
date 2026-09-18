@@ -34,10 +34,13 @@ export function validateMotionDocument(document: MotionDocument): void {
         trackIds.add(track.id);
         validateMotionValue(track.defaultValue, `track default ${track.id}`);
         const keyIds = new Set<string>();
+        const keyFrames = new Set<number>();
         let vectorLength = Array.isArray(track.defaultValue) ? track.defaultValue.length : undefined;
         for (const key of track.keyframes) {
           if (!key.id || keyIds.has(key.id)) throw new Error(`Invalid or duplicate keyframe id: ${key.id}`);
           keyIds.add(key.id);
+          if (keyFrames.has(key.frame)) throw new Error(`Duplicate keyframe frame on track ${track.id}: ${key.frame}`);
+          keyFrames.add(key.frame);
           if (!Number.isInteger(key.frame) || key.frame < 0 || key.frame >= composition.durationFrames) throw new Error(`Invalid keyframe frame: ${key.id}`);
           validateMotionValue(key.value, `keyframe ${key.id}`);
           if (Array.isArray(key.value)) {
