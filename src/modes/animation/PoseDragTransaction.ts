@@ -43,6 +43,7 @@ export const previewPoseDrag = (
   const result = applyViewportPoseEdit(transaction.baseProject, previewControl, {
     delta: accumulatedDelta,
     time: transaction.time,
+    orientation: transaction.control.orientation,
   });
   return {
     ...transaction,
@@ -57,6 +58,7 @@ export const commitPoseDrag = (transaction: PoseDragTransaction): PoseDragTransa
   const result = applyViewportPoseEdit(transaction.baseProject, transaction.control, {
     delta: transaction.accumulatedDelta,
     time: transaction.time,
+    orientation: transaction.control.orientation,
   });
   return {
     ...transaction,
