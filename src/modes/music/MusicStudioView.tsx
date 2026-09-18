@@ -57,7 +57,7 @@ export const MusicStudioView: React.FC = () => {
     const deltaSteps=Math.round((clientX-drag.startX)/(rect.width/project.totalSteps));
     const rowHeight=rect.height/pitchRange.length; const deltaRows=Math.round((clientY-drag.startY)/rowHeight);
     const originIndex=pitchRange.indexOf(drag.originPitch); const targetPitch=pitchRange[Math.max(0,Math.min(pitchRange.length-1,originIndex+deltaRows))]??drag.originPitch;
-    setProject(current=>({...current,tracks:current.tracks.map(track=>track.id===activeTrackId?{...track,notes:track.notes.map(note=>note.id===drag.id?moveNote(note,deltaSteps,targetPitch-drag.originPitch,current.totalSteps):note)}:track)}));
+    setProject(current=>({...current,tracks:current.tracks.map(track=>track.id===activeTrackId?{...track,notes:track.notes.map(note=>note.id===drag.id?moveNote({...note,startStep:drag.originStep,pitch:drag.originPitch},deltaSteps,targetPitch-drag.originPitch,current.totalSteps):note)}:track)}));
   };
 
   const resizeNoteFromPointer = (clientX:number) => {
@@ -66,7 +66,7 @@ export const MusicStudioView: React.FC = () => {
     setProject(current=>({...current,tracks:current.tracks.map(track=>track.id===activeTrackId?{...track,notes:track.notes.map(note=>note.id===drag.id?resizeNote(note,drag.originDuration+deltaSteps,current.totalSteps):note)}:track)}));
   };
 
-  const midiNoteNames: Record<number, string> = { 76: 'E5', 74: 'D5', 72: 'C5', 71: 'B4', 69: 'A4', 67: 'G4', 65: 'F4', 64: 'E4', 62: 'D4', 60: 'C4', 57: 'A3', 55: 'G3', 53: 'F3', 52: 'E3', 48: 'C3', 45: 'A2' };
+  const midiNoteNames = Object.fromEntries(Array.from({length:128},(_,pitch)=>{const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];return [pitch,`${names[pitch%12]}${Math.floor(pitch/12)-1}`];})) as Record<number,string>;
 
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
