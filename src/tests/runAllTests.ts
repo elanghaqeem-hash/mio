@@ -62,6 +62,7 @@ import { runCreativeStudioIntegrationTests } from './creativeStudioIntegrationTe
 import { runCreative3DAnimationWorkspaceTests } from './creative3DAnimationWorkspaceTests';
 import { runMeshModelingCoreTests } from './meshModelingCoreTests';
 import { runCreativeDrawingGraphicWorkspaceTests } from './creativeDrawingGraphicWorkspaceTests';
+import { runCreativeDrawingRuntimeTests } from './creativeDrawingRuntimeTests';
 import { runCreativePhotoWorkspaceTests } from './creativePhotoWorkspaceTests';
 import { runPhotoDomainContractTests } from './photoDomainContractTests';
 import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTests';
