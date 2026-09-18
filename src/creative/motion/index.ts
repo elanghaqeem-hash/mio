@@ -10,3 +10,4 @@ export * from "./timeline";
 export * from "./viewport";
 export * from "./workspaceController";
 export * from "./gestureTransaction";
+export * from "./timelineCommands";
