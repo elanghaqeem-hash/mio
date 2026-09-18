@@ -118,9 +118,6 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   const desiredUpperLocal = localEulerFromWorldQuaternion(upperWorldQuaternion, parentWorld);
   const desiredEndLocal = localEulerFromWorldQuaternion(endWorldQuaternion, upperWorldQuaternion);
   const weight = Math.max(0, Math.min(1, constraint.influence));
-  for (let i = 0; i < 3; i++) {
-    // rotation blending is applied below in quaternion space to avoid Euler wrap/gimbal discontinuities.
-  }
   upperPose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(upperPose.rotation), eulerXYZToQuaternion(desiredUpperLocal), weight));
   endPose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(endPose.rotation), eulerXYZToQuaternion(desiredEndLocal), weight));
 };
@@ -151,7 +148,6 @@ export const applyConstraints = (
       const weight = Math.max(0, Math.min(1, constraint.influence));
       for (let i = 0; i < 3; i++) {
         pose.position[i] = lerp(pose.position[i], target.position[i], weight);
-        // position remains linear; rotation is blended once below in quaternion space.
       }
       pose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(pose.rotation), eulerXYZToQuaternion(target.rotation), weight));
     }
