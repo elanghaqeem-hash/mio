@@ -28,7 +28,7 @@ export const GraphicStudioView: React.FC = () => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>(['layer_title']);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [smartGuides, setSmartGuides] = useState<GraphicSmartGuide[]>([]);
-  const [penMode,setPenMode]=useState(false); const [activePenLayerId,setActivePenLayerId]=useState(''); const [nodeEditMode,setNodeEditMode]=useState(false); const [selectedPathPointId,setSelectedPathPointId]=useState<string>(''); const [activeBezierHandle,setActiveBezierHandle]=useState<'in'|'out'|null>(null);
+  const [penMode,setPenMode]=useState(false); const [penPreviewPoint,setPenPreviewPoint]=useState<{x:number;y:number}|null>(null); const [activePenLayerId,setActivePenLayerId]=useState(''); const [nodeEditMode,setNodeEditMode]=useState(false); const [selectedPathPointId,setSelectedPathPointId]=useState<string>(''); const [activeBezierHandle,setActiveBezierHandle]=useState<'in'|'out'|null>(null);
   const dragSessionRef = useRef<GraphicDragSession | null>(null);
   const resizeSessionRef = useRef<GraphicResizeSession | null>(null);
   const rotationSessionRef = useRef<GraphicRotationSession | null>(null);
@@ -51,7 +51,7 @@ export const GraphicStudioView: React.FC = () => {
     const next=toggleGraphicSelection(selectedLayerIds,hit,event.shiftKey); setSelectedLayerIds(next);
     dragSessionRef.current=beginGraphicDrag(documentData,next,point,8,snapEnabled); event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => { if(penMode&&activePenLayerId)setPenPreviewPoint(canvasPoint(event));
     const point=canvasPoint(event);
     if(nodeEditMode&&selectedLayer?.type==='vector'&&selectedPathPointId&&event.currentTarget.hasPointerCapture(event.pointerId)){const local=graphicLayerWorldToLocal(selectedLayer,point);if(activeBezierHandle){const node=selectedLayer.path?.points.find(p=>p.id===selectedPathPointId);if(node)setDocumentData(previous=>node.nodeType==='smooth'?setGraphicSmoothPathHandle(previous,selectedLayer.id,selectedPathPointId,activeBezierHandle,local):setGraphicPathPointHandles(previous,selectedLayer.id,selectedPathPointId,activeBezierHandle==='in'?local:(node.inX!==undefined&&node.inY!==undefined?{x:node.inX,y:node.inY}:undefined),activeBezierHandle==='out'?local:(node.outX!==undefined&&node.outY!==undefined?{x:node.outX,y:node.outY}:undefined)));return;}setDocumentData(previous=>moveGraphicPathPoint(previous,selectedLayer.id,selectedPathPointId,local));return;}
     if(groupResizeSessionRef.current){const s=groupResizeSessionRef.current;setDocumentData(previous=>updateGraphicGroupResize(previous,s,point,event.shiftKey));return;}
@@ -111,10 +111,11 @@ export const GraphicStudioView: React.FC = () => {
       }
       ctx.restore();
     }
+    if(penMode&&activePenLayerId&&penPreviewPoint){const active=documentData.layers.find(layer=>layer.id===activePenLayerId),last=active?.path?.points.at(-1),first=active?.path?.points[0];if(active&&last){const lw=graphicLayerLocalToWorld(active,last);ctx.save();ctx.strokeStyle='#22d3ee';ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(lw.x,lw.y);ctx.lineTo(penPreviewPoint.x,penPreviewPoint.y);ctx.stroke();if(first&&active.path!.points.length>=3){const fw=graphicLayerLocalToWorld(active,first);ctx.setLineDash([]);ctx.beginPath();ctx.arc(fw.x,fw.y,7,0,Math.PI*2);ctx.stroke();}ctx.restore();}}
     for(const guide of smartGuides){ctx.save();ctx.strokeStyle='#f472b6';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();if(guide.axis==='x'){ctx.moveTo(guide.value,0);ctx.lineTo(guide.value,canvas.height);}else{ctx.moveTo(0,guide.value);ctx.lineTo(canvas.width,guide.value);}ctx.stroke();ctx.restore();}
     const groupBounds=selectedLayerIds.length>1?getGraphicSelectionBounds(documentData,selectedLayerIds):null;
     if(groupBounds){ctx.save();ctx.strokeStyle='#38bdf8';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);ctx.strokeRect(groupBounds.left,groupBounds.top,groupBounds.width,groupBounds.height);ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';ctx.strokeStyle='#0284c7';for(const [hx,hy] of [[groupBounds.left,groupBounds.top],[groupBounds.centerX,groupBounds.top],[groupBounds.right,groupBounds.top],[groupBounds.right,groupBounds.centerY],[groupBounds.right,groupBounds.bottom],[groupBounds.centerX,groupBounds.bottom],[groupBounds.left,groupBounds.bottom],[groupBounds.left,groupBounds.centerY]]){ctx.fillRect(hx-5,hy-5,10,10);ctx.strokeRect(hx-5,hy-5,10,10);}ctx.restore();}
-  }, [documentData, selectedLayerIds, smartGuides]);
+  }, [documentData, selectedLayerIds, smartGuides, penMode, activePenLayerId, penPreviewPoint]);
 
   const updateSelectedLayer = (updates: Partial<GraphicLayer>) => {
     if (!selectedLayerId) return;
