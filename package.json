@@ -25,7 +25,8 @@
     "test": "npm run release:deployment-contract && npm run release:promotion-selftest && npm run release:smoke && npm run release:manifest && node --import tsx src/tests/runAllTests.ts",
     "lint": "oxlint",
     "preview": "vite preview",
-    "release:animation-v1": "node scripts/animation-v1-release-check.mjs"
+    "release:animation-v1": "node scripts/animation-v1-release-check.mjs",
+    "deploy:verify:animation": "node scripts/verify-animation-deployment.mjs"
   },
   "dependencies": {
     "@types/three": "^0.186.0",
