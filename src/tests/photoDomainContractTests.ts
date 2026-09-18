@@ -1,6 +1,7 @@
 import { CreativeDocumentKernel } from '../creative/CreativeDocumentKernel';
 import { compilePhotoCommand, createPhotoDocument, createPhotoNode } from '../creative/photo/PhotoDocumentAdapter';
 import { validatePhotoDocument } from '../creative/photo/PhotoDocumentValidation';
+import { PhotoTransactionEngine } from '../creative/photo/PhotoTransactionEngine';
 interface Result{name:string;passed:boolean;error?:string}
 const assert=(v:unknown,m:string)=>{if(!v)throw new Error(m)};
 const test=async(name:string,run:()=>void|Promise<void>):Promise<Result>=>{try{await run();return{name,passed:true}}catch(error){return{name,passed:false,error:error instanceof Error?error.message:String(error)}}};
@@ -29,6 +30,19 @@ export async function runPhotoDomainContractTests():Promise<{passed:number;total
   const mask={id:'same',kind:'pixel' as const,enabled:true,inverted:false,feather:0,density:1};a.properties.masks=[mask,{...mask}];assert(!validatePhotoDocument(doc).valid,'duplicate masks accepted');a.properties.masks=[];
   let rejected=false;try{compilePhotoCommand(doc,{type:'photo.layer.bindSource',nodeId:'a',assetId:'missing'})}catch{rejected=true}assert(rejected,'missing source asset accepted');
   (b.properties as any).clippingTargetId='a';rejected=false;try{compilePhotoCommand(doc,{type:'photo.layer.clip',nodeId:'a',targetId:'b'})}catch{rejected=true}assert(rejected,'clipping cycle accepted');
+ }));
+ results.push(await test('photo transaction commits multiple commands as one undoable history entry',()=>{
+  const kernel=new CreativeDocumentKernel(createPhotoDocument('Tx',100,100,1,'photo_tx'));const tx=new PhotoTransactionEngine(kernel);
+  const layer=createPhotoNode('tx_layer','Layer','photo.raster');
+  tx.execute({id:'tx_create_edit',metadata:{label:'Create and edit layer',source:'manual',affectedNodeIds:['tx_layer'],renderHints:['composite']},commands:[{type:'photo.layer.create',node:layer},{type:'photo.layer.opacity',nodeId:'tx_layer',opacity:.4}]});
+  assert(tx.snapshot().nodes.tx_layer.properties.opacity===.4,'transaction commands not applied');
+  tx.undo();assert(!tx.snapshot().nodes.tx_layer,'transaction undo was not atomic');
+  tx.redo();assert(tx.snapshot().nodes.tx_layer.properties.opacity===.4,'transaction redo failed');
+ }));
+ results.push(await test('photo transaction compilation is atomic on invalid nested command',()=>{
+  const kernel=new CreativeDocumentKernel(createPhotoDocument('TxFail',100,100,1,'photo_tx_fail'));const tx=new PhotoTransactionEngine(kernel);
+  let rejected=false;try{tx.execute({id:'bad_tx',metadata:{label:'Bad transaction',source:'ai'},commands:[{type:'photo.layer.create',node:createPhotoNode('safe','Safe','photo.raster')},{type:'photo.layer.opacity',nodeId:'missing',opacity:.5}]})}catch{rejected=true}
+  assert(rejected,'invalid transaction accepted');assert(!tx.snapshot().nodes.safe,'failed transaction mutated live document');
  }));
  results.push(await test('photo validation rejects invalid opacity',()=>{
   const doc=createPhotoDocument('Invalid',10,10,1,'photo_invalid');const node=createPhotoNode('bad','Bad','photo.raster');node.properties.opacity=2;doc.nodes.bad=node;doc.rootNodeIds=['bad'];assert(!validatePhotoDocument(doc).valid,'invalid opacity accepted');
