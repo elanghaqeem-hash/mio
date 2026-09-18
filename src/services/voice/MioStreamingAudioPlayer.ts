@@ -9,6 +9,8 @@ export interface MioAudioPlaybackTelemetry {
   playbackStartLatencyMs: number | null;
   playbackMode: MioPlaybackMode;
   appendCount: number;
+  rebufferCount: number;
+  maxObservedBufferAheadMs: number;
 }
 
 const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
@@ -18,6 +20,8 @@ const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
   playbackStartLatencyMs: null,
   playbackMode: 'blob-fallback',
   appendCount: 0,
+  rebufferCount: 0,
+  maxObservedBufferAheadMs: 0,
 });
 
 /**
@@ -75,6 +79,18 @@ export class MioStreamingAudioPlayer {
     this.activeAudio = audio;
     let bytes = 0;
     let appendCount = 0;
+    let rebufferCount = 0;
+    let maxObservedBufferAheadMs = 0;
+    let hasStarted = false;
+    const updateBufferTelemetry = () => {
+      if (!audio.buffered.length) return;
+      const end = audio.buffered.end(audio.buffered.length - 1);
+      const aheadMs = Math.max(0, (end - audio.currentTime) * 1000);
+      maxObservedBufferAheadMs = Math.max(maxObservedBufferAheadMs, aheadMs);
+      this.lastTelemetry = { ...this.lastTelemetry, bufferedBytes: bytes, appendCount, rebufferCount, maxObservedBufferAheadMs };
+    };
+    const onWaiting = () => { if (hasStarted) { rebufferCount += 1; updateBufferTelemetry(); } };
+    audio.addEventListener('waiting', onWaiting);
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -108,7 +124,11 @@ export class MioStreamingAudioPlayer {
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'media-source',
         appendCount,
+        rebufferCount,
+        maxObservedBufferAheadMs,
       };
+      hasStarted = true;
+      updateBufferTelemetry();
 
       let current = first;
       while (!current.final) {
@@ -120,12 +140,13 @@ export class MioStreamingAudioPlayer {
           await append(current.data);
           bytes += current.data.byteLength;
           appendCount += 1;
-          this.lastTelemetry = { ...this.lastTelemetry, bufferedBytes: bytes, appendCount };
+          updateBufferTelemetry();
         }
       }
       if (mediaSource.readyState === 'open' && !sourceBuffer.updating) mediaSource.endOfStream();
       await this.waitForEnd(audio, generation, signal);
     } finally {
+      audio.removeEventListener('waiting', onWaiting);
       audio.onerror = null;
       if (this.activeAudio === audio) this.activeAudio = null;
       URL.revokeObjectURL(url);
@@ -175,6 +196,8 @@ export class MioStreamingAudioPlayer {
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'blob-fallback',
         appendCount,
+        rebufferCount: 0,
+        maxObservedBufferAheadMs: 0,
       };
       await this.waitForEnd(audio, generation, signal);
     } finally {
