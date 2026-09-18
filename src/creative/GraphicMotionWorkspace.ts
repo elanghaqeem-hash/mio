@@ -190,3 +190,14 @@ export const updateGraphicGroupResize=(document:MioGraphicDocument,session:Graph
   const sx=width/Math.max(1,b.width),sy=height/Math.max(1,b.height);
   return {...document,layers:document.layers.map(layer=>{const o=session.origins[layer.id];if(!o)return layer;return {...layer,x:left+(o.x-b.left)*sx,y:top+(o.y-b.top)*sy,width:Math.max(minSize,o.width*sx),height:Math.max(minSize,o.height*sy)};})};
 };
+
+
+export interface GraphicSmartGuide { axis:'x'|'y'; value:number; source:'canvas'|'layer'; }
+export interface GraphicSmartSnapResult { point:Point2D; guides:GraphicSmartGuide[]; }
+export const snapGraphicPointToSmartGuides=(document:MioGraphicDocument,point:Point2D,excludeIds:string[]=[],tolerance=6):GraphicSmartSnapResult=>{
+  const xCandidates:GraphicSmartGuide[]=[{axis:'x',value:0,source:'canvas'},{axis:'x',value:document.width/2,source:'canvas'},{axis:'x',value:document.width,source:'canvas'}];
+  const yCandidates:GraphicSmartGuide[]=[{axis:'y',value:0,source:'canvas'},{axis:'y',value:document.height/2,source:'canvas'},{axis:'y',value:document.height,source:'canvas'}];
+  for(const layer of document.layers){if(!layer.visible||excludeIds.includes(layer.id))continue;const b=getGraphicSelectionBounds(document,[layer.id]);if(!b)continue;xCandidates.push({axis:'x',value:b.left,source:'layer'},{axis:'x',value:b.centerX,source:'layer'},{axis:'x',value:b.right,source:'layer'});yCandidates.push({axis:'y',value:b.top,source:'layer'},{axis:'y',value:b.centerY,source:'layer'},{axis:'y',value:b.bottom,source:'layer'});}
+  const nearest=(value:number,candidates:GraphicSmartGuide[])=>candidates.map(guide=>({guide,distance:Math.abs(guide.value-value)})).filter(item=>item.distance<=tolerance).sort((a,b)=>a.distance-b.distance||a.guide.value-b.guide.value)[0]?.guide;
+  const gx=nearest(point.x,xCandidates),gy=nearest(point.y,yCandidates);return {point:{x:gx?.value??point.x,y:gy?.value??point.y},guides:[gx,gy].filter(Boolean) as GraphicSmartGuide[]};
+};
