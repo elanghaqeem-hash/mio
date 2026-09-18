@@ -73,9 +73,15 @@ export const updateGraphicDrag=(document:MioGraphicDocument,session:GraphicDragS
   })};
 };
 
+const inverseRotateGraphicPoint=(point:Point2D,layer:GraphicLayer):Point2D=>{
+  const radians=(layer.rotation??0)*Math.PI/180; if(!radians)return point;
+  const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2,dx=point.x-cx,dy=point.y-cy;
+  const cos=Math.cos(-radians),sin=Math.sin(-radians);
+  return {x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};
+};
 export const hitTestGraphicLayers=(document:MioGraphicDocument,point:Point2D):string[]=>[...document.layers].reverse().filter(layer=>{
-  if(!layer.visible)return false; const b=bounds(layer);
-  return point.x>=b.left&&point.x<=b.right&&point.y>=b.top&&point.y<=b.bottom;
+  if(!layer.visible)return false; const local=inverseRotateGraphicPoint(point,layer),b=bounds(layer);
+  return local.x>=b.left&&local.x<=b.right&&local.y>=b.top&&local.y<=b.bottom;
 }).map(layer=>layer.id);
 
 export const toggleGraphicSelection=(current:string[],id:string,additive=false):string[]=>{
