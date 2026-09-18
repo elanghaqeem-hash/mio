@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, Download, Play, Plus, ShieldCheck, Sliders, Trash2, Volume2 } from 'lucide-react';
+import { Activity, Download, Play, Plus, ShieldCheck, Sliders, Trash2, Upload, Volume2 } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { ExportManager } from '../../project/ExportManager';
@@ -8,6 +8,8 @@ import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocum
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutomatableParameter, normalizeAutomationLane, evaluateAutomationLane } from '../../creative/AudioWorkspace';
 import { configureSFXDistortion, createSFXLayerSource, createSFXSharedDSPGraph } from '../../creative/SFXUnifiedGraph';
+import { importSFXSample, chooseWaveformLevel, getRuntimeSample } from '../../creative/SFXSampleRegistry';
+import { scheduleSFXSampleRegion } from '../../creative/SFXSampleRuntime';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -57,6 +59,8 @@ export const SFXStudioView: React.FC = () => {
   const draggingAutomationIdRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const automationCanvasRef = useRef<HTMLDivElement | null>(null);
+  const sampleInputRef = useRef<HTMLInputElement | null>(null);
+  const waveformRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const selectedLayer = patch.layers.find((layer) => layer.id === selectedLayerId);
@@ -109,6 +113,11 @@ export const SFXStudioView: React.FC = () => {
   }, []);
 
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
+  const importSample = async (file: File) => {
+    const context=audioCtxRef.current;if(!context)return;const id=`sample_${Date.now()}`;const imported=await importSFXSample(context,file,id);
+    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.sourceEnd),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));
+  };
+  useEffect(()=>{const canvas=waveformRef.current,region=patch.sampleRegions?.[0];if(!canvas||!region)return;const entry=getRuntimeSample(region.assetId),ctx=canvas.getContext('2d');if(!entry||!ctx)return;const level=chooseWaveformLevel(entry,canvas.width),peaks=level.channels[0]??[];ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#22d3ee';ctx.beginPath();peaks.forEach((p,i)=>{const x=i/Math.max(1,peaks.length-1)*canvas.width;ctx.moveTo(x,(1-p.max)*canvas.height/2);ctx.lineTo(x,(1-p.min)*canvas.height/2);});ctx.stroke();},[patch.sampleRegions,patch.sampleAssets]);
 
   const addAutomationPoint = (time: number, value: number) => {
     const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { id: `automation_${Date.now()}_${automationPointSequenceRef.current++}`, time, value }] }, patch.duration);
@@ -203,7 +212,7 @@ export const SFXStudioView: React.FC = () => {
     master.gain.setValueAtTime(0.7, context.currentTime);
     master.connect(analyser);
     analyser.connect(context.destination);
-    normalizeSFXPatch(patch).layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration));
+    const normalized=normalizeSFXPatch(patch); normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart);});
     eventBus.emit('CORE_STATE_CHANGE', 'SFX MODE');
     window.setTimeout(() => {
       if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
@@ -234,11 +243,13 @@ export const SFXStudioView: React.FC = () => {
       <section className="flex flex-1 flex-col overflow-y-auto bg-[#0a0e17] p-4">
         <header className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-cyan-300"><Volume2 size={16} /><span className="font-bold text-sm">SFX ENGINE // PROCEDURAL AUDIO SYNTHESIZER</span><span className="ml-2 flex items-center gap-1 text-[10px] text-emerald-400"><ShieldCheck size={12} /> LOCAL SYNTH</span></div>
-          <div className="flex gap-2">
+          <div className="flex gap-2"><input ref={sampleInputRef} type="file" accept="audio/*,.wav" className="hidden" onChange={(e)=>{const file=e.target.files?.[0];if(file)void importSample(file);e.currentTarget.value="";}}/><button onClick={()=>sampleInputRef.current?.click()} className="flex items-center gap-1.5 rounded border border-cyan-500/40 px-3 py-1.5 text-cyan-200"><Upload size={13}/> IMPORT AUDIO</button>
             <button onClick={() => void playSound()} className="flex items-center gap-2 rounded bg-cyan-500 px-4 py-1.5 font-bold text-black hover:bg-cyan-400"><Play size={14} /> TRIGGER SFX</button>
             <button onClick={() => void exportWav()} className="flex items-center gap-1.5 rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-gray-200 hover:bg-gray-700"><Download size={13} /> Export WAV</button>
           </div>
         </header>
+
+        <div className="mb-4 rounded-xl border border-gray-800 bg-[#0b101c] p-4"><div className="mb-2 flex justify-between text-[10px] text-gray-400"><span>SAMPLE WAVEFORM</span><span>{patch.sampleRegions?.length??0} REGIONS</span></div><canvas ref={waveformRef} width={900} height={140} className="h-28 w-full rounded bg-black"/>{patch.sampleAssets?.[0]&&<div className="mt-2 text-[10px] text-gray-500">{patch.sampleAssets[0].name} · {patch.sampleAssets[0].sampleRate} Hz · {patch.sampleAssets[0].channels} ch</div>}</div>
 
         <div className="mb-4 rounded-xl border border-cyan-500/30 bg-[#0b101c] p-4">
           <div className="mb-2 flex justify-between text-[10px] text-gray-400"><span className="flex items-center gap-1"><Activity size={12} className="text-cyan-400" /> REAL-TIME OSCILLOSCOPE</span><span>Duration {patch.duration}s</span></div>
