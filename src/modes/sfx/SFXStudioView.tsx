@@ -121,8 +121,12 @@ export const SFXStudioView: React.FC = () => {
 
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
   const importSample = async (file: File) => {
-    const context=audioCtxRef.current;if(!context)return;if(context.state==='suspended')await context.resume();const id=`sample_${globalThis.crypto?.randomUUID?.()??`${Date.now()}_${Math.random().toString(36).slice(2)}`}`;const imported=await importSFXSample(context,file,id);
-    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.timelineStart+regionTimelineDuration(imported.region)),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);
+    const context=audioCtxRef.current;if(!context)return;
+    try{
+      setSampleError(null);if(context.state==='suspended')await context.resume();
+      const id=`sample_${globalThis.crypto?.randomUUID?.()??`${Date.now()}_${Math.random().toString(36).slice(2)}`}`;const imported=await importSFXSample(context,file,id);
+      setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.timelineStart+regionTimelineDuration(imported.region)),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);setSampleRuntimeRevision(value=>value+1);
+    }catch(error){setSampleError(error instanceof Error?error.message:'Unable to import audio sample');}
   };
   const selectedSampleRegion=patch.sampleRegions?.find(region=>region.id===selectedSampleRegionId)??patch.sampleRegions?.[0];
   const selectedSampleAsset=selectedSampleRegion?patch.sampleAssets?.find(asset=>asset.id===selectedSampleRegion.assetId):undefined;
@@ -242,6 +246,7 @@ export const SFXStudioView: React.FC = () => {
 
   const exportWav = async () => {
     setSampleError(null);
+    try {
     const offline = new OfflineAudioContext(1, Math.ceil(44100 * patch.duration), 44100);
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
@@ -249,6 +254,7 @@ export const SFXStudioView: React.FC = () => {
     const normalized=normalizeSFXPatch(patch);normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, normalized.duration));
     const missing:string[]=[];normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(!entry){missing.push(region.assetId);return;}scheduleSFXSampleRegion(offline,entry.decoded,region,master,region.timelineStart);});if(missing.length){const message=`SFX sample relink required before export: ${[...new Set(missing)].join(', ')}`;setSampleError(message);return;}
     ExportManager.exportAudioAsWAV(await offline.startRendering(), `${patch.name}.wav`);
+    } catch(error) { setSampleError(error instanceof Error?error.message:'Unable to export SFX audio'); }
   };
 
   const slider = (label: string, value: number, min: number, max: number, step: number, field: keyof SFXLayer, suffix = '') => (
