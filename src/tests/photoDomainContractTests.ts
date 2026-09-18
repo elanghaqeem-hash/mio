@@ -2,11 +2,13 @@ import { CreativeDocumentKernel } from '../creative/CreativeDocumentKernel';
 import { compilePhotoCommand, createPhotoDocument, createPhotoNode } from '../creative/photo/PhotoDocumentAdapter';
 import { validatePhotoDocument } from '../creative/photo/PhotoDocumentValidation';
 import { PhotoTransactionEngine } from '../creative/photo/PhotoTransactionEngine';
+import { buildPhotoRenderGraph, collectDirtyRenderNodes, topologicalPhotoRenderOrder } from '../creative/photo/PhotoRenderGraph';
 interface Result{name:string;passed:boolean;error?:string}
 const assert=(v:unknown,m:string)=>{if(!v)throw new Error(m)};
 const test=async(name:string,run:()=>void|Promise<void>):Promise<Result>=>{try{await run();return{name,passed:true}}catch(error){return{name,passed:false,error:error instanceof Error?error.message:String(error)}}};
 export async function runPhotoDomainContractTests():Promise<{passed:number;total:number}>{
  const results:Result[]=[];
+ results.push(await test('photo render graph orders dependencies and propagates dirtiness',()=>{const doc=createPhotoDocument('Render',100,100,1,'render_test');const kernel=new CreativeDocumentKernel(doc);kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.layer.create',node:createPhotoNode('base','Base','photo.raster')})});kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.layer.create',node:{...createPhotoNode('clip','Clip','photo.raster'),properties:{...createPhotoNode('clip','Clip','photo.raster').properties,clippingTargetId:'base'}}})});const graph=buildPhotoRenderGraph(kernel.snapshot() as any);const order=topologicalPhotoRenderOrder(graph);assert(order.indexOf('base')<order.indexOf('clip'),'dependency rendered after dependent');assert(collectDirtyRenderNodes(graph,['base']).has('clip'),'dirty dependency did not propagate');}));
  results.push(await test('photo domain creates, edits and undoes typed layers',()=>{
   const kernel=new CreativeDocumentKernel(createPhotoDocument('Portrait',1200,800,1,'photo_test'));
   const layer=createPhotoNode('layer_a','Portrait','photo.raster');
