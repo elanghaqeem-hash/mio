@@ -51,7 +51,23 @@ export const Motion2DStudioView: React.FC = () => {
   const currentFrame = motionSecondsToFrame(currentTime, compositionV2.fps);
 
   useEffect(() => { if (canvasRef.current) renderFrame(canvasRef.current, project, currentTime); }, [project, currentTime]);
-  useEffect(() => { if (!playing) return; let last = performance.now(); let frame = 0; const tick = (now: number) => { const delta = (now - last) / 1000; last = now; setCurrentTime((time) => { const next = time + delta; if (next <= project.duration) return next; if (project.loop) return 0; setPlaying(false); return project.duration; }); frame = requestAnimationFrame(tick); }; frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame); }, [playing, project.duration, project.loop]);
+  useEffect(() => {
+    if (!playing) return;
+    const controller = new MotionWorkspaceController(legacyMotionProjectToV2(project));
+    controller.seek(motionSecondsToFrame(currentTime, project.fps));
+    controller.setLoop(project.loop);
+    controller.setPlaying(true);
+    let last = performance.now(); let animationFrame = 0;
+    const tick = (now: number) => {
+      controller.tick((now - last) / 1000); last = now;
+      const state = controller.snapshot().playback;
+      setCurrentTime(motionFrameToSeconds(state.frame, project.fps));
+      if (!state.playing) { setPlaying(false); return; }
+      animationFrame = requestAnimationFrame(tick);
+    };
+    animationFrame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [playing, project.duration, project.fps, project.loop]);
 
   const updateLayer = (changes: Partial<MotionLayer>) => { if (selected && !selected.locked) setProject((previous) => ({ ...previous, layers: previous.layers.map((layer) => layer.id === selected.id ? { ...layer, ...changes } : layer) })); };
   const addLayer = (type: MotionLayer['type']) => { const id = `motion_${type}_${Date.now().toString(36)}`; const layer: MotionLayer = { id, name: type === 'text' ? 'Text Layer' : 'Shape Layer', type, visible: true, locked: false, x: project.width / 2, y: project.height / 2, width: 240, height: type === 'text' ? 60 : 120, scale: 1, rotation: 0, opacity: 1, fill: type === 'text' ? '#ffffff' : '#00f0ff', text: type === 'text' ? 'New Motion Text' : undefined, fontSize: type === 'text' ? 40 : undefined, borderRadius: 12 }; setProject((previous) => ({ ...previous, layers: [...previous.layers, layer] })); setSelectedId(id); };
