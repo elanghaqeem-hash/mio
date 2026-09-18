@@ -10,6 +10,7 @@ import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutom
 import { configureSFXDistortion, createSFXLayerSource, createSFXSharedDSPGraph } from '../../creative/SFXUnifiedGraph';
 import { importSFXSample, chooseWaveformLevel, getRuntimeSample } from '../../creative/SFXSampleRegistry';
 import { scheduleSFXSampleRegion } from '../../creative/SFXSampleRuntime';
+import { normalizeSampleRegion, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -55,6 +56,7 @@ export const SFXStudioView: React.FC = () => {
   const [automationParameter, setAutomationParameter] = useState<SFXAutomatableParameter>('filterCutoff');
   const automationLanes: SFXAutomationLane[] = patch.automationLanes ?? [];
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null);
+  const [selectedSampleRegionId, setSelectedSampleRegionId] = useState<string | null>(null);
   const automationPointSequenceRef = useRef(0);
   const draggingAutomationIdRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -115,8 +117,12 @@ export const SFXStudioView: React.FC = () => {
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
   const importSample = async (file: File) => {
     const context=audioCtxRef.current;if(!context)return;const id=`sample_${Date.now()}`;const imported=await importSFXSample(context,file,id);
-    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.sourceEnd),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));
+    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.sourceEnd),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);
   };
+  const selectedSampleRegion=patch.sampleRegions?.find(region=>region.id===selectedSampleRegionId)??patch.sampleRegions?.[0];
+  const updateSampleRegion=(updates:Partial<NonNullable<MioSFXPatch['sampleRegions']>[number]>)=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).map(region=>region.id===selectedSampleRegion.id?normalizeSampleRegion({...region,...updates},asset):region)}));};
+  const splitSelectedSampleRegion=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const split=(selectedSampleRegion.sourceStart+selectedSampleRegion.sourceEnd)/2;const parts=splitSampleRegion(selectedSampleRegion,asset,split,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[0].id);};
+
   useEffect(()=>{const canvas=waveformRef.current,region=patch.sampleRegions?.[0];if(!canvas||!region)return;const entry=getRuntimeSample(region.assetId),ctx=canvas.getContext('2d');if(!entry||!ctx)return;const level=chooseWaveformLevel(entry,canvas.width),peaks=level.channels[0]??[];ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#22d3ee';ctx.beginPath();peaks.forEach((p,i)=>{const x=i/Math.max(1,peaks.length-1)*canvas.width;ctx.moveTo(x,(1-p.max)*canvas.height/2);ctx.lineTo(x,(1-p.min)*canvas.height/2);});ctx.stroke();},[patch.sampleRegions,patch.sampleAssets]);
 
   const addAutomationPoint = (time: number, value: number) => {
@@ -249,7 +255,7 @@ export const SFXStudioView: React.FC = () => {
           </div>
         </header>
 
-        <div className="mb-4 rounded-xl border border-gray-800 bg-[#0b101c] p-4"><div className="mb-2 flex justify-between text-[10px] text-gray-400"><span>SAMPLE WAVEFORM</span><span>{patch.sampleRegions?.length??0} REGIONS</span></div><canvas ref={waveformRef} width={900} height={140} className="h-28 w-full rounded bg-black"/>{patch.sampleAssets?.[0]&&<div className="mt-2 text-[10px] text-gray-500">{patch.sampleAssets[0].name} · {patch.sampleAssets[0].sampleRate} Hz · {patch.sampleAssets[0].channels} ch</div>}</div>
+        <div className="mb-4 rounded-xl border border-gray-800 bg-[#0b101c] p-4"><div className="mb-2 flex justify-between text-[10px] text-gray-400"><span>SAMPLE WAVEFORM</span><span>{patch.sampleRegions?.length??0} REGIONS</span></div><canvas ref={waveformRef} width={900} height={140} className="h-28 w-full rounded bg-black"/>{patch.sampleAssets?.[0]&&<div className="mt-2 text-[10px] text-gray-500">{patch.sampleAssets[0].name} · {patch.sampleAssets[0].sampleRate} Hz · {patch.sampleAssets[0].channels} ch</div>}{selectedSampleRegion&&<div className="mt-3 grid grid-cols-2 gap-2 text-[10px]"><button onClick={splitSelectedSampleRegion} className="rounded border border-gray-700 py-1">SPLIT MID</button><button onClick={()=>updateSampleRegion({reverse:!selectedSampleRegion.reverse})} className="rounded border border-gray-700 py-1">{selectedSampleRegion.reverse?'REVERSE ON':'REVERSE'}</button><button onClick={()=>updateSampleRegion({loop:!selectedSampleRegion.loop})} className="rounded border border-gray-700 py-1">{selectedSampleRegion.loop?'LOOP ON':'LOOP'}</button><label>PITCH {selectedSampleRegion.pitchSemitones}<input className="w-full" type="range" min="-24" max="24" step="1" value={selectedSampleRegion.pitchSemitones} onChange={e=>updateSampleRegion({pitchSemitones:Number(e.target.value)})}/></label><label>GAIN {selectedSampleRegion.gain.toFixed(2)}<input className="w-full" type="range" min="0" max="2" step=".01" value={selectedSampleRegion.gain} onChange={e=>updateSampleRegion({gain:Number(e.target.value)})}/></label><label>PAN {selectedSampleRegion.pan.toFixed(2)}<input className="w-full" type="range" min="-1" max="1" step=".01" value={selectedSampleRegion.pan} onChange={e=>updateSampleRegion({pan:Number(e.target.value)})}/></label></div>}</div>
 
         <div className="mb-4 rounded-xl border border-cyan-500/30 bg-[#0b101c] p-4">
           <div className="mb-2 flex justify-between text-[10px] text-gray-400"><span className="flex items-center gap-1"><Activity size={12} className="text-cyan-400" /> REAL-TIME OSCILLOSCOPE</span><span>Duration {patch.duration}s</span></div>
