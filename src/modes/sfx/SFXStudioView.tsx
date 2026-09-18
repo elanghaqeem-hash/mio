@@ -50,7 +50,7 @@ export const SFXStudioView: React.FC = () => {
   const { state: patch, setState: setPatch } = workspace;
   const [selectedLayerId, setSelectedLayerId] = useState(INITIAL_LAYERS[0].id);
   const [automationParameter, setAutomationParameter] = useState<SFXAutomatableParameter>('filterCutoff');
-  const [automationLanes, setAutomationLanes] = useState<SFXAutomationLane[]>([]);
+  const automationLanes: SFXAutomationLane[] = patch.automationLanes ?? [];
   const [selectedAutomationTime, setSelectedAutomationTime] = useState<number | null>(null);
   const draggingAutomationTimeRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -110,7 +110,7 @@ export const SFXStudioView: React.FC = () => {
 
   const addAutomationPoint = (time: number, value: number) => {
     const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { time, value }] }, patch.duration);
-    setAutomationLanes((current) => [...current.filter((candidate) => !(candidate.layerId === selectedLayerId && candidate.parameter === automationParameter)), lane]);
+    setPatch((current) => ({ ...current, automationLanes: [...(current.automationLanes ?? []).filter((candidate) => !(candidate.layerId === selectedLayerId && candidate.parameter === automationParameter)), lane] }));
   };
 
   const automationRange = (parameter: SFXAutomatableParameter): [number, number] => parameter === 'filterCutoff' || parameter === 'baseFrequency' || parameter === 'frequencySweep' ? [20, 20000] : parameter === 'filterResonance' ? [0, 30] : parameter === 'delayTime' ? [0, 2] : [0, 1];
@@ -121,7 +121,7 @@ export const SFXStudioView: React.FC = () => {
   };
   const moveSelectedAutomationPoint = (clientX: number, clientY: number) => {
     const previous = draggingAutomationTimeRef.current; const next = pointerAutomationValue(clientX, clientY); if (previous === null || !next) return;
-    setAutomationLanes((current) => current.map((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter ? normalizeAutomationLane({ ...lane, points: lane.points.map((point) => Math.abs(point.time - previous) < 0.0001 ? next : point) }, patch.duration) : lane));
+    setPatch((current) => ({ ...current, automationLanes: (current.automationLanes ?? []).map((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter ? normalizeAutomationLane({ ...lane, points: lane.points.map((point) => Math.abs(point.time - previous) < 0.0001 ? next : point) }, current.duration) : lane) }));
     draggingAutomationTimeRef.current = next.time; setSelectedAutomationTime(next.time);
   };
   const authorAutomationAtPointer = (clientX: number, clientY: number) => {
@@ -130,7 +130,7 @@ export const SFXStudioView: React.FC = () => {
 
   const removeSelectedAutomationPoint = () => {
     if (selectedAutomationTime === null) return;
-    setAutomationLanes((current) => current.map((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter ? { ...lane, points: lane.points.filter((point) => Math.abs(point.time - selectedAutomationTime) > 0.0001) } : lane));
+    setPatch((current) => ({ ...current, automationLanes: (current.automationLanes ?? []).map((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter ? { ...lane, points: lane.points.filter((point) => Math.abs(point.time - selectedAutomationTime) > 0.0001) } : lane) }));
     setSelectedAutomationTime(null);
   };
 
@@ -152,7 +152,7 @@ export const SFXStudioView: React.FC = () => {
       if (current.layers.length <= 1) return current;
       const layers = current.layers.filter((layer) => layer.id !== layerId);
       if (selectedLayerId === layerId) setSelectedLayerId(layers[0].id);
-      return { ...current, layers };
+      return { ...current, layers, automationLanes: (current.automationLanes ?? []).filter((lane) => lane.layerId !== layerId) };
     });
   };
 
