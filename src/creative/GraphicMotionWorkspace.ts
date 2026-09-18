@@ -178,12 +178,15 @@ export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[]
 };
 
 
-export interface GraphicGroupResizeSession { ids:string[]; bounds:GraphicSelectionBounds; origins:Record<string,{x:number;y:number;width:number;height:number}>; }
-export const beginGraphicGroupResize=(document:MioGraphicDocument,ids:string[]):GraphicGroupResizeSession|null=>{
+export interface GraphicGroupResizeSession { ids:string[]; handle:GraphicResizeHandle; bounds:GraphicSelectionBounds; origins:Record<string,{x:number;y:number;width:number;height:number}>; }
+export const beginGraphicGroupResize=(document:MioGraphicDocument,ids:string[],handle:GraphicResizeHandle='se'):GraphicGroupResizeSession|null=>{
   const unlocked=ids.filter(id=>document.layers.some(layer=>layer.id===id&&!layer.locked)); const selection=getGraphicSelectionBounds(document,unlocked); if(!selection||unlocked.length<2)return null;
-  return {ids:unlocked,bounds:selection,origins:Object.fromEntries(document.layers.filter(layer=>unlocked.includes(layer.id)).map(layer=>[layer.id,{x:layer.x,y:layer.y,width:layer.width,height:layer.height}]))};
+  return {ids:unlocked,handle,bounds:selection,origins:Object.fromEntries(document.layers.filter(layer=>unlocked.includes(layer.id)).map(layer=>[layer.id,{x:layer.x,y:layer.y,width:layer.width,height:layer.height}]))};
 };
-export const updateGraphicGroupResize=(document:MioGraphicDocument,session:GraphicGroupResizeSession,nextWidth:number,nextHeight:number,minSize=4):MioGraphicDocument=>{
-  const sx=Math.max(minSize,nextWidth)/Math.max(1,session.bounds.width),sy=Math.max(minSize,nextHeight)/Math.max(1,session.bounds.height);
-  return {...document,layers:document.layers.map(layer=>{const o=session.origins[layer.id];if(!o)return layer;return {...layer,x:session.bounds.left+(o.x-session.bounds.left)*sx,y:session.bounds.top+(o.y-session.bounds.top)*sy,width:Math.max(minSize,o.width*sx),height:Math.max(minSize,o.height*sy)};})};
+export const updateGraphicGroupResize=(document:MioGraphicDocument,session:GraphicGroupResizeSession,pointer:Point2D,keepAspect=false,minSize=4):MioGraphicDocument=>{
+  const b=session.bounds,h=session.handle; let left=b.left,right=b.right,top=b.top,bottom=b.bottom;
+  if(h.includes('w'))left=Math.min(pointer.x,right-minSize); if(h.includes('e'))right=Math.max(pointer.x,left+minSize); if(h.includes('n'))top=Math.min(pointer.y,bottom-minSize); if(h.includes('s'))bottom=Math.max(pointer.y,top+minSize);
+  let width=right-left,height=bottom-top;if(keepAspect){const ratio=b.width/Math.max(1,b.height);if(Math.abs(width-b.width)>=Math.abs(height-b.height)){height=width/ratio;if(h.includes('n'))top=bottom-height;else bottom=top+height;}else{width=height*ratio;if(h.includes('w'))left=right-width;else right=left+width;}}
+  const sx=width/Math.max(1,b.width),sy=height/Math.max(1,b.height);
+  return {...document,layers:document.layers.map(layer=>{const o=session.origins[layer.id];if(!o)return layer;return {...layer,x:left+(o.x-b.left)*sx,y:top+(o.y-b.top)*sy,width:Math.max(minSize,o.width*sx),height:Math.max(minSize,o.height*sy)};})};
 };
