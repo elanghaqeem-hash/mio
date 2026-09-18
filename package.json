@@ -21,10 +21,11 @@
     "release:promotion-selftest": "node scripts/promotion-readiness-selftest.mjs",
     "release:promotion-gate": "node scripts/rc-promotion-gate.mjs",
     "deploy:verify": "node scripts/verify-deployment.mjs",
-    "release:check": "npm run release:preflight && npm run release:deployment-contract && npm run release:promotion-selftest && npm run build:all && npm run release:smoke && npm run release:manifest",
+    "release:check": "npm run release:preflight && npm run release:animation-v1 && npm run release:deployment-contract && npm run release:promotion-selftest && npm run build:all && npm run release:smoke && npm run release:manifest",
     "test": "npm run release:deployment-contract && npm run release:promotion-selftest && npm run release:smoke && npm run release:manifest && node --import tsx src/tests/runAllTests.ts",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "release:animation-v1": "node scripts/animation-v1-release-check.mjs"
   },
   "dependencies": {
     "@types/three": "^0.186.0",
@@ -53,20 +54,35 @@
   "build": {
     "appId": "com.mio.v2.desktop",
     "productName": "Mio V2",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "dist-electron/**/*"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
     "extraResources": [
       {
         "from": "training",
         "to": "training",
-        "filter": ["train_mio_lora.py", "sft_lora.py", "requirements.txt", "configs/**/*"]
+        "filter": [
+          "train_mio_lora.py",
+          "sft_lora.py",
+          "requirements.txt",
+          "configs/**/*"
+        ]
       },
       {
         "from": "scripts/training/create-training-run-handoff.mjs",
         "to": "scripts/training/create-training-run-handoff.mjs"
       }
     ],
-    "win": { "target": ["nsis", "portable"] },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
