@@ -16,10 +16,31 @@ const toKey = (key: LegacyKeyframe, fps: number): MotionKeyframe<number> => ({
   interpolation: toInterpolation(key),
 });
 
-const legacyTrack = (project: MioMotionProject, layerId: string, property: string, fallback: number): MotionTrack<number> => {
+export const legacyTrackToV2 = (project: MioMotionProject, layerId: string, property: string, fallback: number): MotionTrack<number> => {
   const source = project.tracks.find((track) => track.nodeId === layerId && track.property === property);
   return { id: source?.id ?? `track_${layerId}_${property}`, property, defaultValue: fallback, keyframes: source?.keyframes.map((key) => toKey(key, project.fps)) ?? [] };
 };
+
+export function mergeLegacyPositionTrack(project: MioMotionProject, layerId: string, fallbackX: number, fallbackY: number): MotionTrack<readonly [number, number]> {
+  const x = legacyTrackToV2(project, layerId, "x", fallbackX);
+  const y = legacyTrackToV2(project, layerId, "y", fallbackY);
+  const frames = [...new Set([...x.keyframes.map((key) => key.frame), ...y.keyframes.map((key) => key.frame)])].sort((a, b) => a - b);
+  const sample = (track: MotionTrack<number>, frame: number): number => {
+    const exact = track.keyframes.find((key) => key.frame === frame);
+    if (exact) return exact.value;
+    const previous = [...track.keyframes].filter((key) => key.frame < frame).sort((a, b) => b.frame - a.frame)[0];
+    return previous?.value ?? track.defaultValue;
+  };
+  return {
+    id: `track_${layerId}_position`,
+    property: "position",
+    defaultValue: [fallbackX, fallbackY] as const,
+    keyframes: frames.map((frame) => {
+      const source = x.keyframes.find((key) => key.frame === frame) ?? y.keyframes.find((key) => key.frame === frame);
+      return { id: `key_${layerId}_position_${frame}`, frame, value: [sample(x, frame), sample(y, frame)] as const, interpolation: source?.interpolation ?? { type: "linear" } };
+    }),
+  };
+}
 
 export function legacyMotionProjectToV2(project: MioMotionProject, documentId = "motion-document", compositionId = "main"): MotionDocument {
   const durationFrames = Math.max(1, Math.round(project.duration * project.fps));
@@ -44,19 +65,14 @@ export function legacyMotionProjectToV2(project: MioMotionProject, documentId = 
         enabled: layer.visible,
         locked: layer.locked,
         transform: {
-          position: {
-            id: `track_${layer.id}_position`,
-            property: "position",
-            defaultValue: [layer.x, layer.y] as const,
-            keyframes: [],
-          },
-          scale: legacyTrack(project, layer.id, "scale", layer.scale),
-          rotation: legacyTrack(project, layer.id, "rotation", layer.rotation),
-          opacity: legacyTrack(project, layer.id, "opacity", layer.opacity),
+          position: mergeLegacyPositionTrack(project, layer.id, layer.x, layer.y),
+          scale: legacyTrackToV2(project, layer.id, "scale", layer.scale),
+          rotation: legacyTrackToV2(project, layer.id, "rotation", layer.rotation),
+          opacity: legacyTrackToV2(project, layer.id, "opacity", layer.opacity),
         },
         tracks: [
-          legacyTrack(project, layer.id, "x", layer.x),
-          legacyTrack(project, layer.id, "y", layer.y),
+          legacyTrackToV2(project, layer.id, "x", layer.x),
+          legacyTrackToV2(project, layer.id, "y", layer.y),
         ],
       })),
     }],
