@@ -50,7 +50,7 @@ export const graphicToMotionProject=(document:MioGraphicDocument, duration=6, fp
   const layers:MotionLayer[]=document.layers.filter(l=>l.visible&&(l.type==='shape'||l.type==='text')).map(l=>({
     id:`motion_${l.id}`,name:l.name,type:l.type as 'shape'|'text',visible:l.visible,locked:l.locked,
     x:l.x+l.width/2,y:l.y+l.height/2,width:l.width,height:l.height,scale:1,rotation:l.rotation??0,opacity:l.opacity,
-    fill:l.fill??'#ffffff',text:l.text,fontSize:l.fontSize,borderRadius:l.shapeType==='circle'?Math.min(l.width,l.height)/2:0,
+    fill:l.fill??'#ffffff',text:l.text,fontSize:l.fontSize,fontFamily:l.fontFamily,fontWeight:l.fontWeight,fontStyle:l.fontStyle,textAlign:l.textAlign,lineHeight:l.lineHeight,borderRadius:l.shapeType==='circle'?Math.min(l.width,l.height)/2:0,
   }));
   return {width:document.width,height:document.height,backgroundColor:document.backgroundColor,duration,fps,currentTime:0,loop:true,layers,tracks:[]};
 };

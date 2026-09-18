@@ -29,7 +29,7 @@ export interface MioPhotoDocument { width:number; height:number; backgroundColor
 export type MotionProperty='x'|'y'|'scale'|'rotation'|'opacity';
 export interface MotionKeyframe { id:string;time:number;value:number;interpolation:AnimationInterpolation }
 export interface MotionTrack { id:string;nodeId:string;property:MotionProperty;keyframes:MotionKeyframe[] }
-export interface MotionLayer { id:string;name:string;type:'shape'|'text';visible:boolean;locked:boolean;x:number;y:number;width:number;height:number;scale:number;rotation:number;opacity:number;fill:string;text?:string;fontSize?:number;borderRadius?:number; }
+export interface MotionLayer { id:string;name:string;type:'shape'|'text';visible:boolean;locked:boolean;x:number;y:number;width:number;height:number;scale:number;rotation:number;opacity:number;fill:string;text?:string;fontSize?:number;fontFamily?:string;fontWeight?:number|string;fontStyle?:'normal'|'italic';textAlign?:'left'|'center'|'right';lineHeight?:number;borderRadius?:number; }
 export interface MioMotionProject { width:number;height:number;backgroundColor:string;duration:number;fps:number;currentTime:number;loop:boolean;layers:MotionLayer[];tracks:MotionTrack[]; }
 export interface SFXLayer { id:string;name:string;type:'transient'|'oscillator'|'noise'|'sub_harmonic';waveType:OscillatorType;baseFrequency:number;frequencySweep:number;attack:number;decay:number;sustain:number;release:number;filterCutoff:number;filterResonance:number;distortion:number;delayTime:number;delayFeedback:number;reverbMix:number;volume:number; }
 export interface SFXAutomationPoint { id?:string; time:number; value:number; }
