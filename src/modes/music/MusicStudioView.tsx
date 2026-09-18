@@ -41,6 +41,7 @@ export const MusicStudioView: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const pianoRollRef = useRef<HTMLDivElement | null>(null);
   const draggingNoteRef = useRef<{id:string;startX:number;startY:number;originStep:number;originPitch:number}|null>(null);
@@ -182,6 +183,11 @@ export const MusicStudioView: React.FC = () => {
             <button onClick={() => void exportWav()} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-gray-300"><Download size={12} />WAV</button><div className="flex items-center gap-1 border-l border-gray-800 pl-2"><button onClick={() => quantizeTrack(1)} className="rounded border border-gray-700 px-2 py-1 text-cyan-300">Q 1/16</button><button onClick={() => transposeTrack(-12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">-12</button><button onClick={() => transposeTrack(12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">+12</button></div>
           </div>
           <span className="flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/20 px-2 py-1 rounded border border-amber-500/30"><ShieldCheck size={12} /> LOCAL NOTE SEQUENCE // RIGHTS NOT ASSESSED</span>
+        </div>
+
+        <div className="mb-3 rounded-xl border border-gray-800 bg-[#090d16] p-2">
+          <div className="mb-2 flex items-center justify-between"><span className="font-bold text-cyan-300">ARRANGEMENT TIMELINE</span><button onClick={()=>setProject(current=>({...current,arrangement:current.arrangement??{totalSteps:Math.max(32,current.totalSteps),clips:current.tracks.map((track,index)=>({id:`clip_${track.id}`,trackId:track.id,name:track.name,startStep:index*4,lengthSteps:current.totalSteps,sourceStartStep:0,loop:false}))}}))} className="rounded border border-gray-700 px-2 py-1 text-gray-300">INITIALIZE</button></div>
+          <div className="space-y-1">{project.tracks.map(track=><div key={track.id} className="flex h-8 items-center"><span className="w-28 truncate pr-2 text-[9px] text-gray-400">{track.name}</span><div className="relative h-full flex-1 rounded bg-gray-900">{project.arrangement?.clips.filter(clip=>clip.trackId===track.id).map(clip=><button key={clip.id} onClick={()=>{setSelectedClipId(clip.id);setActiveTrackId(track.id);}} className={`absolute top-1 h-6 rounded border px-1 text-left text-[9px] ${selectedClipId===clip.id?'border-amber-300 bg-cyan-700':'border-cyan-600 bg-cyan-900'}`} style={{left:`${(clip.startStep/(project.arrangement?.totalSteps||project.totalSteps))*100}%`,width:`${(clip.lengthSteps/(project.arrangement?.totalSteps||project.totalSteps))*100}%`}}>{clip.name}{clip.loop?' ↻':''}</button>)}<div className="absolute top-0 h-full w-px bg-white/60" style={{left:`${(currentStep/(project.arrangement?.totalSteps||project.totalSteps))*100}%`}} /></div></div>)}</div>
         </div>
 
         <div className="flex-1 bg-[#090d16] rounded-xl border border-gray-800 flex overflow-hidden">
