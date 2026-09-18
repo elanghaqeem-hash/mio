@@ -1,5 +1,5 @@
 import { deviceVoiceProvider } from './DeviceVoiceProvider';
-import { productionSynthesisVoiceProvider } from './ProductionSynthesisVoiceProvider';
+import { MioProductionVoiceError, productionSynthesisVoiceProvider } from './ProductionSynthesisVoiceProvider';
 import type { MioLocale, MioTranscriptionResult, MioVoiceProsodyHint, MioVoiceProvider, MioVoiceProviderCapability } from './MioVoiceProvider';
 import { mioVoiceProviders, type MioVoiceProviderRegistry } from './MioVoiceProviderRegistry';
 
@@ -36,8 +36,9 @@ export class MioVoiceRuntimeV3 {
       await this.speakWithProvider(provider, text, locale, controller, prosody);
     } catch (error) {
       if (controller.signal.aborted) return;
-      // A provider may pass readiness and still fail during synthesis/playback. Keep Mio audible by retrying once with device TTS.
-      if (provider.id !== deviceVoiceProvider.id) {
+      // Device fallback is safe only before production audio becomes audible. Retrying after MID_STREAM would duplicate speech.
+      const mayFallback = !(error instanceof MioProductionVoiceError) || error.stage === 'PRE_AUDIO';
+      if (provider.id !== deviceVoiceProvider.id && mayFallback) {
         await Promise.allSettled([provider.stopSpeaking()]);
         const fallback = await this.registry.select('TTS', deviceVoiceProvider.id);
         if (fallback && fallback.provider.id !== provider.id && !controller.signal.aborted) {
