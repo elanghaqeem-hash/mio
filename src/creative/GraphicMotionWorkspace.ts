@@ -176,3 +176,14 @@ export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[]
   const left=Math.min(...points.map(p=>p.x)),right=Math.max(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y)),bottom=Math.max(...points.map(p=>p.y));
   return {left,top,right,bottom,width:right-left,height:bottom-top,centerX:(left+right)/2,centerY:(top+bottom)/2};
 };
+
+
+export interface GraphicGroupResizeSession { ids:string[]; bounds:GraphicSelectionBounds; origins:Record<string,{x:number;y:number;width:number;height:number}>; }
+export const beginGraphicGroupResize=(document:MioGraphicDocument,ids:string[]):GraphicGroupResizeSession|null=>{
+  const unlocked=ids.filter(id=>document.layers.some(layer=>layer.id===id&&!layer.locked)); const selection=getGraphicSelectionBounds(document,unlocked); if(!selection||unlocked.length<2)return null;
+  return {ids:unlocked,bounds:selection,origins:Object.fromEntries(document.layers.filter(layer=>unlocked.includes(layer.id)).map(layer=>[layer.id,{x:layer.x,y:layer.y,width:layer.width,height:layer.height}]))};
+};
+export const updateGraphicGroupResize=(document:MioGraphicDocument,session:GraphicGroupResizeSession,nextWidth:number,nextHeight:number,minSize=4):MioGraphicDocument=>{
+  const sx=Math.max(minSize,nextWidth)/Math.max(1,session.bounds.width),sy=Math.max(minSize,nextHeight)/Math.max(1,session.bounds.height);
+  return {...document,layers:document.layers.map(layer=>{const o=session.origins[layer.id];if(!o)return layer;return {...layer,x:session.bounds.left+(o.x-session.bounds.left)*sx,y:session.bounds.top+(o.y-session.bounds.top)*sy,width:Math.max(minSize,o.width*sx),height:Math.max(minSize,o.height*sy)};})};
+};
