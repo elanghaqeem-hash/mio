@@ -1,5 +1,11 @@
 // 3D Scene Specification (.mio3d)
-export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; proceduralParams?:Record<string,number|string>; }
+export type MioMeshSelectionMode='vertex'|'edge'|'face';
+export interface MioMeshVertex { id:string; position:[number,number,number]; }
+export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:number; }
+export interface MioMeshEdge { id:string; vertexIds:[string,string]; faceIds:string[]; }
+export interface MioMeshData { vertices:MioMeshVertex[]; faces:MioMeshFace[]; }
+export interface MioMeshSelection { mode:MioMeshSelectionMode; vertexIds:string[]; edgeIds:string[]; faceIds:string[]; }
+export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; proceduralParams?:Record<string,number|string>; }
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
