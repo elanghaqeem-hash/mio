@@ -1,4 +1,4 @@
-import { beginGraphicResize, deleteMotionKeyframe, graphicToMotionProject, moveMotionKeyframe, setMotionKeyframeInterpolation, updateGraphicResize, beginGraphicRotation, updateGraphicRotation, hitTestGraphicLayers, getGraphicSelectionBounds, upsertMotionKeyframe } from '../creative/GraphicMotionWorkspace';
+import { beginGraphicResize, deleteMotionKeyframe, graphicToMotionProject, moveMotionKeyframe, setMotionKeyframeInterpolation, updateGraphicResize, beginGraphicRotation, updateGraphicRotation, hitTestGraphicLayers, getGraphicSelectionBounds, beginGraphicGroupResize, updateGraphicGroupResize, upsertMotionKeyframe } from '../creative/GraphicMotionWorkspace';
 import type { MioGraphicDocument } from '../types/creative';
 
 interface Result { name:string; passed:boolean; error?:string }
