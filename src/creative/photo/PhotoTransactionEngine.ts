@@ -12,7 +12,7 @@ export const compilePhotoTransaction=(document:CreativeDocument,transaction:Phot
  const commands=transaction.commands.map(command=>{
   const compiled=compilePhotoCommand(working,command);
   const sandbox=new CreativeDocumentKernel(working);
-  working=sandbox.execute({actor:transaction.metadata.source==='manual'?'user':'ai',command:compiled}).snapshot();
+  working=sandbox.execute({actor:transaction.metadata.source==='manual'?'user':'agent',command:compiled});
   return compiled;
  });
  return {id:transaction.id,timestamp:transaction.timestamp,actor:transaction.metadata.source==='manual'?'user':'ai',command:{type:'batch',commands}};
