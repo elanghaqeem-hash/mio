@@ -9,7 +9,9 @@ import {
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Raycaster,
   Scene,
+  Vector2,
   SphereGeometry,
   TorusGeometry,
   WebGLRenderer,
@@ -19,7 +21,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
-import { projectMeshToBufferGeometry } from './modeling/MeshGeometryProjection';
+import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -45,6 +47,7 @@ export const Studio3DView: React.FC = () => {
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
+  const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
   const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
   const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
@@ -137,10 +140,15 @@ export const Studio3DView: React.FC = () => {
       if (mesh.material instanceof MeshStandardMaterial) mesh.material.dispose();
     });
     meshMapRef.current.clear();
+    meshProjectionMapRef.current.clear();
 
     for (const object of sceneData.objects) {
       let geometry: BufferGeometry;
-      if (object.mesh) geometry = projectMeshToBufferGeometry(object.mesh).geometry;
+      if (object.mesh) {
+        const projection = projectMeshToBufferGeometry(object.mesh);
+        geometry = projection.geometry;
+        meshProjectionMapRef.current.set(object.id, projection);
+      }
       else if (object.type === 'sphere') geometry = new SphereGeometry(0.7, 32, 32);
       else if (object.type === 'cylinder') geometry = new CylinderGeometry(0.5, 0.5, 1.2, 24);
       else if (object.type === 'torus') geometry = new TorusGeometry(0.7, 0.2, 16, 32);
@@ -216,6 +224,37 @@ export const Studio3DView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
 
+  const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (workspaceMode !== 'edit' || meshSelection.mode !== 'face' || !selectedObj?.mesh) return;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    const mesh = meshMapRef.current.get(selectedObj.id);
+    const projection = meshProjectionMapRef.current.get(selectedObj.id);
+    if (!renderer || !camera || !mesh || !projection) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const pointer = new Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObject(mesh, false)[0];
+    if (!hit || hit.faceIndex == null) {
+      if (!event.shiftKey) setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
+      return;
+    }
+    const faceId = faceIdFromTriangleIndex(projection, hit.faceIndex);
+    if (!faceId) return;
+    setMeshSelection((previous) => {
+      const additive = event.shiftKey;
+      const alreadySelected = previous.faceIds.includes(faceId);
+      const faceIds = additive
+        ? alreadySelected ? previous.faceIds.filter((id) => id !== faceId) : [...previous.faceIds, faceId]
+        : [faceId];
+      return { mode: 'face', vertexIds: [], edgeIds: [], faceIds };
+    });
+  };
+
   const enterEditMode = () => {
     if (!selectedObj) return;
     if (!selectedObj.mesh && selectedObj.type === 'cube') updateSelectedObject({ mesh: createCubeMesh() });
@@ -276,7 +315,7 @@ export const Studio3DView: React.FC = () => {
           <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude +0.25</button>
           <span className="px-2 text-[10px] text-gray-500">V {selectedObj.mesh.vertices.length} / F {selectedObj.mesh.faces.length}</span>
         </div>}
-        <div ref={containerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing" />
+        <div ref={containerRef} onPointerDown={handleViewportPointerDown} className={`w-full flex-1 ${workspaceMode === 'edit' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`} />
         <div className="h-10 bg-[#0d121d] border-t border-gray-800 flex items-center justify-between px-4">
           <div className="flex items-center gap-2"><span className="text-gray-400 font-mono">ADD:</span>
             <button onClick={() => addObject('cube')} className="px-2 py-1 bg-gray-800 hover:bg-cyan-900/60 text-cyan-300 rounded border border-gray-700 flex items-center gap-1 cursor-pointer"><Box size={12} /> Cube</button>
