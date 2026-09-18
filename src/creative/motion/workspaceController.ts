@@ -1,5 +1,5 @@
 import type { MotionComposition, MotionDocument } from "./model";
-import { MotionCommandBus } from "./commands";
+import { MotionCommandBus, type MotionTransaction } from "./commands";
 import { clampMotionFrame, stepMotionPlayback, type MotionPlaybackState } from "./runtime";
 import type { TimelineSelection, TimelineViewport } from "./timeline";
 
@@ -37,5 +37,10 @@ export class MotionWorkspaceController {
   setLoop(loop: boolean): void { this.playback = { ...this.playback, loop }; }
   tick(elapsedSeconds: number): void { this.playback = stepMotionPlayback(this.composition, this.playback, elapsedSeconds); }
   setSelection(selection: TimelineSelection): void { this.selection = { layerIds: [...selection.layerIds], keyframeIds: [...selection.keyframeIds] }; }
+  execute(transaction: MotionTransaction): MotionWorkspaceState { this.commands.execute(transaction); this.seek(this.playback.frame); return this.snapshot(); }
+  undo(): MotionWorkspaceState { this.commands.undo(); this.seek(this.playback.frame); return this.snapshot(); }
+  redo(): MotionWorkspaceState { this.commands.redo(); this.seek(this.playback.frame); return this.snapshot(); }
+  get canUndo(): boolean { return this.commands.canUndo; }
+  get canRedo(): boolean { return this.commands.canRedo; }
   setViewport(viewport: TimelineViewport): void { this.viewport = { ...viewport, pixelsPerFrame: Math.max(.1, viewport.pixelsPerFrame), widthPx: Math.max(1, viewport.widthPx) }; }
 }
