@@ -1,0 +1,2 @@
+import { strict as assert } from 'node:assert';import { buildWaveformPeaks } from '../creative/SFXSampleWorkspace';
+export function runSFXWaveformRegistryContractTests(){let passed=0;const total=3;const p=buildWaveformPeaks(new Float32Array([-1,-.5,0,.5,1]),3);assert.equal(p.length,3);passed++;assert.ok(p.every(x=>x.min>=-1&&x.max<=1));passed++;assert.ok(p.every(x=>x.min<=x.max));passed++;return{passed,total};}
