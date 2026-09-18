@@ -56,6 +56,8 @@ export interface MotionLayer {
   tracks?: readonly MotionTrack[];
 }
 
+export interface MotionMarker { id: string; frame: number; label?: string; }
+
 export interface MotionComposition {
   id: string;
   name: string;
@@ -64,6 +66,7 @@ export interface MotionComposition {
   fps: number;
   durationFrames: number;
   workArea: readonly [number, number];
+  markers?: readonly MotionMarker[];
   layers: readonly MotionLayer[];
 }
 
