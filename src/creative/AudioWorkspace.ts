@@ -1,12 +1,9 @@
-import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, SFXLayer } from '../types/creative';
+import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, SFXLayer, SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
+export type { SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
 
 export interface MusicClip { id:string; trackId:string; name:string; startStep:number; lengthSteps:number; sourceStartStep:number; loop:boolean; }
 export interface MusicArrangement { totalSteps:number; clips:MusicClip[]; }
 export interface MusicMeter { peak:number; rms:number; db:number; }
-export interface SFXAutomationPoint { time:number; value:number; }
-export type SFXAutomatableParameter = 'baseFrequency'|'frequencySweep'|'filterCutoff'|'filterResonance'|'distortion'|'delayTime'|'delayFeedback'|'reverbMix'|'volume';
-export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; points:SFXAutomationPoint[]; }
-
 export const musicStepDuration = (tempo: number): number => 60 / Math.max(20, tempo) / 4;
 export const audibleMusicTracks = (tracks: MusicTrack[]): MusicTrack[] => { const soloed=tracks.filter(t=>t.solo&&!t.mute); return soloed.length?soloed:tracks.filter(t=>!t.mute); };
 export const envelopeTimes = (layer:SFXLayer,start:number,duration:number):{attack:number;decay:number;sustain:number;end:number} => { const end=start+Math.max(.02,duration),attack=Math.min(end-.015,start+Math.max(.001,layer.attack)),decay=Math.min(end-.01,attack+Math.max(.001,layer.decay)),sustain=Math.max(decay,end-Math.max(.005,layer.release)); return {attack,decay,sustain,end}; };
