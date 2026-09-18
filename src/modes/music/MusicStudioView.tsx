@@ -177,7 +177,7 @@ export const MusicStudioView: React.FC = () => {
     for (const track of audibleMusicTracks(project.tracks)) for (const note of (project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes)) {
       const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
       oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
-      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, track.volume * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime(track.pan, start);
+      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, (automationValue(track.id,'volume',note.startStep)??track.volume) * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime((automationValue(track.id,'pan',note.startStep)??((track.pan+1)/2))*2-1, start);
       oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); connectReturnSends(offline,panner,track,offline.destination); oscillator.start(start); oscillator.stop(start + duration);
     }
     await ExportManager.exportAudioAsWAV(await offline.startRendering(), 'MIO_Music_Project.wav', 'MUSIC');
