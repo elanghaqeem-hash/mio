@@ -54,3 +54,35 @@ export const graphicToMotionProject=(document:MioGraphicDocument, duration=6, fp
   }));
   return {width:document.width,height:document.height,backgroundColor:document.backgroundColor,duration,fps,currentTime:0,loop:true,layers,tracks:[]};
 };
+
+
+export interface Point2D { x:number; y:number }
+export interface GraphicDragSession { ids:string[]; start:Point2D; origins:Record<string,Point2D>; gridSize:number; snap:boolean }
+
+export const beginGraphicDrag=(document:MioGraphicDocument,ids:string[],start:Point2D,gridSize=8,snap=true):GraphicDragSession=>({
+  ids:ids.filter(id=>document.layers.some(layer=>layer.id===id&&!layer.locked)),
+  start,gridSize,snap,
+  origins:Object.fromEntries(document.layers.filter(layer=>ids.includes(layer.id)&&!layer.locked).map(layer=>[layer.id,{x:layer.x,y:layer.y}]))
+});
+
+export const updateGraphicDrag=(document:MioGraphicDocument,session:GraphicDragSession,pointer:Point2D):MioGraphicDocument=>{
+  const dx=pointer.x-session.start.x,dy=pointer.y-session.start.y;
+  return {...document,layers:document.layers.map(layer=>{
+    const origin=session.origins[layer.id]; if(!origin)return layer;
+    return {...layer,x:snapGraphicPosition(origin.x+dx,session.gridSize,session.snap),y:snapGraphicPosition(origin.y+dy,session.gridSize,session.snap)};
+  })};
+};
+
+export const hitTestGraphicLayers=(document:MioGraphicDocument,point:Point2D):string[]=>[...document.layers].reverse().filter(layer=>{
+  if(!layer.visible)return false; const b=bounds(layer);
+  return point.x>=b.left&&point.x<=b.right&&point.y>=b.top&&point.y<=b.bottom;
+}).map(layer=>layer.id);
+
+export const toggleGraphicSelection=(current:string[],id:string,additive=false):string[]=>{
+  if(!additive)return [id];
+  return current.includes(id)?current.filter(item=>item!==id):[...current,id];
+};
+
+export const nudgeGraphicLayers=(document:MioGraphicDocument,ids:string[],dx:number,dy:number):MioGraphicDocument=>({
+  ...document,layers:document.layers.map(layer=>ids.includes(layer.id)&&!layer.locked?{...layer,x:layer.x+dx,y:layer.y+dy}:layer)
+});
