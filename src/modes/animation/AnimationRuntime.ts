@@ -113,7 +113,8 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
       const lastWorld = world.bones[endBone.id];
       if (joints.length !== chain.length || !lastWorld) return;
       joints.push(lastWorld.tail);
-      const result = solveFABRIK({ joints, lengths: chain.map(bone => bone.length), target: targetWorld.head });
+      const poleWorld = constraint.poleTargetId ? world.bones[constraint.poleTargetId] : undefined;
+      const result = solveFABRIK({ joints, lengths: chain.map(bone => bone.length), target: targetWorld.head, pole: poleWorld?.head });
       const weight = Math.max(0, Math.min(1, constraint.influence));
       let parentQuaternion = chain[0].parentId ? world.bones[chain[0].parentId]?.quaternion : undefined;
       for (let i=0;i<chain.length;i++) {
