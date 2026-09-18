@@ -30,3 +30,6 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
  for(const result of results)console.log(`${result.passed?'✓':'✗'} [${result.passed?'PASS':'FAIL'}] ${result.name}${result.error?` — ${result.error}`:''}`);
  return{passed:results.filter(result=>result.passed).length,total:results.length};
 }
+
+
+// V2.1 transform primitives are intentionally pure so UI pointer sessions remain undoable and deterministic.
