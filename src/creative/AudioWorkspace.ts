@@ -1,80 +1,33 @@
 import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, SFXLayer } from '../types/creative';
 
+export interface MusicClip { id:string; trackId:string; name:string; startStep:number; lengthSteps:number; sourceStartStep:number; loop:boolean; }
+export interface MusicArrangement { totalSteps:number; clips:MusicClip[]; }
+export interface MusicMeter { peak:number; rms:number; db:number; }
+export interface SFXAutomationPoint { time:number; value:number; }
+export type SFXAutomatableParameter = 'baseFrequency'|'frequencySweep'|'filterCutoff'|'filterResonance'|'distortion'|'delayTime'|'delayFeedback'|'reverbMix'|'volume';
+export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; points:SFXAutomationPoint[]; }
+
 export const musicStepDuration = (tempo: number): number => 60 / Math.max(20, tempo) / 4;
+export const audibleMusicTracks = (tracks: MusicTrack[]): MusicTrack[] => { const soloed=tracks.filter(t=>t.solo&&!t.mute); return soloed.length?soloed:tracks.filter(t=>!t.mute); };
+export const envelopeTimes = (layer:SFXLayer,start:number,duration:number):{attack:number;decay:number;sustain:number;end:number} => { const end=start+Math.max(.02,duration),attack=Math.min(end-.015,start+Math.max(.001,layer.attack)),decay=Math.min(end-.01,attack+Math.max(.001,layer.decay)),sustain=Math.max(decay,end-Math.max(.005,layer.release)); return {attack,decay,sustain,end}; };
+const clamp=(v:number,min:number,max:number):number=>Math.min(max,Math.max(min,v));
 
-export const audibleMusicTracks = (tracks: MusicTrack[]): MusicTrack[] => {
-  const soloed = tracks.filter((track) => track.solo && !track.mute);
-  return soloed.length ? soloed : tracks.filter((track) => !track.mute);
-};
+export const quantizeStep=(step:number,grid=1,totalSteps=16):number=>{const g=Math.max(1,Math.round(grid));return clamp(Math.round(step/g)*g,0,Math.max(0,totalSteps-1));};
+export const quantizeNoteEvent=(note:NoteEvent,grid=1,totalSteps=16):NoteEvent=>{const startStep=quantizeStep(note.startStep,grid,totalSteps);const durationSteps=clamp(Math.round(note.durationSteps/Math.max(1,grid))*Math.max(1,grid),1,Math.max(1,totalSteps-startStep));return {...note,startStep,durationSteps,velocity:clamp(note.velocity,.01,1),pitch:clamp(Math.round(note.pitch),0,127)};};
+export const transposeNotes=(notes:NoteEvent[],semitones:number):NoteEvent[]=>notes.map(n=>({...n,pitch:clamp(Math.round(n.pitch+semitones),0,127)}));
+export const moveNote=(note:NoteEvent,deltaSteps:number,deltaPitch:number,totalSteps:number):NoteEvent=>({...note,startStep:clamp(note.startStep+Math.round(deltaSteps),0,Math.max(0,totalSteps-note.durationSteps)),pitch:clamp(note.pitch+Math.round(deltaPitch),0,127)});
+export const resizeNote=(note:NoteEvent,durationSteps:number,totalSteps:number):NoteEvent=>({...note,durationSteps:clamp(Math.round(durationSteps),1,Math.max(1,totalSteps-note.startStep))});
 
-export const envelopeTimes = (layer: SFXLayer, start: number, duration: number): { attack: number; decay: number; sustain: number; end: number } => {
-  const end = start + Math.max(.02, duration);
-  const attack = Math.min(end - .015, start + Math.max(.001, layer.attack));
-  const decay = Math.min(end - .01, attack + Math.max(.001, layer.decay));
-  const sustain = Math.max(decay, end - Math.max(.005, layer.release));
-  return { attack, decay, sustain, end };
-};
+export const normalizeMusicProject=(project:MioMusicProject):MioMusicProject=>{const totalSteps=clamp(Math.round(project.totalSteps||16),4,512),tempo=clamp(Math.round(project.tempo||120),20,300);return {...project,tempo,totalSteps,tracks:project.tracks.map(track=>({...track,volume:clamp(track.volume,0,1),pan:clamp(track.pan,-1,1),notes:track.notes.map(n=>quantizeNoteEvent(n,1,totalSteps)).filter((n,i,ns)=>ns.findIndex(c=>c.pitch===n.pitch&&c.startStep===n.startStep)===i).sort((a,b)=>a.startStep-b.startStep||a.pitch-b.pitch)}))};};
+export const estimateTrackPeak=(track:MusicTrack):number=>track.mute?0:clamp(track.volume*track.notes.reduce((p,n)=>Math.max(p,clamp(n.velocity,0,1)),0),0,1);
+export const estimateTrackMeter=(track:MusicTrack):MusicMeter=>{const values=track.mute?[]:track.notes.map(n=>clamp(track.volume*n.velocity,0,1));const peak=values.reduce((p,v)=>Math.max(p,v),0);const rms=values.length?Math.sqrt(values.reduce((s,v)=>s+v*v,0)/values.length):0;return {peak,rms,db:rms>0?20*Math.log10(rms):-Infinity};};
 
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+export const normalizeMusicClip=(clip:MusicClip,totalSteps:number):MusicClip=>{const startStep=clamp(Math.round(clip.startStep),0,Math.max(0,totalSteps-1));return {...clip,startStep,sourceStartStep:Math.max(0,Math.round(clip.sourceStartStep)),lengthSteps:clamp(Math.round(clip.lengthSteps),1,Math.max(1,totalSteps-startStep))};};
+export const normalizeArrangement=(arrangement:MusicArrangement,trackIds:string[]):MusicArrangement=>{const totalSteps=clamp(Math.round(arrangement.totalSteps||16),4,4096);return {totalSteps,clips:arrangement.clips.filter(c=>trackIds.includes(c.trackId)).map(c=>normalizeMusicClip(c,totalSteps)).sort((a,b)=>a.startStep-b.startStep)};};
+export const notesForClip=(track:MusicTrack,clip:MusicClip):NoteEvent[]=>{const sourceLength=Math.max(1,track.notes.reduce((m,n)=>Math.max(m,n.startStep+n.durationSteps),1));const out:NoteEvent[]=[];for(let local=0;local<clip.lengthSteps;local+=sourceLength){for(const n of track.notes){const start=clip.startStep+local+n.startStep-clip.sourceStartStep;if(start>=clip.startStep&&start<clip.startStep+clip.lengthSteps)out.push({...n,id:`${clip.id}:${local}:${n.id}`,startStep:start,durationSteps:Math.min(n.durationSteps,clip.startStep+clip.lengthSteps-start)}); } if(!clip.loop)break;}return out;};
 
-export const quantizeStep = (step: number, grid = 1, totalSteps = 16): number => {
-  const safeGrid = Math.max(1, Math.round(grid));
-  return clamp(Math.round(step / safeGrid) * safeGrid, 0, Math.max(0, totalSteps - 1));
-};
-
-export const quantizeNoteEvent = (note: NoteEvent, grid = 1, totalSteps = 16): NoteEvent => {
-  const startStep = quantizeStep(note.startStep, grid, totalSteps);
-  const durationSteps = clamp(Math.round(note.durationSteps / Math.max(1, grid)) * Math.max(1, grid), 1, Math.max(1, totalSteps - startStep));
-  return { ...note, startStep, durationSteps, velocity: clamp(note.velocity, .01, 1), pitch: clamp(Math.round(note.pitch), 0, 127) };
-};
-
-export const transposeNotes = (notes: NoteEvent[], semitones: number): NoteEvent[] =>
-  notes.map((note) => ({ ...note, pitch: clamp(Math.round(note.pitch + semitones), 0, 127) }));
-
-export const normalizeMusicProject = (project: MioMusicProject): MioMusicProject => {
-  const totalSteps = clamp(Math.round(project.totalSteps || 16), 4, 512);
-  const tempo = clamp(Math.round(project.tempo || 120), 20, 300);
-  return {
-    ...project,
-    tempo,
-    totalSteps,
-    tracks: project.tracks.map((track) => ({
-      ...track,
-      volume: clamp(track.volume, 0, 1),
-      pan: clamp(track.pan, -1, 1),
-      notes: track.notes
-        .map((note) => quantizeNoteEvent(note, 1, totalSteps))
-        .filter((note, index, notes) => notes.findIndex((candidate) => candidate.pitch === note.pitch && candidate.startStep === note.startStep) === index)
-        .sort((a, b) => a.startStep - b.startStep || a.pitch - b.pitch),
-    })),
-  };
-};
-
-export const estimateTrackPeak = (track: MusicTrack): number => {
-  if (track.mute) return 0;
-  const loudestVelocity = track.notes.reduce((peak, note) => Math.max(peak, clamp(note.velocity, 0, 1)), 0);
-  return clamp(track.volume * loudestVelocity, 0, 1);
-};
-
-export const sanitizeSFXLayer = (layer: SFXLayer): SFXLayer => ({
-  ...layer,
-  baseFrequency: clamp(layer.baseFrequency, 20, 20000),
-  frequencySweep: clamp(layer.frequencySweep, 20, 20000),
-  attack: clamp(layer.attack, .001, 10),
-  decay: clamp(layer.decay, .001, 10),
-  sustain: clamp(layer.sustain, .001, 1),
-  release: clamp(layer.release, .001, 10),
-  filterCutoff: clamp(layer.filterCutoff, 20, 20000),
-  filterResonance: clamp(layer.filterResonance, 0, 30),
-  distortion: clamp(layer.distortion, 0, 1),
-  delayTime: clamp(layer.delayTime, 0, 2),
-  delayFeedback: clamp(layer.delayFeedback, 0, .85),
-  reverbMix: clamp(layer.reverbMix, 0, 1),
-  volume: clamp(layer.volume, 0, 1),
-});
-
-export const normalizeSFXPatch = (patch: MioSFXPatch): MioSFXPatch => ({
-  ...patch,
-  duration: clamp(patch.duration, .02, 60),
-  layers: patch.layers.map(sanitizeSFXLayer),
-});
+export const sanitizeSFXLayer=(layer:SFXLayer):SFXLayer=>({...layer,baseFrequency:clamp(layer.baseFrequency,20,20000),frequencySweep:clamp(layer.frequencySweep,20,20000),attack:clamp(layer.attack,.001,10),decay:clamp(layer.decay,.001,10),sustain:clamp(layer.sustain,.001,1),release:clamp(layer.release,.001,10),filterCutoff:clamp(layer.filterCutoff,20,20000),filterResonance:clamp(layer.filterResonance,0,30),distortion:clamp(layer.distortion,0,1),delayTime:clamp(layer.delayTime,0,2),delayFeedback:clamp(layer.delayFeedback,0,.85),reverbMix:clamp(layer.reverbMix,0,1),volume:clamp(layer.volume,0,1)});
+export const normalizeSFXPatch=(patch:MioSFXPatch):MioSFXPatch=>({...patch,duration:clamp(patch.duration,.02,60),layers:patch.layers.map(sanitizeSFXLayer)});
+const automationBounds:Record<SFXAutomatableParameter,[number,number]>={baseFrequency:[20,20000],frequencySweep:[20,20000],filterCutoff:[20,20000],filterResonance:[0,30],distortion:[0,1],delayTime:[0,2],delayFeedback:[0,.85],reverbMix:[0,1],volume:[0,1]};
+export const normalizeAutomationLane=(lane:SFXAutomationLane,duration:number):SFXAutomationLane=>{const [min,max]=automationBounds[lane.parameter];return {...lane,points:lane.points.map(p=>({time:clamp(p.time,0,Math.max(.02,duration)),value:clamp(p.value,min,max)})).sort((a,b)=>a.time-b.time).filter((p,i,ps)=>i===0||p.time!==ps[i-1].time)};};
+export const evaluateAutomationLane=(lane:SFXAutomationLane,time:number,fallback:number):number=>{if(!lane.points.length)return fallback;const t=Math.max(0,time);if(t<=lane.points[0].time)return lane.points[0].value;for(let i=1;i<lane.points.length;i++){const right=lane.points[i],left=lane.points[i-1];if(t<=right.time){const mix=(t-left.time)/Math.max(.000001,right.time-left.time);return left.value+(right.value-left.value)*mix;}}return lane.points[lane.points.length-1].value;};
