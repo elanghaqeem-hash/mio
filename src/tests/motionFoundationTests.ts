@@ -71,6 +71,31 @@ export function runMotionFoundationTests(): void {
   try { validateMotionDocument(cyclic); } catch { rejected = true; }
   assert(rejected, "parent cycle rejection");
 
+  const temporal: MotionDocument = JSON.parse(JSON.stringify(document));
+  (temporal.compositions[0] as any).markers = [{ id: "m1", frame: 42, label: "Beat" }];
+  const temporalRoundTrip = deserializeMotionDocument(serializeMotionDocument(temporal));
+  assert(temporalRoundTrip.compositions[0].markers?.[0].frame === 42, "marker serialization round trip");
+  assert(temporalRoundTrip.compositions[0].workArea[1] === 299, "work area serialization round trip");
+
+  const duplicateFrame: MotionDocument = JSON.parse(JSON.stringify(document));
+  (duplicateFrame.compositions[0].layers[0].transform.opacity as any).keyframes = [
+    { id: "k1", frame: 10, value: 10, interpolation: { type: "linear" } },
+    { id: "k2", frame: 10, value: 20, interpolation: { type: "linear" } },
+  ];
+  rejected = false;
+  try { validateMotionDocument(duplicateFrame); } catch { rejected = true; }
+  assert(rejected, "duplicate keyframe frame rejection");
+
+  rejected = false;
+  try { deserializeMotionDocument('{"schemaVersion":1,"id":"bad","activeCompositionId":"x","compositions":"nope"}'); } catch { rejected = true; }
+  assert(rejected, "malformed document rejection");
+
+  const badMarker: MotionDocument = JSON.parse(JSON.stringify(temporal));
+  (badMarker.compositions[0].markers as any)[0].frame = 999;
+  rejected = false;
+  try { validateMotionDocument(badMarker); } catch { rejected = true; }
+  assert(rejected, "out-of-range marker rejection");
+
   const bus = new MotionCommandBus(document);
   bus.execute({ id: "tx-1", label: "Rename composition", commands: [{ id: "rename", label: "Rename", apply: (current) => ({ ...current, compositions: current.compositions.map((comp) => comp.id === "comp" ? { ...comp, name: "Renamed" } : comp) }) }] });
   assert(bus.document.compositions[0].name === "Renamed", "transaction apply");
