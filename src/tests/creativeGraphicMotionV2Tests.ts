@@ -37,8 +37,9 @@ export async function runCreativeGraphicMotionV2Tests():Promise<{passed:number;t
    assert(bounds&&Math.abs(bounds.width/bounds.height-aspect!.bounds.width/aspect!.bounds.height)<0.05,'aspect ratio drifted during Shift group resize');
  }));
  results.push(await test('Graphic smart guides snap moving selection geometry rather than pointer',()=>{
-   const doc=graphic(); const session=beginGraphicDrag(doc,['card'],{x:150,y:150},8,false); const snapped=snapGraphicDragToSmartGuides(doc,session,{x:450,y:150},6);
-   assert(snapped.pointer.x===500,'selection center should align to canvas center by pointer adjustment'); assert(snapped.guides.some(guide=>guide.axis==='x'&&guide.value===400),'canvas center guide missing');
+   const doc=graphic(); const session=beginGraphicDrag(doc,['card'],{x:150,y:150},8,false); const snapped=snapGraphicDragToSmartGuides(doc,session,{x:350,y:150},6);
+   assert(snapped.pointer.x===350,'pointer should remain stable when selection center is already aligned'); assert(snapped.guides.some(guide=>guide.axis==='x'&&guide.value===400),'canvas center guide missing');
+   const near=snapGraphicDragToSmartGuides(doc,session,{x:347,y:150},6); assert(near.pointer.x===350,'selection-aware snap should correct pointer by nearest geometry delta');
  }));
  for(const result of results)console.log(`${result.passed?'✓':'✗'} [${result.passed?'PASS':'FAIL'}] ${result.name}${result.error?` — ${result.error}`:''}`);
  return{passed:results.filter(result=>result.passed).length,total:results.length};
