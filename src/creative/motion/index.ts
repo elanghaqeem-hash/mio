@@ -9,3 +9,4 @@ export * from "./runtime";
 export * from "./timeline";
 export * from "./viewport";
 export * from "./workspaceController";
+export * from "./gestureTransaction";
