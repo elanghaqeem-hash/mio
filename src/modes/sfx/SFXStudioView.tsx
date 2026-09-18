@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, Download, Play, Plus, ShieldCheck, Sliders, Trash2, Volume2 } from 'lucide-react';
+import { Activity, Download, Play, Plus, ShieldCheck, Sliders, Trash2, Upload, Volume2 } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { ExportManager } from '../../project/ExportManager';
@@ -7,6 +7,10 @@ import type { MioSFXPatch, SFXLayer } from '../../types/creative';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
 import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutomatableParameter, normalizeAutomationLane, evaluateAutomationLane } from '../../creative/AudioWorkspace';
+import { configureSFXDistortion, createSFXLayerSource, createSFXSharedDSPGraph } from '../../creative/SFXUnifiedGraph';
+import { importSFXSample, chooseWaveformLevel, getRuntimeSample } from '../../creative/SFXSampleRegistry';
+import { scheduleSFXSampleRegion } from '../../creative/SFXSampleRuntime';
+import { normalizeSampleRegion, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -52,10 +56,15 @@ export const SFXStudioView: React.FC = () => {
   const [automationParameter, setAutomationParameter] = useState<SFXAutomatableParameter>('filterCutoff');
   const automationLanes: SFXAutomationLane[] = patch.automationLanes ?? [];
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null);
+  const [selectedSampleRegionId, setSelectedSampleRegionId] = useState<string | null>(null);
+  const [samplePlayhead, setSamplePlayhead] = useState(0);
+  const [waveformZoom, setWaveformZoom] = useState(1);
   const automationPointSequenceRef = useRef(0);
   const draggingAutomationIdRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const automationCanvasRef = useRef<HTMLDivElement | null>(null);
+  const sampleInputRef = useRef<HTMLInputElement | null>(null);
+  const waveformRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const selectedLayer = patch.layers.find((layer) => layer.id === selectedLayerId);
@@ -108,6 +117,18 @@ export const SFXStudioView: React.FC = () => {
   }, []);
 
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
+  const importSample = async (file: File) => {
+    const context=audioCtxRef.current;if(!context)return;const id=`sample_${Date.now()}`;const imported=await importSFXSample(context,file,id);
+    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.sourceEnd),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);
+  };
+  const selectedSampleRegion=patch.sampleRegions?.find(region=>region.id===selectedSampleRegionId)??patch.sampleRegions?.[0];
+  const updateSampleRegion=(updates:Partial<NonNullable<MioSFXPatch['sampleRegions']>[number]>)=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).map(region=>region.id===selectedSampleRegion.id?normalizeSampleRegion({...region,...updates},asset):region)}));};
+  const splitSelectedSampleRegion=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const split=(selectedSampleRegion.sourceStart+selectedSampleRegion.sourceEnd)/2;const parts=splitSampleRegion(selectedSampleRegion,asset,split,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[0].id);};
+
+  const splitAtPlayhead=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const sourceTime=selectedSampleRegion.sourceStart+samplePlayhead*Math.max(.0001,selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart);const parts=splitSampleRegion(selectedSampleRegion,asset,sourceTime,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[1].id);};
+  const seekWaveform=(clientX:number)=>{const canvas=waveformRef.current;if(!canvas)return;const rect=canvas.getBoundingClientRect();setSamplePlayhead(Math.max(0,Math.min(1,(clientX-rect.left)/Math.max(1,rect.width))));};
+
+  useEffect(()=>{const canvas=waveformRef.current,region=patch.sampleRegions?.[0];if(!canvas||!region)return;const entry=getRuntimeSample(region.assetId),ctx=canvas.getContext('2d');if(!entry||!ctx)return;const level=chooseWaveformLevel(entry,canvas.width),peaks=level.channels[0]??[];ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#22d3ee';ctx.beginPath();peaks.forEach((p,i)=>{const x=i/Math.max(1,peaks.length-1)*canvas.width;ctx.moveTo(x,(1-p.max)*canvas.height/2);ctx.lineTo(x,(1-p.min)*canvas.height/2);});ctx.stroke();},[patch.sampleRegions,patch.sampleAssets]);
 
   const addAutomationPoint = (time: number, value: number) => {
     const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { id: `automation_${Date.now()}_${automationPointSequenceRef.current++}`, time, value }] }, patch.duration);
@@ -167,41 +188,27 @@ export const SFXStudioView: React.FC = () => {
   };
 
   const buildLayerGraph = (context: BaseAudioContext, layer: SFXLayer, destination: AudioNode, startTime: number, duration: number) => {
-    const oscillator = context.createOscillator();
-    let source: AudioScheduledSourceNode = oscillator;
-    if (layer.type === 'noise') {
-      const frameCount = Math.max(1, Math.ceil(context.sampleRate * duration));
-      const buffer = context.createBuffer(1, frameCount, context.sampleRate);
-      const data = buffer.getChannelData(0);
-      // Deterministic xorshift noise keeps live/offline synthesis reproducible for the same layer.
-      let seed = Array.from(layer.id).reduce((value, char) => ((value * 31) ^ char.charCodeAt(0)) >>> 0, 0x9e3779b9) || 1;
-      for (let index = 0; index < data.length; index += 1) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; data[index] = ((seed >>> 0) / 0xffffffff) * 2 - 1; }
-      const bufferSource = context.createBufferSource(); bufferSource.buffer = buffer; source = bufferSource;
+    const source = createSFXLayerSource(context, layer, duration);
+    const graph = createSFXSharedDSPGraph(context, destination);
+    if (source.frequency) {
+      scheduleAutomation(source.frequency, layer.id, 'baseFrequency', Math.max(20, layer.baseFrequency), startTime, duration);
+      if (!automationLanes.some((lane) => lane.layerId === layer.id && lane.parameter === 'baseFrequency' && lane.points.length)) source.frequency.exponentialRampToValueAtTime(Math.max(20, layer.frequencySweep), startTime + duration);
     }
-    const filter = context.createBiquadFilter();
-    const envelope = context.createGain();
-    const distortion = context.createWaveShaper();
-    const dry = context.createGain();
-    const delay = context.createDelay(2);
-    const feedback = context.createGain();
-    const wet = context.createGain();
-    oscillator.type = layer.waveType;
-    if (layer.type !== 'noise') { scheduleAutomation(oscillator.frequency, layer.id, 'baseFrequency', Math.max(20, layer.baseFrequency), startTime, duration); if (!automationLanes.some((lane) => lane.layerId === layer.id && lane.parameter === 'baseFrequency' && lane.points.length)) oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, layer.frequencySweep), startTime + duration); }
-    filter.type = 'lowpass';
-    scheduleAutomation(filter.frequency, layer.id, 'filterCutoff', layer.filterCutoff, startTime, duration);
-    scheduleAutomation(filter.Q, layer.id, 'filterResonance', layer.filterResonance, startTime, duration);
+    scheduleAutomation(graph.filter.frequency, layer.id, 'filterCutoff', layer.filterCutoff, startTime, duration);
+    scheduleAutomation(graph.filter.Q, layer.id, 'filterResonance', layer.filterResonance, startTime, duration);
     const times = envelopeTimes(layer, startTime, duration);
-    envelope.gain.setValueAtTime(0.0001, startTime);
-    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume), times.attack);
-    envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.decay);
-    envelope.gain.setValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.sustain);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, times.end);
-    const amount = Math.max(0, layer.distortion) * 80;
-    distortion.curve = new Float32Array(Array.from({ length: 256 }, (_, index) => { const x = index * 2 / 255 - 1; return ((3 + amount) * x * 20 * Math.PI / 180) / (Math.PI + amount * Math.abs(x)); }));
-    distortion.oversample = '2x'; dry.gain.setValueAtTime(1 - layer.reverbMix * .4, startTime); wet.gain.setValueAtTime(layer.reverbMix, startTime);
-    scheduleAutomation(delay.delayTime, layer.id, 'delayTime', layer.delayTime, startTime, duration); scheduleAutomation(feedback.gain, layer.id, 'delayFeedback', Math.min(.85, layer.delayFeedback), startTime, duration); scheduleAutomation(wet.gain, layer.id, 'reverbMix', layer.reverbMix, startTime, duration);
-    source.connect(filter);
-    filter.connect(distortion); distortion.connect(envelope); envelope.connect(dry); dry.connect(destination); envelope.connect(delay); delay.connect(wet); wet.connect(destination); delay.connect(feedback); feedback.connect(delay);
+    graph.envelope.gain.setValueAtTime(0.0001, startTime);
+    graph.envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume), times.attack);
+    graph.envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.decay);
+    graph.envelope.gain.setValueAtTime(Math.max(0.001, layer.volume * layer.sustain), times.sustain);
+    graph.envelope.gain.exponentialRampToValueAtTime(0.0001, times.end);
+    configureSFXDistortion(graph.distortion, layer.distortion);
+    graph.dry.gain.setValueAtTime(1 - layer.reverbMix * .4, startTime);
+    graph.wet.gain.setValueAtTime(layer.reverbMix, startTime);
+    scheduleAutomation(graph.delay.delayTime, layer.id, 'delayTime', layer.delayTime, startTime, duration);
+    scheduleAutomation(graph.feedback.gain, layer.id, 'delayFeedback', Math.min(.85, layer.delayFeedback), startTime, duration);
+    scheduleAutomation(graph.wet.gain, layer.id, 'reverbMix', layer.reverbMix, startTime, duration);
+    source.node.connect(graph.input);
     source.start(startTime);
     source.stop(startTime + duration);
   };
@@ -216,7 +223,7 @@ export const SFXStudioView: React.FC = () => {
     master.gain.setValueAtTime(0.7, context.currentTime);
     master.connect(analyser);
     analyser.connect(context.destination);
-    normalizeSFXPatch(patch).layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration));
+    const normalized=normalizeSFXPatch(patch); normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart);});
     eventBus.emit('CORE_STATE_CHANGE', 'SFX MODE');
     window.setTimeout(() => {
       if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
@@ -247,11 +254,13 @@ export const SFXStudioView: React.FC = () => {
       <section className="flex flex-1 flex-col overflow-y-auto bg-[#0a0e17] p-4">
         <header className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-cyan-300"><Volume2 size={16} /><span className="font-bold text-sm">SFX ENGINE // PROCEDURAL AUDIO SYNTHESIZER</span><span className="ml-2 flex items-center gap-1 text-[10px] text-emerald-400"><ShieldCheck size={12} /> LOCAL SYNTH</span></div>
-          <div className="flex gap-2">
+          <div className="flex gap-2"><input ref={sampleInputRef} type="file" accept="audio/*,.wav" className="hidden" onChange={(e)=>{const file=e.target.files?.[0];if(file)void importSample(file);e.currentTarget.value="";}}/><button onClick={()=>sampleInputRef.current?.click()} className="flex items-center gap-1.5 rounded border border-cyan-500/40 px-3 py-1.5 text-cyan-200"><Upload size={13}/> IMPORT AUDIO</button>
             <button onClick={() => void playSound()} className="flex items-center gap-2 rounded bg-cyan-500 px-4 py-1.5 font-bold text-black hover:bg-cyan-400"><Play size={14} /> TRIGGER SFX</button>
             <button onClick={() => void exportWav()} className="flex items-center gap-1.5 rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-gray-200 hover:bg-gray-700"><Download size={13} /> Export WAV</button>
           </div>
         </header>
+
+        <div className="mb-4 rounded-xl border border-gray-800 bg-[#0b101c] p-4"><div className="mb-2 flex justify-between text-[10px] text-gray-400"><span>SAMPLE WAVEFORM</span><span>{patch.sampleRegions?.length??0} REGIONS</span></div><div className="relative overflow-x-auto"><canvas ref={waveformRef} width={900} height={140} onPointerDown={e=>seekWaveform(e.clientX)} className="h-28 max-w-none touch-none rounded bg-black cursor-crosshair" style={{width:`${waveformZoom*100}%`}}/><div className="pointer-events-none absolute top-0 h-28 w-px bg-white" style={{left:`${samplePlayhead*waveformZoom*100}%`}}/></div>{patch.sampleAssets?.[0]&&<div className="mt-2 text-[10px] text-gray-500">{patch.sampleAssets[0].name} · {patch.sampleAssets[0].sampleRate} Hz · {patch.sampleAssets[0].channels} ch</div>}{selectedSampleRegion&&<div className="mt-3 grid grid-cols-2 gap-2 text-[10px]"><button onClick={splitAtPlayhead} className="rounded border border-gray-700 py-1">SPLIT @ PLAYHEAD</button><button onClick={()=>updateSampleRegion({reverse:!selectedSampleRegion.reverse})} className="rounded border border-gray-700 py-1">{selectedSampleRegion.reverse?'REVERSE ON':'REVERSE'}</button><button onClick={()=>updateSampleRegion({loop:!selectedSampleRegion.loop})} className="rounded border border-gray-700 py-1">{selectedSampleRegion.loop?'LOOP ON':'LOOP'}</button><label>ZOOM {waveformZoom.toFixed(1)}x<input className="w-full" type="range" min="1" max="8" step=".5" value={waveformZoom} onChange={e=>setWaveformZoom(Number(e.target.value))}/></label><label>FADE IN {selectedSampleRegion.fadeIn.toFixed(2)}s<input className="w-full" type="range" min="0" max={Math.max(.01,(selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart)/2)} step=".01" value={selectedSampleRegion.fadeIn} onChange={e=>updateSampleRegion({fadeIn:Number(e.target.value)})}/></label><label>FADE OUT {selectedSampleRegion.fadeOut.toFixed(2)}s<input className="w-full" type="range" min="0" max={Math.max(.01,(selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart)/2)} step=".01" value={selectedSampleRegion.fadeOut} onChange={e=>updateSampleRegion({fadeOut:Number(e.target.value)})}/></label><label>PITCH {selectedSampleRegion.pitchSemitones}<input className="w-full" type="range" min="-24" max="24" step="1" value={selectedSampleRegion.pitchSemitones} onChange={e=>updateSampleRegion({pitchSemitones:Number(e.target.value)})}/></label><label>GAIN {selectedSampleRegion.gain.toFixed(2)}<input className="w-full" type="range" min="0" max="2" step=".01" value={selectedSampleRegion.gain} onChange={e=>updateSampleRegion({gain:Number(e.target.value)})}/></label><label>PAN {selectedSampleRegion.pan.toFixed(2)}<input className="w-full" type="range" min="-1" max="1" step=".01" value={selectedSampleRegion.pan} onChange={e=>updateSampleRegion({pan:Number(e.target.value)})}/></label></div>}</div>
 
         <div className="mb-4 rounded-xl border border-cyan-500/30 bg-[#0b101c] p-4">
           <div className="mb-2 flex justify-between text-[10px] text-gray-400"><span className="flex items-center gap-1"><Activity size={12} className="text-cyan-400" /> REAL-TIME OSCILLOSCOPE</span><span>Duration {patch.duration}s</span></div>
