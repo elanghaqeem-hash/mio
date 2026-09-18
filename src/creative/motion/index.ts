@@ -7,3 +7,4 @@ export * from "./migrations";
 export * from "./legacyAdapter";
 export * from "./runtime";
 export * from "./timeline";
+export * from "./viewport";
