@@ -13,6 +13,8 @@ export const assetDuration=(a:SFXSampleAsset)=>a.lengthSamples/Math.max(1,a.samp
 export const sanitizeSampleAsset=(a:SFXSampleAsset):SFXSampleAsset=>({...a,sampleRate:clamp(Math.round(a.sampleRate),8000,384000),channels:clamp(Math.round(a.channels),1,32),lengthSamples:Math.max(1,Math.round(a.lengthSamples)),version:Math.max(1,Math.round(a.version??1))});
 export const effectivePlaybackRate=(r:SFXSampleRegion)=>clamp(r.playbackRate,0.0625,16)*Math.pow(2,clamp(r.pitchSemitones,-48,48)/12);
 export const regionTimelineDuration=(r:SFXSampleRegion)=>Math.max(.001,r.sourceEnd-r.sourceStart)/effectivePlaybackRate(r);
+export const sampleTimelineExtent=(regions:readonly SFXSampleRegion[])=>regions.reduce((end,r)=>Math.max(end,Math.max(0,r.timelineStart)+regionTimelineDuration(r)),0);
+export const effectiveSFXDuration=(projectDuration:number,regions:readonly SFXSampleRegion[])=>Math.max(.01,Number.isFinite(projectDuration)?Math.max(0,projectDuration):0,sampleTimelineExtent(regions));
 export const normalizeSampleRegion=(r:SFXSampleRegion,a:SFXSampleAsset):SFXSampleRegion=>{
  const d=assetDuration(a),sourceStart=clamp(r.sourceStart,0,Math.max(0,d-.001)),sourceEnd=clamp(r.sourceEnd,sourceStart+.001,d),sourceDuration=sourceEnd-sourceStart;
  let fadeIn=clamp(r.fadeIn,0,sourceDuration),fadeOut=clamp(r.fadeOut,0,sourceDuration); const fadeTotal=fadeIn+fadeOut;
