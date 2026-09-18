@@ -164,3 +164,15 @@ export const updateGraphicRotation=(document:MioGraphicDocument,session:GraphicR
   rotation=((rotation%360)+360)%360;
   return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,rotation:Number(rotation.toFixed(2))}:layer)};
 };
+
+
+export interface GraphicSelectionBounds { left:number; top:number; right:number; bottom:number; width:number; height:number; centerX:number; centerY:number; }
+export const getGraphicLayerCorners=(layer:GraphicLayer):Point2D[]=>{
+  const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2,r=(layer.rotation??0)*Math.PI/180,cos=Math.cos(r),sin=Math.sin(r);
+  return [[layer.x,layer.y],[layer.x+layer.width,layer.y],[layer.x+layer.width,layer.y+layer.height],[layer.x,layer.y+layer.height]].map(([x,y])=>{const dx=x-cx,dy=y-cy;return {x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};});
+};
+export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[]):GraphicSelectionBounds|null=>{
+  const points=document.layers.filter(layer=>ids.includes(layer.id)&&layer.visible).flatMap(getGraphicLayerCorners); if(!points.length)return null;
+  const left=Math.min(...points.map(p=>p.x)),right=Math.max(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y)),bottom=Math.max(...points.map(p=>p.y));
+  return {left,top,right,bottom,width:right-left,height:bottom-top,centerX:(left+right)/2,centerY:(top+bottom)/2};
+};
