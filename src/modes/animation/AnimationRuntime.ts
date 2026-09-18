@@ -89,6 +89,8 @@ const rigLocalPoses = (rig: AnimationRig, poses: Record<string, BonePose>): Reco
 const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: Record<string, BonePose>) => {
   if (!constraint.boneId || !constraint.targetId) return;
   const endBone = rig.bones.find(bone => bone.id === constraint.boneId);
+  const requestedChainLength = constraint.chainLength == null ? 2 : Math.max(1, Math.floor(constraint.chainLength));
+  if (requestedChainLength < 2) return;
   const upperBone = endBone?.parentId ? rig.bones.find(bone => bone.id === endBone.parentId) : undefined;
   if (!endBone || !upperBone) return;
 
