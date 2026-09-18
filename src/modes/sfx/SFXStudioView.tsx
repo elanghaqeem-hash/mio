@@ -132,6 +132,15 @@ export const SFXStudioView: React.FC = () => {
     });
   };
 
+  const scheduleAutomation = (param: AudioParam, layerId: string, parameter: SFXAutomatableParameter, fallback: number, startTime: number, duration: number) => {
+    const lane = automationLanes.find((candidate) => candidate.layerId === layerId && candidate.parameter === parameter);
+    param.cancelScheduledValues(startTime);
+    if (!lane?.points.length) { param.setValueAtTime(fallback, startTime); return; }
+    const normalized = normalizeAutomationLane(lane, duration);
+    param.setValueAtTime(evaluateAutomationLane(normalized, 0, fallback), startTime);
+    normalized.points.forEach((point) => param.linearRampToValueAtTime(point.value, startTime + point.time));
+  };
+
   const buildLayerGraph = (context: BaseAudioContext, layer: SFXLayer, destination: AudioNode, startTime: number, duration: number) => {
     const oscillator = context.createOscillator();
     const filter = context.createBiquadFilter();
@@ -142,11 +151,11 @@ export const SFXStudioView: React.FC = () => {
     const feedback = context.createGain();
     const wet = context.createGain();
     oscillator.type = layer.waveType;
-    oscillator.frequency.setValueAtTime(Math.max(10, layer.baseFrequency), startTime);
-    oscillator.frequency.exponentialRampToValueAtTime(Math.max(10, layer.frequencySweep), startTime + duration);
+    scheduleAutomation(oscillator.frequency, layer.id, 'baseFrequency', Math.max(20, layer.baseFrequency), startTime, duration);
+    if (!automationLanes.some((lane) => lane.layerId === layer.id && lane.parameter === 'baseFrequency' && lane.points.length)) oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, layer.frequencySweep), startTime + duration);
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(layer.filterCutoff, startTime);
-    filter.Q.setValueAtTime(layer.filterResonance, startTime);
+    scheduleAutomation(filter.frequency, layer.id, 'filterCutoff', layer.filterCutoff, startTime, duration);
+    scheduleAutomation(filter.Q, layer.id, 'filterResonance', layer.filterResonance, startTime, duration);
     const times = envelopeTimes(layer, startTime, duration);
     envelope.gain.setValueAtTime(0.0001, startTime);
     envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, layer.volume), times.attack);
@@ -156,7 +165,7 @@ export const SFXStudioView: React.FC = () => {
     const amount = Math.max(0, layer.distortion) * 80;
     distortion.curve = new Float32Array(Array.from({ length: 256 }, (_, index) => { const x = index * 2 / 255 - 1; return ((3 + amount) * x * 20 * Math.PI / 180) / (Math.PI + amount * Math.abs(x)); }));
     distortion.oversample = '2x'; dry.gain.setValueAtTime(1 - layer.reverbMix * .4, startTime); wet.gain.setValueAtTime(layer.reverbMix, startTime);
-    delay.delayTime.setValueAtTime(layer.delayTime, startTime); feedback.gain.setValueAtTime(Math.min(.85, layer.delayFeedback), startTime);
+    scheduleAutomation(delay.delayTime, layer.id, 'delayTime', layer.delayTime, startTime, duration); scheduleAutomation(feedback.gain, layer.id, 'delayFeedback', Math.min(.85, layer.delayFeedback), startTime, duration); scheduleAutomation(wet.gain, layer.id, 'reverbMix', layer.reverbMix, startTime, duration);
     oscillator.connect(filter);
     filter.connect(distortion); distortion.connect(envelope); envelope.connect(dry); dry.connect(destination); envelope.connect(delay); delay.connect(wet); wet.connect(destination); delay.connect(feedback); feedback.connect(delay);
     oscillator.start(startTime);
