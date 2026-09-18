@@ -41,7 +41,7 @@ export const GraphicStudioView: React.FC = () => {
   const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
     const groupBounds=selectedLayerIds.length>1?getGraphicSelectionBounds(documentData,selectedLayerIds):null;
-    if(groupBounds&&Math.hypot(point.x-groupBounds.right,point.y-groupBounds.bottom)<=10){groupResizeSessionRef.current=beginGraphicGroupResize(documentData,selectedLayerIds);event.currentTarget.setPointerCapture(event.pointerId);return;}
+    if(groupBounds){const handles=[['nw',groupBounds.left,groupBounds.top],['n',groupBounds.centerX,groupBounds.top],['ne',groupBounds.right,groupBounds.top],['e',groupBounds.right,groupBounds.centerY],['se',groupBounds.right,groupBounds.bottom],['s',groupBounds.centerX,groupBounds.bottom],['sw',groupBounds.left,groupBounds.bottom],['w',groupBounds.left,groupBounds.centerY]] as const;const gh=handles.find(([,x,y])=>Math.abs(point.x-x)<=8&&Math.abs(point.y-y)<=8);if(gh){groupResizeSessionRef.current=beginGraphicGroupResize(documentData,selectedLayerIds,gh[0]);event.currentTarget.setPointerCapture(event.pointerId);return;}}
     if(selectedLayer && !selectedLayer.locked){ const rotatePoint={x:selectedLayer.x+selectedLayer.width/2,y:selectedLayer.y-28}; if(Math.hypot(point.x-rotatePoint.x,point.y-rotatePoint.y)<=10){rotationSessionRef.current=beginGraphicRotation(documentData,selectedLayer.id,point);event.currentTarget.setPointerCapture(event.pointerId);return;} const handle=resizeHandles(selectedLayer).find(([,x,y])=>Math.abs(point.x-x)<=8&&Math.abs(point.y-y)<=8); if(handle){resizeSessionRef.current=beginGraphicResize(documentData,selectedLayer.id,handle[0] as GraphicResizeHandle,point);event.currentTarget.setPointerCapture(event.pointerId);return;} }
     const hit=hitTestGraphicLayers(documentData,point)[0];
     if(!hit){setSelectedLayerIds([]);return;}
@@ -50,7 +50,7 @@ export const GraphicStudioView: React.FC = () => {
   };
   const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
-    if(groupResizeSessionRef.current){const s=groupResizeSessionRef.current;setDocumentData(previous=>updateGraphicGroupResize(previous,s,point.x-s.bounds.left,point.y-s.bounds.top));return;}
+    if(groupResizeSessionRef.current){const s=groupResizeSessionRef.current;setDocumentData(previous=>updateGraphicGroupResize(previous,s,point,event.shiftKey));return;}
     if(rotationSessionRef.current){setDocumentData(previous=>updateGraphicRotation(previous,rotationSessionRef.current!,point,event.shiftKey?15:0));return;}
     if(resizeSessionRef.current){setDocumentData(previous=>updateGraphicResize(previous,resizeSessionRef.current!,point,event.shiftKey));return;}
     if(!dragSessionRef.current)return;
@@ -99,7 +99,7 @@ export const GraphicStudioView: React.FC = () => {
       ctx.restore();
     }
     const groupBounds=selectedLayerIds.length>1?getGraphicSelectionBounds(documentData,selectedLayerIds):null;
-    if(groupBounds){ctx.save();ctx.strokeStyle='#38bdf8';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);ctx.strokeRect(groupBounds.left,groupBounds.top,groupBounds.width,groupBounds.height);ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';ctx.fillRect(groupBounds.right-5,groupBounds.bottom-5,10,10);ctx.strokeStyle='#0284c7';ctx.strokeRect(groupBounds.right-5,groupBounds.bottom-5,10,10);ctx.restore();}
+    if(groupBounds){ctx.save();ctx.strokeStyle='#38bdf8';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);ctx.strokeRect(groupBounds.left,groupBounds.top,groupBounds.width,groupBounds.height);ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';ctx.strokeStyle='#0284c7';for(const [hx,hy] of [[groupBounds.left,groupBounds.top],[groupBounds.centerX,groupBounds.top],[groupBounds.right,groupBounds.top],[groupBounds.right,groupBounds.centerY],[groupBounds.right,groupBounds.bottom],[groupBounds.centerX,groupBounds.bottom],[groupBounds.left,groupBounds.bottom],[groupBounds.left,groupBounds.centerY]]){ctx.fillRect(hx-5,hy-5,10,10);ctx.strokeRect(hx-5,hy-5,10,10);}ctx.restore();}
   }, [documentData, selectedLayerIds]);
 
   const updateSelectedLayer = (updates: Partial<GraphicLayer>) => {
