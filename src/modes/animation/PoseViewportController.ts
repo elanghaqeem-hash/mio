@@ -1,10 +1,12 @@
 import type { MioAnimationProject } from '../../types/creative';
 import { applyPoseEdit, type PoseEditResult } from './PoseEditSession';
+import { rotateBoneWorld, translateBoneWorld } from './WorldTransformOperations';
 import { resolveSelectedBone, type PoseControlState } from './PoseControlModel';
 
 export interface PoseViewportEdit {
   delta: number;
   time: number;
+  orientation?: 'WORLD' | 'LOCAL';
 }
 
 export const applyViewportPoseEdit = (
@@ -14,6 +16,12 @@ export const applyViewportPoseEdit = (
 ): PoseEditResult => {
   const selected = resolveSelectedBone(project, controls.selection);
   if (!selected || !controls.selection) throw new Error('Select a valid animation bone before editing its pose');
+  if (edit.orientation === 'WORLD') {
+    const transformed = controls.tool === 'TRANSLATE'
+      ? translateBoneWorld(project, controls.selection.rigId, controls.selection.boneId, controls.axis, edit.delta)
+      : rotateBoneWorld(project, controls.selection.rigId, controls.selection.boneId, controls.axis, edit.delta);
+    return { project: transformed, keyedChannels: [] };
+  }
   return applyPoseEdit(project, {
     rigId: controls.selection.rigId,
     boneId: controls.selection.boneId,
