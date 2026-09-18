@@ -70,6 +70,8 @@ export const MusicStudioView: React.FC = () => {
 
   const connectTrackEffects = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode) => { let node=input; for(const effect of track.effects??[]){ if(!effect.enabled)continue; if(effect.type==='gain'){const gain=ctx.createGain();gain.gain.value=0.5+effect.amount;node.connect(gain);node=gain;} else if(effect.type==='lowpass'){const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=200+effect.amount*19800;filter.Q.value=(effect.resonance??0)*20;node.connect(filter);node=filter;} else if(effect.type==='delay'){const dry=ctx.createGain(),wet=ctx.createGain(),delay=ctx.createDelay(1),feedback=ctx.createGain(),sum=ctx.createGain(),mix=effect.mix??0.35;dry.gain.value=1-mix;wet.gain.value=mix;delay.delayTime.value=effect.amount*0.5;feedback.gain.value=Math.min(0.9,effect.feedback??0.25);node.connect(dry);dry.connect(sum);node.connect(delay);delay.connect(wet);wet.connect(sum);delay.connect(feedback);feedback.connect(delay);node=sum;} } node.connect(destination); };
 
+  const connectReturnSends = (ctx: BaseAudioContext, input: AudioNode, track: MusicTrack, destination: AudioNode) => { for(const send of track.sends??[]){ if(!send.enabled||send.level<=0)continue; const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId); if(!bus)continue; const sendGain=ctx.createGain(),returnGain=ctx.createGain(); sendGain.gain.value=send.level; returnGain.gain.value=bus.volume; input.connect(sendGain); connectTrackEffects(ctx,sendGain,{...track,effects:[bus.effect]},returnGain); returnGain.connect(destination); } };
+
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
@@ -95,7 +97,7 @@ export const MusicStudioView: React.FC = () => {
               gain.gain.setValueAtTime(0.001, now);
               gain.gain.exponentialRampToValueAtTime(track.volume * note.velocity * 0.3, now + 0.02);
               gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
-              panner.pan.setValueAtTime(track.pan, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination); oscillator.start(now); oscillator.stop(now + durationSec);
+              panner.pan.setValueAtTime(track.pan, now); oscillator.connect(gain); gain.connect(panner); connectTrackEffects(ctx,panner,track,ctx.destination); connectReturnSends(ctx,panner,track,ctx.destination); oscillator.start(now); oscillator.stop(now + durationSec);
             }
           }
         }
@@ -174,7 +176,7 @@ export const MusicStudioView: React.FC = () => {
       const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
       oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
       gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, track.volume * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime(track.pan, start);
-      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); oscillator.start(start); oscillator.stop(start + duration);
+      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination); connectReturnSends(offline,panner,track,offline.destination); oscillator.start(start); oscillator.stop(start + duration);
     }
     await ExportManager.exportAudioAsWAV(await offline.startRendering(), 'MIO_Music_Project.wav', 'MUSIC');
   };
