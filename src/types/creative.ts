@@ -1,11 +1,5 @@
 // 3D Scene Specification (.mio3d)
-export type MioMeshSelectionMode='vertex'|'edge'|'face';
-export interface MioMeshVertex { id:string; position:[number,number,number]; }
-export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:number; }
-export interface MioMeshEdge { id:string; vertexIds:[string,string]; faceIds:string[]; }
-export interface MioMeshData { vertices:MioMeshVertex[]; faces:MioMeshFace[]; }
-export interface MioMeshSelection { mode:MioMeshSelectionMode; vertexIds:string[]; edgeIds:string[]; faceIds:string[]; }
-export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; proceduralParams?:Record<string,number|string>; }
+export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; proceduralParams?:Record<string,number|string>; }
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
@@ -44,7 +38,9 @@ export interface SFXAutomationPoint { id?:string; time:number; value:number; }
 export type SFXAutomatableParameter = 'baseFrequency'|'frequencySweep'|'filterCutoff'|'filterResonance'|'distortion'|'delayTime'|'delayFeedback'|'reverbMix'|'volume';
 export type SFXAutomationInterpolation = 'linear'|'step'|'smooth';
 export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; interpolation?:SFXAutomationInterpolation; points:SFXAutomationPoint[]; }
-export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[]; }
+export interface SFXSampleAssetState { id:string;name:string;sampleRate:number;channels:number;lengthSamples:number;sourceUri?:string;contentHash?:string;version?:number; }
+export interface SFXSampleRegionState { id:string;assetId:string;name:string;sourceStart:number;sourceEnd:number;timelineStart:number;gain:number;pan:number;fadeIn:number;fadeOut:number;reverse:boolean;playbackRate:number;pitchSemitones:number;loop:boolean;loopStart?:number;loopEnd?:number; }
+export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[];sampleAssets?:SFXSampleAssetState[];sampleRegions?:SFXSampleRegionState[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
 export interface MusicInsertEffect { id:string;type:'gain'|'lowpass'|'delay';enabled:boolean;amount:number;mix?:number;feedback?:number;resonance?:number; }
 export type MusicAutomationParameter = 'volume'|'pan'|'sendLevel'|'effectAmount'|'effectMix'|'effectFeedback'|'effectResonance';
