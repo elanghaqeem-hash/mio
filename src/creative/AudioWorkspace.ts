@@ -1,4 +1,4 @@
-import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, MusicClip, MusicArrangement, SFXLayer, SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
+import type { MioMusicProject, MioSFXPatch, MusicTrack, NoteEvent, MusicClip, MusicArrangement, SFXLayer, SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane, MusicAutomationLane } from '../types/creative';
 export type { SFXAutomationPoint, SFXAutomatableParameter, SFXAutomationLane } from '../types/creative';
 
 export type { MusicClip, MusicArrangement } from '../types/creative';
