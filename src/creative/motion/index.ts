@@ -4,3 +4,4 @@ export * from "./validation";
 export * from "./serialization";
 export * from "./commands";
 export * from "./migrations";
+export * from "./legacyAdapter";
