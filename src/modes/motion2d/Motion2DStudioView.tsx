@@ -45,16 +45,19 @@ export const Motion2DStudioView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const workspace = useCreativeStudioDocument<MioMotionProject>('MIO_Motion.miomotion', INITIAL_MOTION);
   const { state: project, setState: setProject } = workspace;
-  const [currentTime, setCurrentTime] = useState(0); const [playing, setPlaying] = useState(false); const [snap, setSnap] = useState(true); const [selectedId, setSelectedId] = useState('motion_title'); const [selectedKeyId,setSelectedKeyId]=useState<string|null>(null); const [selectedKeyIds,setSelectedKeyIds]=useState<string[]>([]); const [keyClipboard,setKeyClipboard]=useState<Array<{property:MotionProperty;offsetFrames:number;value:number;interpolation:'linear'|'step'|'easeIn'|'easeOut'|'easeInOut'}>>([]); const [expandedTracks,setExpandedTracks]=useState<Record<string,boolean>>({}); const [timelineZoom,setTimelineZoom]=useState(1); const [workArea,setWorkArea]=useState<readonly [number,number]>(compositionV2.workArea); const [markers,setMarkers]=useState<TimelineMarker[]>([]); const [layerRanges,setLayerRanges]=useState<Record<string,readonly [number,number]>>({});
-  const selected = project.layers.find((layer) => layer.id === selectedId);
   const motionV2 = legacyMotionProjectToV2(project);
   const compositionV2 = motionV2.compositions[0];
+  const controllerRef = useRef<MotionWorkspaceController | null>(null);
+  if (!controllerRef.current) controllerRef.current = new MotionWorkspaceController(motionV2);
+  const [currentTime, setCurrentTime] = useState(0); const [playing, setPlaying] = useState(false); const [snap, setSnap] = useState(true); const [selectedId, setSelectedId] = useState('motion_title'); const [selectedKeyId,setSelectedKeyId]=useState<string|null>(null); const [selectedKeyIds,setSelectedKeyIds]=useState<string[]>([]); const [keyClipboard,setKeyClipboard]=useState<Array<{property:MotionProperty;offsetFrames:number;value:number;interpolation:'linear'|'step'|'easeIn'|'easeOut'|'easeInOut'}>>([]); const [expandedTracks,setExpandedTracks]=useState<Record<string,boolean>>({}); const [timelineZoom,setTimelineZoom]=useState(1); const [workArea,setWorkArea]=useState<readonly [number,number]>(compositionV2.workArea); const [markers,setMarkers]=useState<TimelineMarker[]>(compositionV2.markers??[]); const [layerRanges,setLayerRanges]=useState<Record<string,readonly [number,number]>>({});
+  const selected = project.layers.find((layer) => layer.id === selectedId);
   const currentFrame = motionSecondsToFrame(currentTime, compositionV2.fps);
 
   useEffect(() => { if (canvasRef.current) renderFrame(canvasRef.current, project, currentTime); }, [project, currentTime]);
   useEffect(() => {
     if (!playing) return;
-    const controller = new MotionWorkspaceController(legacyMotionProjectToV2(project));
+    const controller = controllerRef.current ?? new MotionWorkspaceController(legacyMotionProjectToV2(project));
+    controllerRef.current = controller;
     controller.seek(motionSecondsToFrame(currentTime, project.fps));
     controller.setLoop(project.loop);
     controller.setPlaying(true);
