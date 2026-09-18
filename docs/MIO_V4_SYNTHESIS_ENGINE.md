@@ -1,12 +1,12 @@
-# Mio Voice V4 — Production Synthesis Engine
+# Mio Voice V4.2 — Production Synthesis Engine
 
 ## Objective
 
-Give Mio one stable, provider-neutral vocal identity across supported devices instead of depending on the browser/device voice catalog.
+Give Mio one stable, provider-neutral vocal identity across supported devices instead of depending on the browser/device voice catalog, while keeping provider credentials and actual voice/model selection under server authority.
 
 ## Pipeline
 
-`response text -> language/emotion/prosody planning -> Mio synthesis profile -> production voice adapter -> same-origin gateway -> licensed synthesis provider -> audio stream -> playback -> Voice Runtime V3`
+`response text -> language/emotion/prosody planning -> Mio synthesis profile -> production voice adapter -> synthesis gateway -> licensed synthesis provider -> audio stream -> playback -> Voice Runtime V3`
 
 ## Identity target
 
@@ -18,56 +18,67 @@ The profile is intentionally expressed as abstract synthesis controls rather tha
 
 Production providers MUST use a separately licensed, consented, or project-owned synthetic voice. Third-party performer recordings may only inform broad non-identifying character direction. They MUST NOT be uploaded, enrolled, embedded, cloned, speaker-matched, or used to retain distinctive performer traits.
 
-## Implemented kernel
+## Implemented production kernel
 
 - `MioSynthesisProfile`: stable Mio character controls.
-- `MioSynthesisProvider` and `MioSynthesisRegistry`: provider-neutral synthesis boundary and deterministic selection.
+- `MioSynthesisProvider` and registry: provider-neutral synthesis boundary and deterministic selection.
 - `MioProsodyPlanner`: semantic-preserving speaking-intent controls.
 - `MioSynthesisOrchestrator`: synthesis lifecycle and cancellation owner.
-- `HttpSynthesisProvider`: browser-safe same-origin client for `/api/voice/synthesize`.
-- `ProductionSynthesisVoiceProvider`: bridge into Voice Runtime V3.
-- `MioStreamingAudioPlayer`: deterministic encoded-audio playback/cancellation boundary.
-- `functions/api/voice/synthesize.ts`: server-side Cloudflare Pages Function gateway.
+- `HttpSynthesisProvider`: browser-safe client for the Mio gateway.
+- `ProductionSynthesisVoiceProvider`: bridge into Voice Runtime V3 with stale-session guards and deterministic cancellation.
+- `MioStreamingAudioPlayer`: encoded-audio playback boundary with listener cleanup and non-audio latency/byte telemetry.
+- `functions/api/voice/synthesize.ts`: Cloudflare Pages Function gateway with bounded body streaming, HTTPS-only upstream endpoint validation, redirect rejection, origin allowlisting and server-owned voice/model identity.
 - Voice Runtime V3 prefers production synthesis and retries once with device TTS if production synthesis/playback fails.
 
-## Server-side gateway contract
+## Deployment configuration
 
-The browser never receives an upstream TTS credential. Configure only deployment-side values:
+Configure only deployment-side values:
 
-- `MIO_TTS_ENDPOINT`: licensed TTS service endpoint.
-- `MIO_TTS_API_KEY`: secret; configure only in Cloudflare/hosting secret settings.
-- `MIO_TTS_VOICE_ID`: identifier for the separately licensed/consented/project-owned Mio voice.
+- `MIO_TTS_ENDPOINT`: HTTPS endpoint of the licensed TTS service.
+- `MIO_TTS_API_KEY`: provider credential; server secret only.
+- `MIO_TTS_VOICE_ID`: separately licensed/consented/project-owned Mio voice ID.
 - `MIO_TTS_MODEL`: optional provider model identifier.
+- `MIO_VOICE_GATEWAY_TOKEN`: optional transitional gateway protection.
+- `MIO_VOICE_ALLOWED_ORIGINS`: optional comma-separated additional trusted application origins, useful for packaged desktop shells or a separately hosted frontend.
 
-Do not prefix any secret or private synthesis configuration with `VITE_`.
+Do not prefix secrets or private synthesis configuration with `VITE_`. The browser is not allowed to choose the upstream voice ID, model, endpoint or credential.
 
-The gateway validates JSON/content type, limits text to 8,000 characters, clamps synthesis controls, restricts emotions, applies a 30-second upstream timeout, validates returned audio media types, disables caching, and does not expose provider secrets or voice enrollment data. HEAD/GET readiness checks disclose configuration state only.
+## Gateway controls
+
+V4.2 validates content type, enforces a 32 KB request-body limit while the body is read (not only from `Content-Length`), limits synthesis text to 8,000 characters, clamps abstract synthesis controls, restricts emotions, applies a 30-second upstream timeout, rejects upstream redirects, requires HTTPS provider endpoints, validates returned audio media types, disables caching and does not expose provider secrets or enrollment data.
+
+HEAD/GET readiness checks disclose configuration state only.
+
+## Authentication and abuse-control boundary
+
+`MIO_VOICE_GATEWAY_TOKEN` remains transitional. Do not ship that token as a static browser secret. Public production should bind synthesis to Mio's application session and enforce distributed quotas at the deployment edge or a durable/shared rate-limit store. In-memory counters are intentionally not used because Cloudflare isolates are not a reliable global quota authority.
+
+## Playback and latency
+
+The HTTP gateway already passes the provider response stream through without buffering it server-side. The browser player currently retains the compatibility-first encoded Blob path, which is reliable on iOS/Safari. V4.2 records only non-audio telemetry: bytes buffered, first-chunk latency and playback-start latency.
+
+A later low-latency path may use MediaSource/WebCodecs or PCM/WebAudio where supported, but it must feature-detect capabilities and retain the current compatibility fallback.
 
 ## Fallback behavior
 
 1. Runtime asks for `mio-production-synthesis`.
-2. Production adapter checks the same-origin gateway.
-3. If the gateway is unconfigured/unavailable, provider selection proceeds to device TTS.
-4. If the production provider passes readiness but later fails during synthesis or playback, Runtime V3 performs one deterministic retry with device TTS.
-5. User interruption aborts the active provider and playback lifecycle.
+2. Production adapter checks the gateway.
+3. If unconfigured/unavailable, provider selection proceeds to device TTS.
+4. If production passes readiness but fails during synthesis/playback, Runtime V3 retries once with device TTS.
+5. User interruption aborts the active synthesis session, player and provider lifecycle.
+6. Stale synthesis sessions cannot reclaim active playback ownership.
 
 ## Remaining production work
 
-### True low-latency playback
-
-`MioStreamingAudioPlayer` currently consumes encoded chunks and creates a browser-playable blob before playback. The HTTP transport is stream-capable, but playback is not yet genuinely incremental. A later phase should add MediaSource/WebCodecs-compatible buffering where browser support is reliable, retaining the current path as an iOS/Safari-compatible fallback.
-
-### Provider adapter calibration
-
-Different licensed TTS services expose different controls. The server-side adapter should translate Mio's abstract profile into provider-specific parameters without allowing browser clients to choose arbitrary upstream voices or models.
-
-### Abuse controls
-
-Before public production enablement, add deployment-appropriate authentication/session binding and distributed rate limiting. Avoid in-memory-only counters because Cloudflare isolates are not a reliable global quota store.
+1. Bind gateway authorization to the application's authenticated session.
+2. Add deployment-native distributed rate limiting once the production Cloudflare topology and quota policy are fixed.
+3. Select a licensed neural-TTS provider and implement provider-specific mapping of Mio's abstract controls.
+4. Add capability-detected low-latency browser playback without regressing iPadOS/iOS Safari.
+5. Run cross-device calibration and acceptance testing.
 
 ## Validation
 
-Validate on iPadOS/iOS Safari, Android Chrome, desktop Chrome/Edge/Safari, and representative audio devices. Track startup latency, interruption latency, synthesis failures, fallback rate, and playback underruns. Do not store raw microphone or synthesis audio as telemetry.
+Validate on iPadOS/iOS Safari, Android Chrome, desktop Chrome/Edge/Safari and representative audio devices. Track startup latency, interruption latency, synthesis failures, fallback rate and playback underruns. Do not store raw microphone or synthesis audio as telemetry.
 
 ## Acceptance criteria
 
@@ -78,4 +89,6 @@ Validate on iPadOS/iOS Safari, Android Chrome, desktop Chrome/Edge/Safari, and r
 5. No provider secret is shipped to the client.
 6. No external performer recording is used as a cloning or biometric source.
 7. Invalid synthesis controls cannot bypass server-side limits.
-8. Public production enablement requires session-aware abuse controls.
+8. Public production enablement requires session-aware distributed abuse controls.
+9. Upstream voice/model identity remains server-owned.
+10. Browser low-latency enhancements must retain a tested iOS/Safari fallback.
