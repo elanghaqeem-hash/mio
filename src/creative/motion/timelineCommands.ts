@@ -1,5 +1,5 @@
 import type { MotionCommand, MotionTransaction } from "./commands";
-import type { MotionComposition, MotionDocument, MotionLayer } from "./model";
+import type { MotionComposition, MotionDocument, MotionLayer, MotionMarker } from "./model";
 import type { TimelineMarker } from "./timeline";
 
 const updateComposition = (document: MotionDocument, compositionId: string, update: (composition: MotionComposition) => MotionComposition): MotionDocument => ({
@@ -21,6 +21,11 @@ export const trimMotionLayerCommand = (compositionId: string, layerId: string, i
 });
 
 export const timelineTransaction = (id: string, label: string, commands: readonly MotionCommand[]): MotionTransaction => ({ id, label, commands });
+
+export const setMotionMarkersCommand = (compositionId: string, markers: readonly MotionMarker[]): MotionCommand => ({
+  id: `markers:${compositionId}`, label: "Set timeline markers",
+  apply: (document) => updateComposition(document, compositionId, (composition) => ({ ...composition, markers: normalizeTimelineMarkers(markers, composition.durationFrames) })),
+});
 
 export interface MotionTimelineMetadata { markers: readonly TimelineMarker[] }
 
