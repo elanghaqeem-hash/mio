@@ -86,3 +86,60 @@ export const toggleGraphicSelection=(current:string[],id:string,additive=false):
 export const nudgeGraphicLayers=(document:MioGraphicDocument,ids:string[],dx:number,dy:number):MioGraphicDocument=>({
   ...document,layers:document.layers.map(layer=>ids.includes(layer.id)&&!layer.locked?{...layer,x:layer.x+dx,y:layer.y+dy}:layer)
 });
+
+
+export type GraphicResizeHandle='nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w';
+export interface GraphicResizeSession { id:string; handle:GraphicResizeHandle; start:Point2D; origin:{x:number;y:number;width:number;height:number}; aspectRatio:number; }
+
+export const beginGraphicResize=(document:MioGraphicDocument,id:string,handle:GraphicResizeHandle,start:Point2D):GraphicResizeSession|null=>{
+  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null;
+  return {id,handle,start,origin:{x:layer.x,y:layer.y,width:layer.width,height:layer.height},aspectRatio:layer.width/Math.max(1,layer.height)};
+};
+
+export const updateGraphicResize=(document:MioGraphicDocument,session:GraphicResizeSession,pointer:Point2D,keepAspect=false,minSize=4):MioGraphicDocument=>{
+  const dx=pointer.x-session.start.x,dy=pointer.y-session.start.y; const o=session.origin;
+  let x=o.x,y=o.y,width=o.width,height=o.height;
+  if(session.handle.includes('e')) width=Math.max(minSize,o.width+dx);
+  if(session.handle.includes('s')) height=Math.max(minSize,o.height+dy);
+  if(session.handle.includes('w')){width=Math.max(minSize,o.width-dx);x=o.x+o.width-width;}
+  if(session.handle.includes('n')){height=Math.max(minSize,o.height-dy);y=o.y+o.height-height;}
+  if(keepAspect){
+    const horizontal=session.handle==='e'||session.handle==='w';
+    if(horizontal) height=Math.max(minSize,width/session.aspectRatio);
+    else width=Math.max(minSize,height*session.aspectRatio);
+    if(session.handle.includes('w'))x=o.x+o.width-width;
+    if(session.handle.includes('n'))y=o.y+o.height-height;
+  }
+  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,x,y,width,height}:layer)};
+};
+
+export const duplicateGraphicLayers=(document:MioGraphicDocument,ids:string[],offset=16):{document:MioGraphicDocument;ids:string[]}=>{
+  const created=document.layers.filter(layer=>ids.includes(layer.id)).map((layer,index)=>({...structuredClone(layer),id:`${layer.id}_copy_${Date.now().toString(36)}_${index}`,name:`${layer.name} Copy`,x:layer.x+offset,y:layer.y+offset,locked:false}));
+  return {document:{...document,layers:[...document.layers,...created]},ids:created.map(layer=>layer.id)};
+};
+
+export const deleteGraphicLayers=(document:MioGraphicDocument,ids:string[]):MioGraphicDocument=>({...document,layers:document.layers.filter(layer=>!ids.includes(layer.id)||layer.locked)});
+
+export const setGraphicLayerOrder=(document:MioGraphicDocument,id:string,target:'front'|'back'|'forward'|'backward'):MioGraphicDocument=>{
+  const index=document.layers.findIndex(layer=>layer.id===id); if(index<0)return document;
+  const layers=[...document.layers], [layer]=layers.splice(index,1);
+  const next=target==='front'?layers.length:target==='back'?0:target==='forward'?Math.min(layers.length,index+1):Math.max(0,index-1);
+  layers.splice(next,0,layer); return {...document,layers};
+};
+
+export const createMotionTrackId=(nodeId:string,property:string):string=>`track_${nodeId}_${property}`;
+
+export const upsertMotionKeyframe=(project:MioMotionProject,nodeId:string,property:import('../types/creative').MotionProperty,time:number,value:number,interpolation:import('../types/creative').AnimationInterpolation='easeInOut'):MioMotionProject=>{
+  const trackId=createMotionTrackId(nodeId,property), keyTime=snapMotionProjectTime(time,project.fps);
+  const existing=project.tracks.find(track=>track.id===trackId);
+  const keyframe={id:`key_${nodeId}_${property}_${Math.round(keyTime*1000)}`,time:keyTime,value,interpolation};
+  return {...project,tracks:existing?project.tracks.map(track=>track.id===trackId?{...track,keyframes:[...track.keyframes.filter(key=>Math.abs(key.time-keyTime)>.0005),keyframe].sort((a,b)=>a.time-b.time)}:track):[...project.tracks,{id:trackId,nodeId,property,keyframes:[keyframe]}]};
+};
+
+export const deleteMotionKeyframe=(project:MioMotionProject,trackId:string,keyId:string):MioMotionProject=>({...project,tracks:project.tracks.map(track=>track.id===trackId?{...track,keyframes:track.keyframes.filter(key=>key.id!==keyId)}:track).filter(track=>track.keyframes.length>0)});
+
+export const moveMotionKeyframe=(project:MioMotionProject,trackId:string,keyId:string,time:number):MioMotionProject=>({...project,tracks:project.tracks.map(track=>track.id===trackId?{...track,keyframes:track.keyframes.map(key=>key.id===keyId?{...key,time:snapMotionProjectTime(Math.max(0,Math.min(project.duration,time)),project.fps)}:key).sort((a,b)=>a.time-b.time)}:track)});
+
+export const setMotionKeyframeInterpolation=(project:MioMotionProject,trackId:string,keyId:string,interpolation:import('../types/creative').AnimationInterpolation):MioMotionProject=>({...project,tracks:project.tracks.map(track=>track.id===trackId?{...track,keyframes:track.keyframes.map(key=>key.id===keyId?{...key,interpolation}:key)}:track)});
+
+const snapMotionProjectTime=(time:number,fps:number)=>Number((Math.round(time*fps)/fps).toFixed(3));
