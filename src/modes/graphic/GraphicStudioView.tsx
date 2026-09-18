@@ -5,7 +5,7 @@ import { ExportManager } from '../../project/ExportManager';
 import { eventBus } from '../../core/EventBus';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { alignGraphicLayers, beginGraphicDrag, beginGraphicResize, deleteGraphicLayers, distributeGraphicLayers, duplicateGraphicLayers, hitTestGraphicLayers, nudgeGraphicLayers, setGraphicLayerOrder, toggleGraphicSelection, updateGraphicDrag, updateGraphicResize, type GraphicDragSession, type GraphicResizeHandle, type GraphicResizeSession } from '../../creative/GraphicMotionWorkspace';
+import { alignGraphicLayers, beginGraphicDrag, beginGraphicResize, beginGraphicRotation, deleteGraphicLayers, distributeGraphicLayers, duplicateGraphicLayers, hitTestGraphicLayers, nudgeGraphicLayers, setGraphicLayerOrder, toggleGraphicSelection, updateGraphicDrag, updateGraphicResize, updateGraphicRotation, type GraphicDragSession, type GraphicResizeHandle, type GraphicResizeSession, type GraphicRotationSession } from '../../creative/GraphicMotionWorkspace';
 
 const activityTimestamp = () => Date.now();
 
@@ -29,6 +29,7 @@ export const GraphicStudioView: React.FC = () => {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const dragSessionRef = useRef<GraphicDragSession | null>(null);
   const resizeSessionRef = useRef<GraphicResizeSession | null>(null);
+  const rotationSessionRef = useRef<GraphicRotationSession | null>(null);
   const selectedLayerId = selectedLayerIds.at(-1) ?? '';
   const selectedLayer = documentData.layers.find((layer) => layer.id === selectedLayerId);
   const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -38,7 +39,7 @@ export const GraphicStudioView: React.FC = () => {
   const resizeHandles = (layer: GraphicLayer) => ([['nw',layer.x,layer.y],['n',layer.x+layer.width/2,layer.y],['ne',layer.x+layer.width,layer.y],['e',layer.x+layer.width,layer.y+layer.height/2],['se',layer.x+layer.width,layer.y+layer.height],['s',layer.x+layer.width/2,layer.y+layer.height],['sw',layer.x,layer.y+layer.height],['w',layer.x,layer.y+layer.height/2]] as const);
   const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
-    if(selectedLayer && !selectedLayer.locked){ const handle=resizeHandles(selectedLayer).find(([,x,y])=>Math.abs(point.x-x)<=8&&Math.abs(point.y-y)<=8); if(handle){resizeSessionRef.current=beginGraphicResize(documentData,selectedLayer.id,handle[0] as GraphicResizeHandle,point);event.currentTarget.setPointerCapture(event.pointerId);return;} }
+    if(selectedLayer && !selectedLayer.locked){ const rotatePoint={x:selectedLayer.x+selectedLayer.width/2,y:selectedLayer.y-28}; if(Math.hypot(point.x-rotatePoint.x,point.y-rotatePoint.y)<=10){rotationSessionRef.current=beginGraphicRotation(documentData,selectedLayer.id,point);event.currentTarget.setPointerCapture(event.pointerId);return;} const handle=resizeHandles(selectedLayer).find(([,x,y])=>Math.abs(point.x-x)<=8&&Math.abs(point.y-y)<=8); if(handle){resizeSessionRef.current=beginGraphicResize(documentData,selectedLayer.id,handle[0] as GraphicResizeHandle,point);event.currentTarget.setPointerCapture(event.pointerId);return;} }
     const hit=hitTestGraphicLayers(documentData,point)[0];
     if(!hit){setSelectedLayerIds([]);return;}
     const next=toggleGraphicSelection(selectedLayerIds,hit,event.shiftKey); setSelectedLayerIds(next);
@@ -46,11 +47,12 @@ export const GraphicStudioView: React.FC = () => {
   };
   const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
+    if(rotationSessionRef.current){setDocumentData(previous=>updateGraphicRotation(previous,rotationSessionRef.current!,point,event.shiftKey?15:0));return;}
     if(resizeSessionRef.current){setDocumentData(previous=>updateGraphicResize(previous,resizeSessionRef.current!,point,event.shiftKey));return;}
     if(!dragSessionRef.current)return;
     setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,point));
   };
-  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; resizeSessionRef.current=null; if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
+  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; resizeSessionRef.current=null; rotationSessionRef.current=null; if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
   useEffect(()=>{const handler=(event:KeyboardEvent)=>{if(!selectedLayerIds.length||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return; const step=event.shiftKey?10:1; const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0; const dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0; event.preventDefault();setDocumentData(previous=>nudgeGraphicLayers(previous,selectedLayerIds,dx,dy));};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[selectedLayerIds,setDocumentData]);
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export const GraphicStudioView: React.FC = () => {
       if (!layer.visible) continue;
       ctx.save();
       ctx.globalAlpha = layer.opacity;
+      const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2; if(layer.rotation){ctx.translate(cx,cy);ctx.rotate(layer.rotation*Math.PI/180);ctx.translate(-cx,-cy);}
       if (layer.type === 'shape' && layer.shapeType === 'rectangle') {
         if (layer.fill) { ctx.fillStyle = layer.fill; ctx.fillRect(layer.x, layer.y, layer.width, layer.height); }
         if (layer.stroke) { ctx.strokeStyle = layer.stroke; ctx.lineWidth = layer.strokeWidth || 1; ctx.strokeRect(layer.x, layer.y, layer.width, layer.height); }
@@ -86,7 +89,7 @@ export const GraphicStudioView: React.FC = () => {
       if (selectedLayerIds.includes(layer.id)) {
         ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
         ctx.strokeRect(layer.x - 4, layer.y - 4, layer.width + 8, (layer.height || layer.fontSize || 20) + 8);
-        if(!layer.locked){ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';for(const [,hx,hy] of resizeHandles(layer)){ctx.fillRect(hx-4,hy-4,8,8);ctx.strokeStyle='#0284c7';ctx.strokeRect(hx-4,hy-4,8,8);}}
+        if(!layer.locked){ctx.setLineDash([]);ctx.fillStyle='#e2e8f0';for(const [,hx,hy] of resizeHandles(layer)){ctx.fillRect(hx-4,hy-4,8,8);ctx.strokeStyle='#0284c7';ctx.strokeRect(hx-4,hy-4,8,8);} const rx=layer.x+layer.width/2,ry=layer.y-28;ctx.beginPath();ctx.moveTo(rx,layer.y-4);ctx.lineTo(rx,ry+6);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fill();ctx.stroke();}
         ctx.setLineDash([]);
       }
       ctx.restore();
