@@ -52,7 +52,7 @@ export const GraphicStudioView: React.FC = () => {
   const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point=canvasPoint(event);
     if(groupResizeSessionRef.current){const s=groupResizeSessionRef.current;setDocumentData(previous=>updateGraphicGroupResize(previous,s,point,event.shiftKey));return;}
-    if(dragSessionRef.current&&snapEnabled){const snapped=snapGraphicDragToSmartGuides(documentData,dragSessionRef.current,point,6);setSmartGuides(snapped.guides);setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,snapped.point));return;}
+    if(dragSessionRef.current&&snapEnabled){const snapped=snapGraphicDragToSmartGuides(documentData,dragSessionRef.current,point,6);setSmartGuides(snapped.guides);setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,snapped.pointer));return;}
     if(rotationSessionRef.current){setDocumentData(previous=>updateGraphicRotation(previous,rotationSessionRef.current!,point,event.shiftKey?15:0));return;}
     if(resizeSessionRef.current){setDocumentData(previous=>updateGraphicResize(previous,resizeSessionRef.current!,point,event.shiftKey));return;}
     if(!dragSessionRef.current)return;
