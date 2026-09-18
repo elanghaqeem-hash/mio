@@ -10,7 +10,7 @@ import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutom
 import { configureSFXDistortion, createSFXLayerSource, createSFXSharedDSPGraph } from '../../creative/SFXUnifiedGraph';
 import { importSFXSample, chooseWaveformLevel, getRuntimeSample, hasRuntimeSample, relinkSFXSample } from '../../creative/SFXSampleRegistry';
 import { scheduleSFXSampleRegion } from '../../creative/SFXSampleRuntime';
-import { normalizeSampleRegion, regionTimelineDuration, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
+import { effectiveSFXDuration, normalizeSampleRegion, regionTimelineDuration, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -228,7 +228,7 @@ export const SFXStudioView: React.FC = () => {
     if (!context || !analyser) return;
     if (context.state === 'suspended') await context.resume();
     const normalized=normalizeSFXPatch(patch);
-    const renderDuration=Math.max(normalized.duration,...(normalized.sampleRegions??[]).map(region=>region.timelineStart+regionTimelineDuration(region)),0.01);
+    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]);
     const missing=[...new Set((normalized.sampleRegions??[]).filter(region=>!getRuntimeSample(region.assetId)).map(region=>region.assetId))];
     if(missing.length){setSampleError(`SFX sample relink required before playback: ${missing.join(', ')}`);return;}
     setSampleError(null);
@@ -249,7 +249,7 @@ export const SFXStudioView: React.FC = () => {
     setSampleError(null);
     try {
     const normalized=normalizeSFXPatch(patch);
-    const renderDuration=Math.max(normalized.duration,...(normalized.sampleRegions??[]).map(region=>region.timelineStart+regionTimelineDuration(region)),0.01);
+    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]);
     const offline = new OfflineAudioContext(1, Math.ceil(44100 * renderDuration), 44100);
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
