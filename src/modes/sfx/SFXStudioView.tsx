@@ -6,7 +6,7 @@ import { ExportManager } from '../../project/ExportManager';
 import type { MioSFXPatch, SFXLayer } from '../../types/creative';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { envelopeTimes } from '../../creative/AudioWorkspace';
+import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutomatableParameter, normalizeAutomationLane, evaluateAutomationLane } from '../../creative/AudioWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -49,6 +49,8 @@ export const SFXStudioView: React.FC = () => {
   const workspace = useCreativeStudioDocument<MioSFXPatch>('MIO_SFX_Patch.miosfx', INITIAL_PATCH);
   const { state: patch, setState: setPatch } = workspace;
   const [selectedLayerId, setSelectedLayerId] = useState(INITIAL_LAYERS[0].id);
+  const [automationParameter, setAutomationParameter] = useState<SFXAutomatableParameter>('filterCutoff');
+  const [automationLanes, setAutomationLanes] = useState<SFXAutomationLane[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -100,6 +102,13 @@ export const SFXStudioView: React.FC = () => {
       analyserRef.current = null;
     };
   }, []);
+
+  const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
+
+  const addAutomationPoint = (time: number, value: number) => {
+    const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { time, value }] }, patch.duration);
+    setAutomationLanes((current) => [...current.filter((candidate) => !(candidate.layerId === selectedLayerId && candidate.parameter === automationParameter)), lane]);
+  };
 
   const updateSelectedLayer = (updates: Partial<SFXLayer>) => {
     setPatch((current) => ({
@@ -164,7 +173,7 @@ export const SFXStudioView: React.FC = () => {
     master.gain.setValueAtTime(0.7, context.currentTime);
     master.connect(analyser);
     analyser.connect(context.destination);
-    patch.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration));
+    normalizeSFXPatch(patch).layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, patch.duration));
     eventBus.emit('CORE_STATE_CHANGE', 'SFX MODE');
     window.setTimeout(() => {
       if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
@@ -178,7 +187,7 @@ export const SFXStudioView: React.FC = () => {
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
     master.connect(offline.destination);
-    patch.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, patch.duration));
+    normalizeSFXPatch(patch).layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, patch.duration));
     ExportManager.exportAudioAsWAV(await offline.startRendering(), `${patch.name}.wav`);
   };
 
@@ -220,7 +229,7 @@ export const SFXStudioView: React.FC = () => {
       <aside className="flex h-full w-80 flex-col space-y-4 overflow-y-auto border-l border-gray-800 bg-[#0d121d] p-4">
         {selectedLayer ? <>
           <div className="flex items-start justify-between border-b border-gray-800 pb-3"><div><span className="block text-[10px] text-gray-500">ACTIVE SYNTH LAYER</span><span className="font-bold text-cyan-300">{selectedLayer.name}</span></div>{patch.layers.length > 1 && <button onClick={() => removeLayer(selectedLayer.id)} className="rounded border border-rose-500/20 p-1.5 text-rose-300" title="Remove layer"><Trash2 size={12} /></button>}</div>
-          <label><span className="mb-1 block text-[10px] text-gray-400">WAVEFORM</span><select value={selectedLayer.waveType} onChange={(event) => updateSelectedLayer({ waveType: event.target.value as OscillatorType })} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white"><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Sawtooth</option><option value="square">Square</option></select></label>
+          <label><span className="mb-1 block text-[10px] text-gray-400">LAYER TYPE</span><select value={selectedLayer.type} onChange={(event) => updateSelectedLayer({ type: event.target.value as SFXLayer['type'] })} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white"><option value="transient">Transient</option><option value="oscillator">Oscillator</option><option value="noise">Noise</option><option value="sub_harmonic">Sub Harmonic</option></select></label><label><span className="mb-1 block text-[10px] text-gray-400">WAVEFORM</span><select value={selectedLayer.waveType} onChange={(event) => updateSelectedLayer({ waveType: event.target.value as OscillatorType })} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white"><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Sawtooth</option><option value="square">Square</option></select></label>
           {slider('START PITCH', selectedLayer.baseFrequency, 30, 3000, 1, 'baseFrequency', ' Hz')}
           {slider('SWEEP TARGET', selectedLayer.frequencySweep, 20, 3000, 1, 'frequencySweep', ' Hz')}
           {slider('ATTACK', selectedLayer.attack, 0.001, 0.5, 0.005, 'attack', ' s')}
@@ -234,6 +243,7 @@ export const SFXStudioView: React.FC = () => {
           {slider('DELAY FEEDBACK', selectedLayer.delayFeedback, 0, 0.85, 0.01, 'delayFeedback')}
           {slider('SPACE MIX', selectedLayer.reverbMix, 0, 1, 0.01, 'reverbMix')}
           {slider('VOLUME', selectedLayer.volume, 0.01, 1, 0.01, 'volume')}
+          <div className="space-y-2 border-t border-gray-800 pt-3"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-cyan-300">AUTOMATION</span><span className="text-[9px] text-gray-500">{activeAutomation?.points.length ?? 0} POINTS</span></div><select value={automationParameter} onChange={(event) => setAutomationParameter(event.target.value as SFXAutomatableParameter)} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white"><option value="filterCutoff">Filter Cutoff</option><option value="baseFrequency">Base Frequency</option><option value="distortion">Distortion</option><option value="reverbMix">Space Mix</option><option value="volume">Volume</option></select><div className="grid grid-cols-3 gap-1"><button onClick={() => addAutomationPoint(0, selectedLayer[automationParameter] as number)} className="rounded bg-gray-800 py-1">START</button><button onClick={() => addAutomationPoint(patch.duration / 2, selectedLayer[automationParameter] as number)} className="rounded bg-gray-800 py-1">MID</button><button onClick={() => addAutomationPoint(patch.duration, selectedLayer[automationParameter] as number)} className="rounded bg-gray-800 py-1">END</button></div>{activeAutomation && <div className="text-[9px] text-gray-500">Preview @ 50%: {evaluateAutomationLane(activeAutomation, patch.duration / 2, selectedLayer[automationParameter] as number).toFixed(2)}</div>}</div>
         </> : <div className="m-auto text-gray-500">Select a sound layer.</div>}
       </aside>
     </div>
