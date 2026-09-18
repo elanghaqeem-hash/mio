@@ -2,6 +2,7 @@ import { evaluateTrack } from "../creative/motion/evaluator";
 import { deserializeMotionDocument, serializeMotionDocument } from "../creative/motion/serialization";
 import type { MotionDocument, MotionTrack } from "../creative/motion/model";
 import { validateMotionDocument } from "../creative/motion/validation";
+import { MotionCommandBus } from "../creative/motion/commands";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Motion foundation test failed: ${message}`);
@@ -69,4 +70,12 @@ export function runMotionFoundationTests(): void {
   let rejected = false;
   try { validateMotionDocument(cyclic); } catch { rejected = true; }
   assert(rejected, "parent cycle rejection");
+
+  const bus = new MotionCommandBus(document);
+  bus.execute({ id: "tx-1", label: "Rename composition", commands: [{ id: "rename", label: "Rename", apply: (current) => ({ ...current, compositions: current.compositions.map((comp) => comp.id === "comp" ? { ...comp, name: "Renamed" } : comp) }) }] });
+  assert(bus.document.compositions[0].name === "Renamed", "transaction apply");
+  bus.undo();
+  assert(bus.document.compositions[0].name === "Test", "transaction undo");
+  bus.redo();
+  assert(bus.document.compositions[0].name === "Renamed", "transaction redo");
 }
