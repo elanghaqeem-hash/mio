@@ -9,6 +9,8 @@ export interface MioAudioPlaybackTelemetry {
   playbackStartLatencyMs: number | null;
   playbackMode: MioPlaybackMode;
   appendCount: number;
+  rebufferCount: number;
+  prebufferBytes: number;
 }
 
 const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
@@ -18,6 +20,8 @@ const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
   playbackStartLatencyMs: null,
   playbackMode: 'blob-fallback',
   appendCount: 0,
+  rebufferCount: 0,
+  prebufferBytes: 0,
 });
 
 /**
@@ -75,6 +79,8 @@ export class MioStreamingAudioPlayer {
     this.activeAudio = audio;
     let bytes = 0;
     let appendCount = 0;
+    let rebufferCount = 0;
+    let prebufferBytes = 0;
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -99,6 +105,7 @@ export class MioStreamingAudioPlayer {
       await append(first.data);
       bytes += first.data.byteLength;
       appendCount += 1;
+      prebufferBytes = bytes;
       const playbackStartedAt = performance.now();
       await audio.play();
       this.lastTelemetry = {
@@ -108,6 +115,8 @@ export class MioStreamingAudioPlayer {
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'media-source',
         appendCount,
+        rebufferCount,
+        prebufferBytes,
       };
 
       let current = first;
@@ -120,7 +129,9 @@ export class MioStreamingAudioPlayer {
           await append(current.data);
           bytes += current.data.byteLength;
           appendCount += 1;
-          this.lastTelemetry = { ...this.lastTelemetry, bufferedBytes: bytes, appendCount };
+          const wasWaiting = audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+          if (wasWaiting && !audio.paused && !audio.ended) rebufferCount += 1;
+          this.lastTelemetry = { ...this.lastTelemetry, bufferedBytes: bytes, appendCount, rebufferCount };
         }
       }
       if (mediaSource.readyState === 'open' && !sourceBuffer.updating) mediaSource.endOfStream();
@@ -175,6 +186,8 @@ export class MioStreamingAudioPlayer {
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'blob-fallback',
         appendCount,
+        rebufferCount: 0,
+        prebufferBytes: bytes,
       };
       await this.waitForEnd(audio, generation, signal);
     } finally {
