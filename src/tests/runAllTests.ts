@@ -98,6 +98,7 @@ import { runAnimationHierarchyStressTests } from './animationHierarchyStressTest
 import { runAnimationQuaternionBlendTests } from './animationQuaternionBlendTests';
 import { runAnimationIKFKSemanticsTests } from './animationIKFKSemanticsTests';
 import { runAnimationIKFKSwitchTests } from './animationIKFKSwitchTests';
+import { runAnimationFABRIKTests } from './animationFABRIKTests';
 import { runAnimationIKChainSemanticsTests } from './animationIKChainSemanticsTests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
 import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
