@@ -86,3 +86,30 @@ export const toggleGraphicSelection=(current:string[],id:string,additive=false):
 export const nudgeGraphicLayers=(document:MioGraphicDocument,ids:string[],dx:number,dy:number):MioGraphicDocument=>({
   ...document,layers:document.layers.map(layer=>ids.includes(layer.id)&&!layer.locked?{...layer,x:layer.x+dx,y:layer.y+dy}:layer)
 });
+
+
+export type GraphicResizeHandle='nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w';
+export interface GraphicTransformSession { id:string; start:Point2D; origin:GraphicLayer; mode:'resize'|'rotate'; handle?:GraphicResizeHandle; aspectLocked:boolean; }
+
+export const beginGraphicResize=(layer:GraphicLayer,start:Point2D,handle:GraphicResizeHandle,aspectLocked=false):GraphicTransformSession=>({id:layer.id,start,origin:{...layer},mode:'resize',handle,aspectLocked});
+export const updateGraphicResize=(document:MioGraphicDocument,session:GraphicTransformSession,pointer:Point2D,minSize=8):MioGraphicDocument=>{
+ const dx=pointer.x-session.start.x,dy=pointer.y-session.start.y,o=session.origin,h=session.handle??'se';
+ let x=o.x,y=o.y,w=o.width,hgt=o.height;
+ if(h.includes('e'))w=Math.max(minSize,o.width+dx); if(h.includes('s'))hgt=Math.max(minSize,o.height+dy);
+ if(h.includes('w')){w=Math.max(minSize,o.width-dx);x=o.x+(o.width-w);} if(h.includes('n')){hgt=Math.max(minSize,o.height-dy);y=o.y+(o.height-hgt);}
+ if(session.aspectLocked){const ratio=o.width/Math.max(1,o.height);if(Math.abs(dx)>=Math.abs(dy))hgt=w/ratio;else w=hgt*ratio;}
+ return {...document,layers:document.layers.map(l=>l.id===session.id&&!l.locked?{...l,x,y,width:w,height:hgt}:l)};
+};
+export const beginGraphicRotation=(layer:GraphicLayer,start:Point2D):GraphicTransformSession=>({id:layer.id,start,origin:{...layer},mode:'rotate',aspectLocked:false});
+export const updateGraphicRotation=(document:MioGraphicDocument,session:GraphicTransformSession,pointer:Point2D,snapDegrees=0):MioGraphicDocument=>{
+ const o=session.origin,cx=o.x+o.width/2,cy=o.y+o.height/2;
+ const start=Math.atan2(session.start.y-cy,session.start.x-cx),current=Math.atan2(pointer.y-cy,pointer.x-cx);
+ let degrees=(o.rotation??0)+(current-start)*180/Math.PI;
+ if(snapDegrees>0)degrees=Math.round(degrees/snapDegrees)*snapDegrees;
+ return {...document,layers:document.layers.map(l=>l.id===session.id&&!l.locked?{...l,rotation:Number(degrees.toFixed(2))}:l)};
+};
+export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[])=>{
+ const selected=document.layers.filter(l=>ids.includes(l.id)&&l.visible);if(!selected.length)return null;
+ const b=selected.map(bounds);const left=Math.min(...b.map(v=>v.left)),top=Math.min(...b.map(v=>v.top)),right=Math.max(...b.map(v=>v.right)),bottom=Math.max(...b.map(v=>v.bottom));
+ return {left,top,right,bottom,width:right-left,height:bottom-top,centerX:(left+right)/2,centerY:(top+bottom)/2};
+};
