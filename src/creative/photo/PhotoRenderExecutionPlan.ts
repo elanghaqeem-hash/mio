@@ -8,6 +8,6 @@ const clip=(r:PhotoDirtyRegion|undefined,c:PhotoRenderPlanOptions['canvas']):Pho
 export const createPhotoRenderExecutionPlan=(graph:PhotoRenderGraph,invalidation?:PhotoRenderInvalidation,options:PhotoRenderPlanOptions={}):PhotoRenderExecutionPlan=>{
  const order=topologicalPhotoRenderOrder(graph),target=invalidation?new Set(invalidation.nodeIds):new Set(order);
  const kinds:PhotoRenderDirtyKind[]=invalidation?.kinds?.length?invalidation.kinds:['composite'],region=clip(invalidation?.region,options.canvas);
- const tasks=order.filter(id=>target.has(id)&&graph.nodes[id]?.visible&&!options.cachedKeys?.has(graph.nodes[id].cacheKey)).map(id=>({nodeId:id,renderNodeId:graph.nodes[id].id,kinds:[...kinds],region,cacheKey:graph.nodes[id].cacheKey,priority:options.priority??(invalidation?'interactive':'foreground'),reason:invalidation?'invalidation':'full-render'}));
+ const tasks:PhotoRenderTask[]=order.filter(id=>target.has(id)&&graph.nodes[id]?.visible&&!options.cachedKeys?.has(graph.nodes[id].cacheKey)).map(id=>({nodeId:id,renderNodeId:graph.nodes[id].id,kinds:[...kinds],region,cacheKey:graph.nodes[id].cacheKey,priority:options.priority??(invalidation?'interactive':'foreground'),reason:invalidation?'invalidation':'full-render'}));
  return {documentId:graph.documentId,revision:graph.documentRevision,fullRender:!invalidation,tasks};
 };
