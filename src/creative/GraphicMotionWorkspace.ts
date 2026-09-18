@@ -1,4 +1,4 @@
-import type { GraphicLayer, MioGraphicDocument, MioMotionProject, MotionLayer } from '../types/creative';
+import type { GraphicLayer, GraphicPath, GraphicPathPoint, MioGraphicDocument, MioMotionProject, MotionLayer } from '../types/creative';
 
 export const graphicLayerLocalToWorld=(layer:GraphicLayer,point:Point2D):Point2D=>{const center={x:layer.x+layer.width/2,y:layer.y+layer.height/2},world={x:layer.x+point.x,y:layer.y+point.y};return rotateGraphicVector(world,center,layer.rotation??0);};
 export const graphicLayerWorldToLocal=(layer:GraphicLayer,point:Point2D):Point2D=>{const center={x:layer.x+layer.width/2,y:layer.y+layer.height/2},local=rotateGraphicVector(point,center,-(layer.rotation??0));return{x:local.x-layer.x,y:local.y-layer.y};};
