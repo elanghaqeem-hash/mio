@@ -147,7 +147,7 @@ export class MioStreamingAudioPlayer {
         }
       }
       const playbackStartedAt = performance.now();
-      const playing = this.waitForPlaying(audio, generation, signal);
+      const playing = this.waitForPlaying(audio, generation, startedAt, signal);
       await audio.play();
       const firstAudibleLatencyMs = await playing;
       this.lastTelemetry = {
@@ -248,8 +248,7 @@ export class MioStreamingAudioPlayer {
     }
   }
 
-  private waitForPlaying(audio: HTMLAudioElement, generation: number, signal?: AbortSignal): Promise<number> {
-    const startedAt = performance.now();
+  private waitForPlaying(audio: HTMLAudioElement, generation: number, startedAt: number, signal?: AbortSignal): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       const cleanup = () => {
         audio.removeEventListener('playing', onPlaying);
@@ -260,7 +259,7 @@ export class MioStreamingAudioPlayer {
       audio.addEventListener('playing', onPlaying, { once: true });
       signal?.addEventListener('abort', onAbort, { once: true });
       if (signal?.aborted || generation !== this.generation) onAbort();
-    }).then(latency => (performance.now() - startedAt - latency) + latency);
+    });
   }
 
   private waitForEnd(audio: HTMLAudioElement, generation: number, signal?: AbortSignal): Promise<void> {
