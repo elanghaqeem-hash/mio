@@ -9,7 +9,9 @@ import {
   quaternionInverse,
   quaternionMultiply,
   quaternionNormalize,
+  quaternionSlerp,
   quaternionToEulerXYZ,
+  eulerXYZToQuaternion,
   type Quat,
 } from './RigTransformEvaluator';
 
@@ -116,10 +118,8 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   const desiredUpperLocal = localEulerFromWorldQuaternion(upperWorldQuaternion, parentWorld);
   const desiredEndLocal = localEulerFromWorldQuaternion(endWorldQuaternion, upperWorldQuaternion);
   const weight = Math.max(0, Math.min(1, constraint.influence));
-  for (let i = 0; i < 3; i++) {
-    upperPose.rotation[i] = lerp(upperPose.rotation[i], desiredUpperLocal[i], weight);
-    endPose.rotation[i] = lerp(endPose.rotation[i], desiredEndLocal[i], weight);
-  }
+  upperPose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(upperPose.rotation), eulerXYZToQuaternion(desiredUpperLocal), weight));
+  endPose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(endPose.rotation), eulerXYZToQuaternion(desiredEndLocal), weight));
 };
 
 export const applyConstraints = (
@@ -148,8 +148,8 @@ export const applyConstraints = (
       const weight = Math.max(0, Math.min(1, constraint.influence));
       for (let i = 0; i < 3; i++) {
         pose.position[i] = lerp(pose.position[i], target.position[i], weight);
-        pose.rotation[i] = lerp(pose.rotation[i], target.rotation[i], weight);
       }
+      pose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(pose.rotation), eulerXYZToQuaternion(target.rotation), weight));
     }
     if (constraint.type === 'IK') solveRigIK(rig, constraint, poses);
   }

@@ -28,6 +28,16 @@ export const quaternionNormalize = (q: Quat): Quat => {
   const length = Math.hypot(q[0], q[1], q[2], q[3]);
   return length > EPSILON ? [q[0] / length, q[1] / length, q[2] / length, q[3] / length] : [0, 0, 0, 1];
 };
+export const quaternionSlerp = (a: Quat, b: Quat, t: number): Quat => {
+  const weight = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+  let from = quaternionNormalize(a), to = quaternionNormalize(b);
+  let dot = from[0]*to[0]+from[1]*to[1]+from[2]*to[2]+from[3]*to[3];
+  if (dot < 0) { to = [-to[0],-to[1],-to[2],-to[3]]; dot = -dot; }
+  if (dot > 0.9995) return quaternionNormalize([from[0]+weight*(to[0]-from[0]),from[1]+weight*(to[1]-from[1]),from[2]+weight*(to[2]-from[2]),from[3]+weight*(to[3]-from[3])]);
+  const theta0=Math.acos(Math.max(-1,Math.min(1,dot))),sin0=Math.sin(theta0),theta=theta0*weight;
+  const s0=Math.sin(theta0-theta)/sin0,s1=Math.sin(theta)/sin0;
+  return quaternionNormalize([from[0]*s0+to[0]*s1,from[1]*s0+to[1]*s1,from[2]*s0+to[2]*s1,from[3]*s0+to[3]*s1]);
+};
 export const quaternionInverse = (q: Quat): Quat => {
   const normalized = quaternionNormalize(q);
   return [-normalized[0], -normalized[1], -normalized[2], normalized[3]];
