@@ -16,7 +16,7 @@ export const applyViewportPoseEdit = (
 ): PoseEditResult => {
   const selected = resolveSelectedBone(project, controls.selection);
   if (!selected || !controls.selection) throw new Error('Select a valid animation bone before editing its pose');
-  if (edit.orientation === 'WORLD' && controls.tool !== 'SCALE') {
+  if (edit.orientation === 'WORLD') {
     const transformed = controls.tool === 'TRANSLATE'
       ? translateBoneWorld(project, controls.selection.rigId, controls.selection.boneId, controls.axis, edit.delta)
       : rotateBoneWorld(project, controls.selection.rigId, controls.selection.boneId, controls.axis, edit.delta);
