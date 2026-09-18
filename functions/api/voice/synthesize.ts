@@ -5,6 +5,7 @@ interface Env extends MioVoiceSessionEnv {
   MIO_TTS_API_KEY?: string;
   MIO_TTS_VOICE_ID?: string;
   MIO_TTS_MODEL?: string;
+  MIO_TTS_PROVIDER?: string;
   MIO_VOICE_GATEWAY_TOKEN?: string;
   MIO_VOICE_ALLOWED_ORIGINS?: string;
 }
@@ -19,6 +20,8 @@ interface SynthesisRequest { text?: string; locale?: string; profile?: Synthesis
 const MAX_TEXT_CHARS = 8000;
 const MAX_BODY_BYTES = 32_000;
 const UPSTREAM_TIMEOUT_MS = 30_000;
+type ProviderKind = 'generic' | 'openai-compatible';
+
 const ALLOWED_EMOTIONS = new Set(['neutral', 'warm', 'confident', 'gentle', 'focused', 'playful']);
 
 function securityHeaders(contentType?: string): HeadersInit {
@@ -35,7 +38,16 @@ function securityHeaders(contentType?: string): HeadersInit {
 const json = (payload: unknown, status = 200, extra: HeadersInit = {}) =>
   new Response(JSON.stringify(payload), { status, headers: { ...securityHeaders('application/json; charset=utf-8'), ...extra } });
 
-const configured = (env: Env) => Boolean(env.MIO_TTS_ENDPOINT?.trim() && env.MIO_TTS_API_KEY?.trim() && env.MIO_TTS_VOICE_ID?.trim());
+function providerKind(env: Env): ProviderKind {
+  return env.MIO_TTS_PROVIDER?.trim().toLowerCase() === 'openai-compatible' ? 'openai-compatible' : 'generic';
+}
+
+const configured = (env: Env) => Boolean(
+  env.MIO_TTS_ENDPOINT?.trim()
+    && env.MIO_TTS_API_KEY?.trim()
+    && env.MIO_TTS_VOICE_ID?.trim()
+    && (providerKind(env) === 'generic' || env.MIO_TTS_MODEL?.trim()),
+);
 const clamp = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 
@@ -90,6 +102,35 @@ function safeProviderEndpoint(env: Env): URL | null {
   } catch { return null; }
 }
 
+function providerPayload(env: Env, request: ReturnType<typeof normalize>): Record<string, unknown> {
+  if (request instanceof Response) return {};
+  if (providerKind(env) === 'openai-compatible') {
+    const profile = request.profile;
+    const emotion = String(profile.emotion ?? 'warm');
+    const instructions = [
+      'Speak as Mio with an original, non-imitative vocal identity.',
+      'Tone: warm, mature, calm, slightly deep, natural and conversational.',
+      `Delivery: ${emotion}; measured pauses; avoid exaggerated acting.`,
+      'Do not imitate or reproduce any identifiable performer or reference recording.',
+    ].join(' ');
+    return {
+      model: env.MIO_TTS_MODEL!.trim(),
+      voice: env.MIO_TTS_VOICE_ID!.trim(),
+      input: request.text,
+      instructions,
+      response_format: 'mp3',
+      speed: Number(profile.speakingRate),
+    };
+  }
+  return {
+    text: request.text,
+    locale: request.locale,
+    voice: env.MIO_TTS_VOICE_ID!.trim(),
+    model: env.MIO_TTS_MODEL?.trim() || undefined,
+    profile: request.profile,
+  };
+}
+
 async function readJsonBody(request: Request): Promise<SynthesisRequest | Response> {
   const declared = Number(request.headers.get('content-length') ?? '0');
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return json({ error: 'Synthesis request body is too large.' }, 413);
@@ -133,8 +174,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   const ready = gatewayReady(context.env);
   return json({
     service: 'mio-voice-v4-synthesis',
-    engine: 'v4.4',
+    engine: 'v4.5',
     ready,
+    provider: providerKind(context.env),
     voiceConfigured: Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
     modelConfigured: Boolean(context.env.MIO_TTS_MODEL?.trim()),
     accessProtectionConfigured: Boolean(context.env.MIO_VOICE_GATEWAY_TOKEN?.trim()),
@@ -174,13 +216,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
         'Content-Type': 'application/json',
         'Accept': 'audio/mpeg, audio/wav, audio/ogg',
       },
-      body: JSON.stringify({
-        text: normalized.text,
-        locale: normalized.locale,
-        voice: context.env.MIO_TTS_VOICE_ID!.trim(),
-        model: context.env.MIO_TTS_MODEL?.trim() || undefined,
-        profile: normalized.profile,
-      }),
+      body: JSON.stringify(providerPayload(context.env, normalized)),
     });
     if (!upstream.ok) return json({ error: 'Licensed synthesis provider request failed', upstreamStatus: upstream.status }, 502);
     if (!upstream.body) return json({ error: 'Licensed synthesis provider returned no audio stream' }, 502);
@@ -188,7 +224,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!/^audio\/(mpeg|wav|x-wav|ogg)(?:;|$)/i.test(contentType)) return json({ error: 'Licensed synthesis provider returned an unsupported media type' }, 502);
     return new Response(upstream.body, {
       status: 200,
-      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.4', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
+      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.5', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
     });
   } catch {
     const aborted = controller.signal.aborted;
