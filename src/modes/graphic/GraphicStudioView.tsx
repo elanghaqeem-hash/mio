@@ -79,7 +79,12 @@ export const GraphicStudioView: React.FC = () => {
       ctx.save();
       ctx.globalAlpha = layer.opacity;
       const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2; if(layer.rotation){ctx.translate(cx,cy);ctx.rotate(layer.rotation*Math.PI/180);ctx.translate(-cx,-cy);}
-      if (layer.type === 'shape' && layer.shapeType === 'rectangle') {
+      if (layer.type === 'vector' && layer.path && layer.path.points.length) {
+        const points=layer.path.points; ctx.beginPath(); ctx.moveTo(layer.x+points[0].x,layer.y+points[0].y);
+        for(let index=1;index<points.length;index++){const previous=points[index-1],current=points[index]; const hasCurve=previous.outX!==undefined||previous.outY!==undefined||current.inX!==undefined||current.inY!==undefined; if(hasCurve)ctx.bezierCurveTo(layer.x+(previous.outX??previous.x),layer.y+(previous.outY??previous.y),layer.x+(current.inX??current.x),layer.y+(current.inY??current.y),layer.x+current.x,layer.y+current.y);else ctx.lineTo(layer.x+current.x,layer.y+current.y);}
+        if(layer.path.closed){const last=points.at(-1)!;const first=points[0],hasCurve=last.outX!==undefined||last.outY!==undefined||first.inX!==undefined||first.inY!==undefined;if(hasCurve)ctx.bezierCurveTo(layer.x+(last.outX??last.x),layer.y+(last.outY??last.y),layer.x+(first.inX??first.x),layer.y+(first.inY??first.y),layer.x+first.x,layer.y+first.y);ctx.closePath();}
+        if(layer.fill&&layer.path.closed){ctx.fillStyle=layer.fill;ctx.fill();} if(layer.stroke){ctx.strokeStyle=layer.stroke;ctx.lineWidth=layer.strokeWidth||1;ctx.stroke();}
+      } else if (layer.type === 'shape' && layer.shapeType === 'rectangle') {
         if (layer.fill) { ctx.fillStyle = layer.fill; ctx.fillRect(layer.x, layer.y, layer.width, layer.height); }
         if (layer.stroke) { ctx.strokeStyle = layer.stroke; ctx.lineWidth = layer.strokeWidth || 1; ctx.strokeRect(layer.x, layer.y, layer.width, layer.height); }
       } else if (layer.type === 'shape' && layer.shapeType === 'circle') {
