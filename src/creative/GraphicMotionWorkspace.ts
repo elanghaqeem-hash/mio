@@ -171,6 +171,14 @@ export const getGraphicLayerCorners=(layer:GraphicLayer):Point2D[]=>{
   const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2,r=(layer.rotation??0)*Math.PI/180,cos=Math.cos(r),sin=Math.sin(r);
   return [[layer.x,layer.y],[layer.x+layer.width,layer.y],[layer.x+layer.width,layer.y+layer.height],[layer.x,layer.y+layer.height]].map(([x,y])=>{const dx=x-cx,dy=y-cy;return {x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};});
 };
+export interface GraphicLayerHandlePoints { resize:Record<GraphicResizeHandle,Point2D>; rotation:Point2D; }
+export const getGraphicLayerHandlePoints=(layer:GraphicLayer,rotationOffset=28):GraphicLayerHandlePoints=>{
+  const [nw,ne,se,sw]=getGraphicLayerCorners(layer); const midpoint=(a:Point2D,b:Point2D):Point2D=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+  const n=midpoint(nw,ne),e=midpoint(ne,se),s=midpoint(sw,se),w=midpoint(nw,sw); const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2;
+  const vx=n.x-cx,vy=n.y-cy,length=Math.max(1,Math.hypot(vx,vy));
+  return {resize:{nw,n,ne,e,se,s,sw,w},rotation:{x:n.x+vx/length*rotationOffset,y:n.y+vy/length*rotationOffset}};
+};
+
 export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[]):GraphicSelectionBounds|null=>{
   const points=document.layers.filter(layer=>ids.includes(layer.id)&&layer.visible).flatMap(getGraphicLayerCorners); if(!points.length)return null;
   const left=Math.min(...points.map(p=>p.x)),right=Math.max(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y)),bottom=Math.max(...points.map(p=>p.y));
