@@ -163,7 +163,7 @@ export const SFXStudioView: React.FC = () => {
     if (!lane?.points.length) { param.setValueAtTime(fallback, startTime); return; }
     const normalized = normalizeAutomationLane(lane, duration);
     param.setValueAtTime(evaluateAutomationLane(normalized, 0, fallback), startTime);
-    normalized.points.forEach((point) => param.linearRampToValueAtTime(point.value, startTime + point.time));
+    normalized.points.forEach((point) => normalized.interpolation === 'step' ? param.setValueAtTime(point.value, startTime + point.time) : param.linearRampToValueAtTime(point.value, startTime + point.time));
   };
 
   const buildLayerGraph = (context: BaseAudioContext, layer: SFXLayer, destination: AudioNode, startTime: number, duration: number) => {
