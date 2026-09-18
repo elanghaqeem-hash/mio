@@ -91,6 +91,7 @@ import { runAnimationV1IntegrationTests } from './animationV1IntegrationTests';
 import { runAnimationV1ReleaseContractTests } from './animationV1ReleaseContractTests';
 import { runAnimationInteractiveE2EReadinessTests } from './animationInteractiveE2EReadinessTests';
 import { runAnimationWorldTransformTests } from './animationWorldTransformTests';
+import { runAnimationWorldAutoKeyTests } from './animationWorldAutoKeyTests';
 import { runEmotionalIntelligenceEngineTests } from './emotionalIntelligenceEngineTests';
 import { runCompanionPromptAdapterTests } from './companionPromptAdapterTests';
 import { runGraphicMotionWorkspaceTests } from './graphicMotionWorkspaceTests';
