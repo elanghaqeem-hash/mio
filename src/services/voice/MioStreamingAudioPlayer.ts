@@ -4,6 +4,16 @@ export interface MioAudioPlaybackTelemetry {
   bufferedBytes: number;
   firstChunkLatencyMs: number | null;
   playbackStartLatencyMs: number | null;
+  playbackStarted: boolean;
+}
+
+export type MioVoiceFailureStage = 'PRE_AUDIO' | 'MID_STREAM';
+
+export class MioVoicePlaybackError extends Error {
+  constructor(message: string, readonly stage: MioVoiceFailureStage, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'MioVoicePlaybackError';
+  }
 }
 
 /** Browser playback boundary for encoded synthesis chunks with deterministic cancellation. */
@@ -11,7 +21,7 @@ export class MioStreamingAudioPlayer {
   private activeAudio: HTMLAudioElement | null = null;
   private objectUrls = new Set<string>();
   private generation = 0;
-  private lastTelemetry: MioAudioPlaybackTelemetry = { bufferedBytes: 0, firstChunkLatencyMs: null, playbackStartLatencyMs: null };
+  private lastTelemetry: MioAudioPlaybackTelemetry = { bufferedBytes: 0, firstChunkLatencyMs: null, playbackStartLatencyMs: null, playbackStarted: false };
 
   getLastTelemetry(): MioAudioPlaybackTelemetry { return { ...this.lastTelemetry }; }
 
@@ -22,16 +32,22 @@ export class MioStreamingAudioPlayer {
     let format = 'audio/mpeg';
     let bufferedBytes = 0;
     let firstChunkLatencyMs: number | null = null;
+    this.lastTelemetry = { bufferedBytes: 0, firstChunkLatencyMs: null, playbackStartLatencyMs: null, playbackStarted: false };
 
-    for await (const chunk of chunks) {
-      if (signal?.aborted || generation !== this.generation) throw new DOMException('Playback aborted.', 'AbortError');
-      if (chunk.data.byteLength) {
-        if (firstChunkLatencyMs === null) firstChunkLatencyMs = performance.now() - startedAt;
-        bufferedBytes += chunk.data.byteLength;
-        parts.push(chunk.data.slice().buffer);
+    try {
+      for await (const chunk of chunks) {
+        if (signal?.aborted || generation !== this.generation) throw new DOMException('Playback aborted.', 'AbortError');
+        if (chunk.data.byteLength) {
+          if (firstChunkLatencyMs === null) firstChunkLatencyMs = performance.now() - startedAt;
+          bufferedBytes += chunk.data.byteLength;
+          parts.push(chunk.data.slice().buffer);
+        }
+        format = chunk.format;
+        if (chunk.final) break;
       }
-      format = chunk.format;
-      if (chunk.final) break;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw new MioVoicePlaybackError('Mio synthesis stream failed before audio playback.', 'PRE_AUDIO', { cause: error });
     }
     if (parts.length === 0 || signal?.aborted || generation !== this.generation) return;
 
@@ -53,19 +69,28 @@ export class MioStreamingAudioPlayer {
           finish(() => reject(new DOMException('Playback aborted.', 'AbortError')));
         };
         signal?.addEventListener('abort', abort, { once: true });
-        audio.onended = () => finish(resolve);
-        audio.onerror = () => finish(() => reject(new Error('Mio synthesis audio playback failed.')));
-        const playbackStartedAt = performance.now();
-        void audio.play().then(() => {
+        audio.onplaying = () => {
           this.lastTelemetry = {
             bufferedBytes,
             firstChunkLatencyMs,
-            playbackStartLatencyMs: playbackStartedAt - startedAt,
+            playbackStartLatencyMs: performance.now() - startedAt,
+            playbackStarted: true,
           };
-        }).catch(error => finish(() => reject(error)));
+        };
+        audio.onended = () => finish(resolve);
+        audio.onerror = () => finish(() => reject(new MioVoicePlaybackError(
+          'Mio synthesis audio playback failed.',
+          this.lastTelemetry.playbackStarted ? 'MID_STREAM' : 'PRE_AUDIO',
+        )));
+        void audio.play().catch(error => finish(() => reject(new MioVoicePlaybackError(
+          'Mio synthesis audio could not start.',
+          'PRE_AUDIO',
+          { cause: error },
+        ))));
       });
     } finally {
       if (abort) signal?.removeEventListener('abort', abort);
+      audio.onplaying = null;
       audio.onended = null;
       audio.onerror = null;
       if (this.activeAudio === audio) this.activeAudio = null;
