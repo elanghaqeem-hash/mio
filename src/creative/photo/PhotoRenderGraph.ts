@@ -27,7 +27,7 @@ export interface PhotoDirtyRegion {x:number;y:number;width:number;height:number;
 export interface PhotoRenderInvalidation {nodeIds:string[];kinds:PhotoRenderDirtyKind[];region?:PhotoDirtyRegion;}
 export const createPhotoRenderInvalidation=(graph:PhotoRenderGraph,input:{affectedNodeIds?:string[];renderHints?:PhotoRenderDirtyKind[]},region?:PhotoDirtyRegion):PhotoRenderInvalidation=>{
  const nodeIds=[...collectDirtyRenderNodes(graph,input.affectedNodeIds??[])].sort();
- const kinds=[...new Set(input.renderHints?.length?input.renderHints:['composite'])];
+ const kinds:PhotoRenderDirtyKind[]=[...new Set<PhotoRenderDirtyKind>(input.renderHints?.length?input.renderHints:['composite'])];
  if(region&&(!Number.isFinite(region.x)||!Number.isFinite(region.y)||!Number.isFinite(region.width)||!Number.isFinite(region.height)||region.width<=0||region.height<=0))throw new Error('Photo dirty region must have finite coordinates and positive dimensions.');
  return {nodeIds,kinds,region:region?{...region}:undefined};
 };
