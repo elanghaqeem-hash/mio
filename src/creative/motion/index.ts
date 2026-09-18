@@ -5,3 +5,5 @@ export * from "./serialization";
 export * from "./commands";
 export * from "./migrations";
 export * from "./legacyAdapter";
+export * from "./runtime";
+export * from "./timeline";
