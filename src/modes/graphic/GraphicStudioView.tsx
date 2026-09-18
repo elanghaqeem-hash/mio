@@ -5,6 +5,7 @@ import { ExportManager } from '../../project/ExportManager';
 import { eventBus } from '../../core/EventBus';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
+import { alignGraphicLayers, beginGraphicDrag, distributeGraphicLayers, hitTestGraphicLayers, nudgeGraphicLayers, toggleGraphicSelection, updateGraphicDrag, type GraphicDragSession } from '../../creative/GraphicMotionWorkspace';
 
 const activityTimestamp = () => Date.now();
 
@@ -24,8 +25,27 @@ export const GraphicStudioView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const workspace = useCreativeStudioDocument<MioGraphicDocument>('MIO_Graphic.mioart', INITIAL_GRAPHIC_DOCUMENT);
   const { state: documentData, setState: setDocumentData } = workspace;
-  const [selectedLayerId, setSelectedLayerId] = useState('layer_title');
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>(['layer_title']);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const dragSessionRef = useRef<GraphicDragSession | null>(null);
+  const selectedLayerId = selectedLayerIds.at(-1) ?? '';
   const selectedLayer = documentData.layers.find((layer) => layer.id === selectedLayerId);
+  const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!; const rect = canvas.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height };
+  };
+  const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point=canvasPoint(event), hit=hitTestGraphicLayers(documentData,point)[0];
+    if(!hit){setSelectedLayerIds([]);return;}
+    const next=toggleGraphicSelection(selectedLayerIds,hit,event.shiftKey); setSelectedLayerIds(next);
+    dragSessionRef.current=beginGraphicDrag(documentData,next,point,8,snapEnabled); event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if(!dragSessionRef.current)return; const point=canvasPoint(event);
+    setDocumentData(previous=>updateGraphicDrag(previous,dragSessionRef.current!,point));
+  };
+  const onCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => { dragSessionRef.current=null; if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId); };
+  useEffect(()=>{const handler=(event:KeyboardEvent)=>{if(!selectedLayerIds.length||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return; const step=event.shiftKey?10:1; const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0; const dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0; event.preventDefault();setDocumentData(previous=>nudgeGraphicLayers(previous,selectedLayerIds,dx,dy));};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[selectedLayerIds,setDocumentData]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -56,7 +76,7 @@ export const GraphicStudioView: React.FC = () => {
         ctx.font = `bold ${layer.fontSize || 16}px ${layer.fontFamily || 'monospace'}`;
         ctx.fillText(layer.text || '', layer.x, layer.y);
       }
-      if (layer.id === selectedLayerId) {
+      if (selectedLayerIds.includes(layer.id)) {
         ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
         if (layer.shapeType === 'circle') ctx.strokeRect(layer.x - layer.width / 2 - 4, layer.y - layer.height / 2 - 4, layer.width + 8, layer.height + 8);
         else ctx.strokeRect(layer.x - 4, layer.y - 4, layer.width + 8, (layer.height || layer.fontSize || 20) + 8);
@@ -64,7 +84,7 @@ export const GraphicStudioView: React.FC = () => {
       }
       ctx.restore();
     }
-  }, [documentData, selectedLayerId]);
+  }, [documentData, selectedLayerIds]);
 
   const updateSelectedLayer = (updates: Partial<GraphicLayer>) => {
     if (!selectedLayerId) return;
@@ -93,21 +113,21 @@ export const GraphicStudioView: React.FC = () => {
       fontFamily: type === 'text' ? 'monospace' : undefined,
     };
     setDocumentData((previous) => ({ ...previous, layers: [...previous.layers, layer] }));
-    setSelectedLayerId(layer.id);
+    setSelectedLayerIds([layer.id]);
     eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Added local graphic layer: ${layer.name}`, mode: 'GRAPHIC' });
   };
 
   const deleteSelected = () => {
     if (!selectedLayer || selectedLayer.locked) return;
     setDocumentData((previous) => ({ ...previous, layers: previous.layers.filter((layer) => layer.id !== selectedLayer.id) }));
-    setSelectedLayerId(documentData.layers.find((layer) => layer.id !== selectedLayer.id)?.id ?? '');
+    setSelectedLayerIds(documentData.layers.find((layer) => layer.id !== selectedLayer.id)?.id ? [documentData.layers.find((layer) => layer.id !== selectedLayer.id)!.id] : []);
   };
 
   const duplicateSelected = () => {
     if (!selectedLayer) return;
     const duplicate: GraphicLayer = { ...structuredClone(selectedLayer), id: `${selectedLayer.id}_copy_${Date.now().toString(36)}`, name: `${selectedLayer.name} Copy`, x: selectedLayer.x + 16, y: selectedLayer.y + 16, locked: false };
     setDocumentData((previous) => ({ ...previous, layers: [...previous.layers, duplicate] }));
-    setSelectedLayerId(duplicate.id);
+    setSelectedLayerIds([duplicate.id]);
   };
 
   const moveSelected = (direction: -1 | 1) => {
@@ -128,13 +148,13 @@ export const GraphicStudioView: React.FC = () => {
       <div className="flex-1 flex flex-col p-4 overflow-hidden">
         <div className="mb-3 flex items-center justify-between rounded-xl border border-gray-800 bg-[#0d121d] p-3">
           <div className="flex items-center gap-2 text-cyan-300"><Palette size={15} /><span className="font-bold">GRAPHIC WORKSPACE // LOCAL CANVAS COMPOSITION</span><span className="text-[10px] text-amber-300">RIGHTS NOT ASSESSED</span></div>
-          <div className="flex gap-2"><button onClick={() => addLayer('shape', 'rectangle')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Square size={12} />Rectangle</button><button onClick={() => addLayer('shape', 'circle')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Circle size={12} />Circle</button><button onClick={() => addLayer('text')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Type size={12} />Text</button><button onClick={() => canvasRef.current && void ExportManager.exportCanvasAsPNG(canvasRef.current, 'MIO_Graphic.png')} className="flex items-center gap-1 rounded bg-cyan-500 px-2 py-1 font-bold text-black"><Download size={12} />PNG</button></div>
+          <div className="flex gap-2"><button onClick={() => setSnapEnabled(value=>!value)} className={`rounded border px-2 py-1 ${snapEnabled?'border-cyan-500 text-cyan-300':'border-gray-700 text-gray-500'}`}>SNAP {snapEnabled?'ON':'OFF'}</button><button disabled={selectedLayerIds.length<2} onClick={()=>setDocumentData(previous=>alignGraphicLayers(previous,selectedLayerIds,'centerX'))} className="rounded border border-gray-700 px-2 py-1 disabled:opacity-30">Align X</button><button disabled={selectedLayerIds.length<2} onClick={()=>setDocumentData(previous=>alignGraphicLayers(previous,selectedLayerIds,'centerY'))} className="rounded border border-gray-700 px-2 py-1 disabled:opacity-30">Align Y</button><button disabled={selectedLayerIds.length<3} onClick={()=>setDocumentData(previous=>distributeGraphicLayers(previous,selectedLayerIds,'horizontal'))} className="rounded border border-gray-700 px-2 py-1 disabled:opacity-30">Distribute</button><button onClick={() => addLayer('shape', 'rectangle')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Square size={12} />Rectangle</button><button onClick={() => addLayer('shape', 'circle')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Circle size={12} />Circle</button><button onClick={() => addLayer('text')} className="flex items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-cyan-300"><Type size={12} />Text</button><button onClick={() => canvasRef.current && void ExportManager.exportCanvasAsPNG(canvasRef.current, 'MIO_Graphic.png')} className="flex items-center gap-1 rounded bg-cyan-500 px-2 py-1 font-bold text-black"><Download size={12} />PNG</button></div>
         </div>
-        <div className="flex-1 flex items-center justify-center overflow-auto rounded-xl border border-gray-800 bg-[#090d16] p-4"><canvas ref={canvasRef} width={documentData.width} height={documentData.height} className="max-h-full max-w-full border border-cyan-500/20 bg-black shadow-2xl" /></div>
+        <div className="flex-1 flex items-center justify-center overflow-auto rounded-xl border border-gray-800 bg-[#090d16] p-4"><canvas ref={canvasRef} width={documentData.width} height={documentData.height} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerCancel={onCanvasPointerUp} className="max-h-full max-w-full touch-none cursor-crosshair border border-cyan-500/20 bg-black shadow-2xl" /></div>
       </div>
 
       <div className="w-80 h-full bg-[#0d121d] border-l border-gray-800 p-4 overflow-y-auto space-y-4">
-        <div><span className="text-gray-300 font-bold">LAYERS ({documentData.layers.length})</span><div className="mt-2 space-y-1">{[...documentData.layers].reverse().map((layer) => <div key={layer.id} onClick={() => setSelectedLayerId(layer.id)} className={`flex items-center justify-between rounded border px-2 py-2 cursor-pointer ${selectedLayerId === layer.id ? 'border-cyan-500/50 bg-cyan-950/30 text-cyan-300' : 'border-gray-800 bg-[#111726] text-gray-400'}`}><span className="truncate">{layer.name}</span><div className="flex items-center gap-1"><button onClick={(event) => { event.stopPropagation(); setDocumentData((previous) => ({ ...previous, layers: previous.layers.map((candidate) => candidate.id === layer.id ? { ...candidate, visible: !candidate.visible } : candidate) })); }}>{layer.visible ? <Eye size={11} /> : <EyeOff size={11} />}</button><button onClick={(event) => { event.stopPropagation(); setDocumentData((previous) => ({ ...previous, layers: previous.layers.map((candidate) => candidate.id === layer.id ? { ...candidate, locked: !candidate.locked } : candidate) })); }}>{layer.locked ? <Lock size={11} /> : <Unlock size={11} />}</button></div></div>)}</div></div>
+        <div><span className="text-gray-300 font-bold">LAYERS ({documentData.layers.length})</span><div className="mt-2 space-y-1">{[...documentData.layers].reverse().map((layer) => <div key={layer.id} onClick={(event) => setSelectedLayerIds(toggleGraphicSelection(selectedLayerIds, layer.id, event.shiftKey))} className={`flex items-center justify-between rounded border px-2 py-2 cursor-pointer ${selectedLayerIds.includes(layer.id) ? 'border-cyan-500/50 bg-cyan-950/30 text-cyan-300' : 'border-gray-800 bg-[#111726] text-gray-400'}`}><span className="truncate">{layer.name}</span><div className="flex items-center gap-1"><button onClick={(event) => { event.stopPropagation(); setDocumentData((previous) => ({ ...previous, layers: previous.layers.map((candidate) => candidate.id === layer.id ? { ...candidate, visible: !candidate.visible } : candidate) })); }}>{layer.visible ? <Eye size={11} /> : <EyeOff size={11} />}</button><button onClick={(event) => { event.stopPropagation(); setDocumentData((previous) => ({ ...previous, layers: previous.layers.map((candidate) => candidate.id === layer.id ? { ...candidate, locked: !candidate.locked } : candidate) })); }}>{layer.locked ? <Lock size={11} /> : <Unlock size={11} />}</button></div></div>)}</div></div>
         {selectedLayer && <div className="space-y-3 border-t border-gray-800 pt-3"><div className="flex items-center justify-between"><span className="font-bold text-cyan-300">SELECTED LAYER</span><div className="flex gap-2"><button onClick={() => moveSelected(1)} title="Bring forward"><ArrowUp size={13} /></button><button onClick={() => moveSelected(-1)} title="Send backward"><ArrowDown size={13} /></button><button onClick={duplicateSelected} title="Duplicate"><Copy size={13} /></button><button disabled={selectedLayer.locked} onClick={deleteSelected} className="text-red-400 disabled:opacity-30"><Trash2 size={13} /></button></div></div><input value={selectedLayer.name} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ name: event.target.value })} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white disabled:opacity-50" />{selectedLayer.type === 'text' && <><textarea value={selectedLayer.text || ''} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ text: event.target.value })} className="w-full rounded border border-gray-700 bg-[#141b2b] p-2 text-white disabled:opacity-50" /><input type="number" value={selectedLayer.fontSize || 16} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ fontSize: parseInt(event.target.value) || 16 })} className="w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white disabled:opacity-50" /></>}<div><span className="text-[10px] text-gray-500">OPACITY {Math.round(selectedLayer.opacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={selectedLayer.opacity} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ opacity: parseFloat(event.target.value) })} className="w-full accent-cyan-400 disabled:opacity-50" /></div><div className="grid grid-cols-2 gap-2">{(['x', 'y', 'width', 'height'] as const).map((field) => <label key={field} className="text-[9px] uppercase text-gray-500">{field}<input type="number" value={selectedLayer[field]} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ [field]: parseInt(event.target.value) || 0 })} className="mt-1 w-full rounded border border-gray-700 bg-[#141b2b] px-2 py-1 text-white disabled:opacity-50" /></label>)}</div><label className="flex items-center gap-2 text-gray-500">FILL<input type="color" value={selectedLayer.fill?.slice(0, 7) || '#ffffff'} disabled={selectedLayer.locked} onChange={(event) => updateSelectedLayer({ fill: event.target.value })} /></label></div>}
       </div>
     </div>
