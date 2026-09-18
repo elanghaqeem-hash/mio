@@ -1,0 +1,2 @@
+export const ANIMATION_V1_RELEASE={version:'1.0.0',document:'MIO_3D_Animation.mioanim',workspace:'native-webgl',capabilities:['rig-pose','transform-gizmo','auto-key','dope-sheet','graph-fcurve','bezier-interpolation','action-clips','nla-strips','constraints-ik','playback','document-hydration']as const,validation:{sourceIntegration:true,productionInteractiveE2E:false}}as const;
+export type AnimationV1Capability=typeof ANIMATION_V1_RELEASE.capabilities[number];
