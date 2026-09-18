@@ -43,9 +43,12 @@ export interface SFXSampleRegionState { id:string;assetId:string;name:string;sou
 export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[];sampleAssets?:SFXSampleAssetState[];sampleRegions?:SFXSampleRegionState[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
 export interface MusicInsertEffect { id:string;type:'gain'|'lowpass'|'delay';enabled:boolean;amount:number;mix?:number;feedback?:number;resonance?:number; }
+export type MusicAutomationParameter = 'volume'|'pan'|'sendLevel'|'effectAmount'|'effectMix'|'effectFeedback'|'effectResonance';
+export interface MusicAutomationPoint { id?:string;step:number;value:number; }
+export interface MusicAutomationLane { id:string;trackId:string;parameter:MusicAutomationParameter;targetId?:string;interpolation?:'linear'|'step'|'smooth';points:MusicAutomationPoint[]; }
 export interface MusicTrackSend { busId:string;level:number;enabled:boolean; }
 export interface MusicReturnBus { id:string;name:string;effect:MusicInsertEffect;volume:number; }
 export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[];effects?:MusicInsertEffect[];sends?:MusicTrackSend[]; }
 export interface MusicClip { id:string;trackId:string;name:string;startStep:number;lengthSteps:number;sourceStartStep:number;loop:boolean; }
 export interface MusicArrangement { totalSteps:number;clips:MusicClip[]; }
-export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[];arrangement?:MusicArrangement;returnBuses?:MusicReturnBus[]; }
+export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[];arrangement?:MusicArrangement;returnBuses?:MusicReturnBus[];automationLanes?:MusicAutomationLane[]; }
