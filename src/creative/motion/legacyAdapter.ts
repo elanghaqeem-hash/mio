@@ -1,5 +1,6 @@
 import type { MioMotionProject, MotionKeyframe as LegacyKeyframe } from "../../types/creative";
 import type { MotionDocument, MotionInterpolation, MotionKeyframe, MotionTrack } from "./model";
+import { evaluateTrack } from "./evaluator";
 
 const toInterpolation = (key: LegacyKeyframe): MotionInterpolation => {
   if (key.interpolation === "step") return { type: "hold" };
@@ -25,12 +26,7 @@ export function mergeLegacyPositionTrack(project: MioMotionProject, layerId: str
   const x = legacyTrackToV2(project, layerId, "x", fallbackX);
   const y = legacyTrackToV2(project, layerId, "y", fallbackY);
   const frames = [...new Set([...x.keyframes.map((key) => key.frame), ...y.keyframes.map((key) => key.frame)])].sort((a, b) => a - b);
-  const sample = (track: MotionTrack<number>, frame: number): number => {
-    const exact = track.keyframes.find((key) => key.frame === frame);
-    if (exact) return exact.value;
-    const previous = [...track.keyframes].filter((key) => key.frame < frame).sort((a, b) => b.frame - a.frame)[0];
-    return previous?.value ?? track.defaultValue;
-  };
+  const sample = (track: MotionTrack<number>, frame: number): number => evaluateTrack(track, frame);
   return {
     id: `track_${layerId}_position`,
     property: "position",
