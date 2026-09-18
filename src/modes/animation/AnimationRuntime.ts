@@ -151,7 +151,10 @@ export const applyConstraints = (
       }
       pose.rotation = quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(pose.rotation), eulerXYZToQuaternion(target.rotation), weight));
     }
-    if (constraint.type === 'IK') solveRigIK(rig, constraint, poses);
+    if (constraint.type === 'IK') {
+      const constrainedBone = rig.bones.find(bone => bone.id === constraint.boneId);
+      if (constrainedBone?.ikFk === 'IK') solveRigIK(rig, constraint, poses);
+    }
   }
   return poses;
 };
