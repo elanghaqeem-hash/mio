@@ -17,7 +17,9 @@ export interface AnimationNLAStrip { id:string; actionId:string; start:number; e
 export interface MioAnimationProject { duration:number; fps:number; tracks:AnimationTrack[]; currentTime:number; loop:boolean; rigs?:AnimationRig[]; constraints?:AnimationConstraint[]; shots?:AnimationCameraShot[]; actions?:AnimationAction[]; nlaStrips?:AnimationNLAStrip[]; playbackRange?:[number,number]; timeScale?:number; }
 
 // Graphic Document Specification (.mioart)
-export interface GraphicLayer { id:string; name:string; type:'vector'|'shape'|'text'|'raster'; visible:boolean; locked:boolean; opacity:number; x:number; y:number; width:number; height:number; fill?:string; stroke?:string; strokeWidth?:number; text?:string; fontSize?:number; fontFamily?:string; fontWeight?:number|string; fontStyle?:'normal'|'italic'; textAlign?:'left'|'center'|'right'; lineHeight?:number; shapeType?:'rectangle'|'circle'|'polygon'|'line'|'star'; rotation?:number; }
+export interface GraphicPathPoint { id:string; x:number; y:number; inX?:number; inY?:number; outX?:number; outY?:number; }
+export interface GraphicPath { points:GraphicPathPoint[]; closed:boolean; }
+export interface GraphicLayer { id:string; name:string; type:'vector'|'shape'|'text'|'raster'; visible:boolean; locked:boolean; opacity:number; x:number; y:number; width:number; height:number; fill?:string; stroke?:string; strokeWidth?:number; text?:string; fontSize?:number; fontFamily?:string; fontWeight?:number|string; fontStyle?:'normal'|'italic'; textAlign?:'left'|'center'|'right'; lineHeight?:number; shapeType?:'rectangle'|'circle'|'polygon'|'line'|'star'; path?:GraphicPath; rotation?:number; }
 export interface MioGraphicDocument { width:number; height:number; backgroundColor:string; layers:GraphicLayer[]; selectedLayerId?:string; }
 export interface DrawingPoint { x:number; y:number; pressure:number }
 export interface DrawingStroke { id:string; points:DrawingPoint[]; color:string; size:number; opacity:number; blendMode:'normal'|'multiply'|'screen'|'erase'; }
