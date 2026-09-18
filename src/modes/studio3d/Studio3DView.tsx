@@ -16,7 +16,10 @@ import {
   type BufferGeometry,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Mio3DObject, Mio3DScene } from '../../types/creative';
+import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
+import { createCubeMesh } from './modeling/MeshTopology';
+import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
+import { projectMeshToBufferGeometry } from './modeling/MeshGeometryProjection';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -46,6 +49,8 @@ export const Studio3DView: React.FC = () => {
   const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
   const [transformMode, setTransformMode] = useState<'select' | 'move' | 'rotate' | 'scale'>('select');
+  const [workspaceMode, setWorkspaceMode] = useState<'object' | 'edit'>('object');
+  const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
 
   useEffect(() => {
@@ -135,7 +140,8 @@ export const Studio3DView: React.FC = () => {
 
     for (const object of sceneData.objects) {
       let geometry: BufferGeometry;
-      if (object.type === 'sphere') geometry = new SphereGeometry(0.7, 32, 32);
+      if (object.mesh) geometry = projectMeshToBufferGeometry(object.mesh).geometry;
+      else if (object.type === 'sphere') geometry = new SphereGeometry(0.7, 32, 32);
       else if (object.type === 'cylinder') geometry = new CylinderGeometry(0.5, 0.5, 1.2, 24);
       else if (object.type === 'torus') geometry = new TorusGeometry(0.7, 0.2, 16, 32);
       else geometry = new BoxGeometry(1, 1, 1);
@@ -157,7 +163,7 @@ export const Studio3DView: React.FC = () => {
 
   const addObject = (type: Mio3DObject['type']) => {
     const sequence = sceneData.objects.length + 1;
-    const object: Mio3DObject = { id: `obj_${type}_${sequence}`, name: `New_${type}_${sequence}`, type, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.8, roughness: 0.2, wireframe: false };
+    const object: Mio3DObject = { id: `obj_${type}_${sequence}`, name: `New_${type}_${sequence}`, type, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.8, roughness: 0.2, wireframe: false, mesh: type === 'cube' ? createCubeMesh() : undefined };
     setSceneData((previous) => ({ ...previous, objects: [...previous.objects, object] }));
     setSelectedId(object.id);
     eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Created local 3D ${type} primitive: ${object.name}`, mode: '3D' });
@@ -210,6 +216,36 @@ export const Studio3DView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
 
+  const enterEditMode = () => {
+    if (!selectedObj) return;
+    if (!selectedObj.mesh && selectedObj.type === 'cube') updateSelectedObject({ mesh: createCubeMesh() });
+    if (!selectedObj.mesh && selectedObj.type !== 'cube') return;
+    setWorkspaceMode('edit');
+    setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
+  };
+
+  const setMeshSelectionMode = (mode: MioMeshSelectionMode) => setMeshSelection({ mode, vertexIds: [], edgeIds: [], faceIds: [] });
+
+  const selectFirstMeshElement = () => {
+    if (!selectedObj?.mesh) return;
+    if (meshSelection.mode === 'vertex') setMeshSelection({ ...meshSelection, vertexIds: selectedObj.mesh.vertices[0] ? [selectedObj.mesh.vertices[0].id] : [] });
+    else if (meshSelection.mode === 'face') setMeshSelection({ ...meshSelection, faceIds: selectedObj.mesh.faces[0] ? [selectedObj.mesh.faces[0].id] : [] });
+  };
+
+  const nudgeMeshSelection = (axis: 0 | 1 | 2, amount: number) => {
+    if (!selectedObj?.mesh) return;
+    const delta: [number, number, number] = [0, 0, 0];
+    delta[axis] = amount;
+    updateSelectedObject({ mesh: translateMeshSelection(selectedObj.mesh, meshSelection, delta) });
+  };
+
+  const extrudeSelectedFace = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1) return;
+    const result = extrudeMeshFace(selectedObj.mesh, meshSelection.faceIds[0], 0.25);
+    updateSelectedObject({ mesh: result.mesh });
+    setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [result.capFaceId] });
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -225,8 +261,21 @@ export const Studio3DView: React.FC = () => {
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
       <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="relative flex-1 h-full flex flex-col">
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>OBJECT MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span></div>
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>{workspaceMode.toUpperCase()} MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span></div>
         <div className="absolute left-3 top-12 z-10 flex flex-col gap-1 rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono">{(['select', 'move', 'rotate', 'scale'] as const).map((mode) => <button key={mode} onClick={() => setTransformMode(mode)} className={`rounded px-2 py-1 text-left text-[10px] uppercase ${transformMode === mode ? 'bg-cyan-500 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'select' ? 'Q Select' : mode === 'move' ? 'W Move' : mode === 'rotate' ? 'E Rotate' : 'R Scale'}</button>)}</div>
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono">
+          <button onClick={() => setWorkspaceMode('object')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'object' ? 'bg-cyan-500 text-black' : 'text-gray-300'}`}>OBJECT</button>
+          <button onClick={enterEditMode} disabled={!selectedObj || (!selectedObj.mesh && selectedObj.type !== 'cube')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'edit' ? 'bg-amber-400 text-black' : 'text-gray-300'} disabled:opacity-30`}>EDIT</button>
+        </div>
+        {workspaceMode === 'edit' && selectedObj?.mesh && <div className="absolute left-28 top-12 z-10 flex items-center gap-1 rounded-lg border border-amber-500/30 bg-[#0d121d]/90 p-1 font-mono">
+          {(['vertex','edge','face'] as MioMeshSelectionMode[]).map((mode) => <button key={mode} onClick={() => setMeshSelectionMode(mode)} className={`rounded px-2 py-1 text-[10px] uppercase ${meshSelection.mode === mode ? 'bg-amber-400 text-black' : 'text-gray-300'}`}>{mode}</button>)}
+          <button onClick={selectFirstMeshElement} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-cyan-300">Select First</button>
+          <button onClick={() => nudgeMeshSelection(0, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">X +0.1</button>
+          <button onClick={() => nudgeMeshSelection(1, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Y +0.1</button>
+          <button onClick={() => nudgeMeshSelection(2, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Z +0.1</button>
+          <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude +0.25</button>
+          <span className="px-2 text-[10px] text-gray-500">V {selectedObj.mesh.vertices.length} / F {selectedObj.mesh.faces.length}</span>
+        </div>}
         <div ref={containerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing" />
         <div className="h-10 bg-[#0d121d] border-t border-gray-800 flex items-center justify-between px-4">
           <div className="flex items-center gap-2"><span className="text-gray-400 font-mono">ADD:</span>
