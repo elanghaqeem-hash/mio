@@ -1,4 +1,6 @@
-interface Env {
+import { resolveMioVoiceSession, voiceSessionRequired, type MioVoiceSessionEnv } from './_session';
+
+interface Env extends MioVoiceSessionEnv {
   MIO_TTS_ENDPOINT?: string;
   MIO_TTS_API_KEY?: string;
   MIO_TTS_VOICE_ID?: string;
@@ -125,12 +127,13 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   const ready = configured(context.env) && Boolean(safeProviderEndpoint(context.env));
   return json({
     service: 'mio-voice-v4-synthesis',
-    engine: 'v4.2',
+    engine: 'v4.3',
     ready,
     voiceConfigured: Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
     modelConfigured: Boolean(context.env.MIO_TTS_MODEL?.trim()),
     accessProtectionConfigured: Boolean(context.env.MIO_VOICE_GATEWAY_TOKEN?.trim()),
     allowedOriginsConfigured: Boolean(context.env.MIO_VOICE_ALLOWED_ORIGINS?.trim()),
+    sessionRequired: voiceSessionRequired(context.env),
     detail: ready ? 'Server-side licensed synthesis gateway is configured.' : 'Production synthesis is not configured; Mio will use its device voice fallback.',
     authority: 'readiness only; no provider secret or voice enrollment data is exposed',
   }, ready ? 200 : 503);
@@ -139,6 +142,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 export async function onRequestPost(context: PagesContext): Promise<Response> {
   if (!requestOriginAllowed(context.request, context.env)) return json({ error: 'This origin is not allowed to request synthesis.' }, 403);
   if (!authorized(context.request, context.env)) return json({ error: 'Synthesis gateway authorization failed.' }, 401);
+  const session = resolveMioVoiceSession(context.request);
+  if (voiceSessionRequired(context.env) && !session) return json({ error: 'Authenticated Mio session is required for synthesis.' }, 401);
   const endpoint = safeProviderEndpoint(context.env);
   if (!configured(context.env) || !endpoint) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
   if ((context.request.headers.get('content-type') ?? '').split(';')[0].trim() !== 'application/json') return json({ error: 'Content-Type must be application/json' }, 415);
@@ -176,7 +181,7 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (!/^audio\/(mpeg|wav|x-wav|ogg)(?:;|$)/i.test(contentType)) return json({ error: 'Licensed synthesis provider returned an unsupported media type' }, 502);
     return new Response(upstream.body, {
       status: 200,
-      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.2', 'X-Mio-Voice-Streaming': 'upstream-pass-through' },
+      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.3', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
     });
   } catch {
     const aborted = controller.signal.aborted;
