@@ -22,3 +22,12 @@ export const topologicalPhotoRenderOrder=(graph:PhotoRenderGraph):string[]=>{
  const order:string[]=[],state=new Map<string,0|1|2>();const visit=(id:string)=>{const s=state.get(id)??0;if(s===1)throw new Error(`Photo render dependency cycle at ${id}.`);if(s===2)return;state.set(id,1);for(const dep of graph.nodes[id]?.dependencies??[])if(graph.nodes[dep])visit(dep);state.set(id,2);order.push(id);};
  for(const id of Object.keys(graph.nodes).sort())visit(id);return order;
 };
+
+export interface PhotoDirtyRegion {x:number;y:number;width:number;height:number;}
+export interface PhotoRenderInvalidation {nodeIds:string[];kinds:PhotoRenderDirtyKind[];region?:PhotoDirtyRegion;}
+export const createPhotoRenderInvalidation=(graph:PhotoRenderGraph,input:{affectedNodeIds?:string[];renderHints?:PhotoRenderDirtyKind[]},region?:PhotoDirtyRegion):PhotoRenderInvalidation=>{
+ const nodeIds=[...collectDirtyRenderNodes(graph,input.affectedNodeIds??[])].sort();
+ const kinds=[...new Set(input.renderHints?.length?input.renderHints:['composite'])];
+ if(region&&(!Number.isFinite(region.x)||!Number.isFinite(region.y)||!Number.isFinite(region.width)||!Number.isFinite(region.height)||region.width<=0||region.height<=0))throw new Error('Photo dirty region must have finite coordinates and positive dimensions.');
+ return {nodeIds,kinds,region:region?{...region}:undefined};
+};
