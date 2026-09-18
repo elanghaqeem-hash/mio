@@ -5,7 +5,7 @@ import { eventBus } from '../../core/EventBus';
 import { emergencyStop } from '../../core/EmergencyStop';
 import { useCreativeStudioDocument } from '../../creative/useCreativeStudioDocument';
 import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWorkspaceToolbar';
-import { audibleMusicTracks, musicStepDuration } from '../../creative/AudioWorkspace';
+import { audibleMusicTracks, musicStepDuration, estimateTrackMeter, quantizeNoteEvent, transposeNotes, moveNote, resizeNote } from '../../creative/AudioWorkspace';
 import { ExportManager } from '../../project/ExportManager';
 
 const INITIAL_MUSIC_PROJECT: MioMusicProject = {
@@ -111,6 +111,24 @@ export const MusicStudioView: React.FC = () => {
     setProject((previous) => ({ ...previous, tracks: previous.tracks.map((track) => track.id === activeTrackId ? { ...track, notes: track.notes.map((note) => note.id === selectedNote.id ? { ...note, ...changes } : note) } : track) }));
   };
 
+  const quantizeTrack = (grid = 1) => {
+    setProject((previous) => ({ ...previous, tracks: previous.tracks.map((track) => track.id === activeTrackId ? { ...track, notes: track.notes.map((note) => quantizeNoteEvent(note, grid, previous.totalSteps)) } : track) }));
+  };
+
+  const transposeTrack = (semitones: number) => {
+    setProject((previous) => ({ ...previous, tracks: previous.tracks.map((track) => track.id === activeTrackId ? { ...track, notes: transposeNotes(track.notes, semitones) } : track) }));
+  };
+
+  const nudgeSelectedNote = (steps: number, pitches = 0) => {
+    if (!selectedNote) return;
+    updateSelectedNote(moveNote(selectedNote, steps, pitches, project.totalSteps));
+  };
+
+  const resizeSelectedNote = (delta: number) => {
+    if (!selectedNote) return;
+    updateSelectedNote(resizeNote(selectedNote, selectedNote.durationSteps + delta, project.totalSteps));
+  };
+
   const deleteSelectedNote = () => {
     if (!selectedNote) return;
     setProject((previous) => ({ ...previous, tracks: previous.tracks.map((track) => track.id === activeTrackId ? { ...track, notes: track.notes.filter((note) => note.id !== selectedNote.id) } : track) }));
@@ -144,7 +162,7 @@ export const MusicStudioView: React.FC = () => {
             <button onClick={() => setCurrentStep(0)} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded cursor-pointer" title="Reset Playhead"><RotateCcw size={14} /></button>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">BPM:</span><input type="number" value={project.tempo} onChange={(event) => setProject((current) => ({ ...current, tempo: parseInt(event.target.value) || 120 }))} className="w-14 bg-[#141b2b] border border-gray-700 rounded px-1.5 py-0.5 text-white text-center text-xs" /></div>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">SCALE:</span><span className="text-cyan-300 font-bold">{project.key} {project.scale}</span></div>
-            <button onClick={() => void exportWav()} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-gray-300"><Download size={12} />WAV</button>
+            <button onClick={() => void exportWav()} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-gray-300"><Download size={12} />WAV</button><div className="flex items-center gap-1 border-l border-gray-800 pl-2"><button onClick={() => quantizeTrack(1)} className="rounded border border-gray-700 px-2 py-1 text-cyan-300">Q 1/16</button><button onClick={() => transposeTrack(-12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">-12</button><button onClick={() => transposeTrack(12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">+12</button></div>
           </div>
           <span className="flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/20 px-2 py-1 rounded border border-amber-500/30"><ShieldCheck size={12} /> LOCAL NOTE SEQUENCE // RIGHTS NOT ASSESSED</span>
         </div>
@@ -163,11 +181,11 @@ export const MusicStudioView: React.FC = () => {
         <div className="flex items-center justify-between border-b border-gray-800 pb-3"><span className="text-gray-300 font-bold flex items-center gap-2"><Music size={14} className="text-cyan-400" /> MIO TRACK MIXER</span><button onClick={addTrack} className="flex items-center gap-1 text-cyan-300"><Plus size={12} />TRACK</button></div>
         <div className="space-y-3 flex-1 overflow-y-auto">{project.tracks.map((track) => <div key={track.id} onClick={() => { setActiveTrackId(track.id); setSelectedNoteId(null); }} className={`p-3 rounded-lg border cursor-pointer transition ${activeTrackId === track.id ? 'bg-cyan-950/40 border-cyan-500/60 text-cyan-300' : 'bg-[#111726] border-gray-800 text-gray-400 hover:border-gray-700'}`}>
           <div className="flex items-center justify-between mb-2"><span className="font-bold">{track.name}</span><span className="text-[10px] text-gray-400">{track.role}</span></div>
-          <div className="space-y-1"><div className="flex justify-between text-[10px] text-gray-400"><span>Gain:</span><span>{Math.round(track.volume * 100)}%</span></div><input type="range" min="0" max="1" step="0.05" value={track.volume} onChange={(event) => { const volume = parseFloat(event.target.value); setProject((current) => ({ ...current, tracks: current.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, volume } : candidate) })); }} className="w-full accent-cyan-400" /></div>
+          <div className="mb-2"><div className="flex justify-between text-[9px] text-gray-500"><span>METER</span><span>{estimateTrackMeter(track).db === -Infinity ? '-∞' : estimateTrackMeter(track).db.toFixed(1)} dB</span></div><div className="h-1.5 overflow-hidden rounded bg-gray-900"><div className="h-full bg-cyan-400" style={{ width: `${Math.round(estimateTrackMeter(track).peak * 100)}%` }} /></div></div><div className="space-y-1"><div className="flex justify-between text-[10px] text-gray-400"><span>Gain:</span><span>{Math.round(track.volume * 100)}%</span></div><input type="range" min="0" max="1" step="0.05" value={track.volume} onChange={(event) => { const volume = parseFloat(event.target.value); setProject((current) => ({ ...current, tracks: current.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, volume } : candidate) })); }} className="w-full accent-cyan-400" /></div>
           <div className="space-y-1"><div className="flex justify-between text-[10px] text-gray-400"><span>Pan:</span><span>{track.pan.toFixed(2)}</span></div><input type="range" min="-1" max="1" step="0.05" value={track.pan} onChange={(event) => { const pan = Number(event.target.value); setProject((current) => ({ ...current, tracks: current.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, pan } : candidate) })); }} className="w-full accent-cyan-400" /></div>
           <div className="flex items-center justify-end gap-2 mt-2"><button onClick={(event) => { event.stopPropagation(); setProject((current) => ({ ...current, tracks: current.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, solo: !candidate.solo } : candidate) })); }} className={`px-2 py-0.5 rounded text-[10px] font-bold ${track.solo ? 'bg-amber-400 text-black' : 'bg-gray-800 text-gray-400'}`}>SOLO</button><button onClick={(event) => { event.stopPropagation(); setProject((current) => ({ ...current, tracks: current.tracks.map((candidate) => candidate.id === track.id ? { ...candidate, mute: !candidate.mute } : candidate) })); }} className={`px-2 py-0.5 rounded text-[10px] font-bold ${track.mute ? 'bg-red-500 text-black' : 'bg-gray-800 text-gray-400'}`}>{track.mute ? 'MUTED' : 'MUTE'}</button></div>
         </div>)}</div>
-        {selectedNote && <div className="space-y-2 border-t border-gray-800 pt-3"><div className="flex justify-between font-bold text-cyan-300"><span>NOTE {midiNoteNames[selectedNote.pitch] ?? selectedNote.pitch}</span><button onClick={deleteSelectedNote} className="text-red-400"><Trash2 size={12} /></button></div><label className="block text-gray-500">LENGTH<input type="number" min="1" max={project.totalSteps} value={selectedNote.durationSteps} onChange={(event) => updateSelectedNote({ durationSteps: Math.max(1, Number(event.target.value)) })} className="ml-2 w-16 rounded border border-gray-700 bg-[#141b2b] px-1 text-white" /></label><label className="block text-gray-500">VELOCITY {selectedNote.velocity.toFixed(2)}<input type="range" min="0.05" max="1" step="0.05" value={selectedNote.velocity} onChange={(event) => updateSelectedNote({ velocity: Number(event.target.value) })} className="w-full accent-cyan-400" /></label></div>}
+        {selectedNote && <div className="space-y-2 border-t border-gray-800 pt-3"><div className="flex justify-between font-bold text-cyan-300"><span>NOTE {midiNoteNames[selectedNote.pitch] ?? selectedNote.pitch}</span><button onClick={deleteSelectedNote} className="text-red-400"><Trash2 size={12} /></button></div><label className="block text-gray-500">LENGTH<input type="number" min="1" max={project.totalSteps} value={selectedNote.durationSteps} onChange={(event) => updateSelectedNote({ durationSteps: Math.max(1, Number(event.target.value)) })} className="ml-2 w-16 rounded border border-gray-700 bg-[#141b2b] px-1 text-white" /></label><div className="grid grid-cols-4 gap-1"><button onClick={() => nudgeSelectedNote(-1)} className="rounded bg-gray-800 py-1">←</button><button onClick={() => nudgeSelectedNote(1)} className="rounded bg-gray-800 py-1">→</button><button onClick={() => resizeSelectedNote(-1)} className="rounded bg-gray-800 py-1">−LEN</button><button onClick={() => resizeSelectedNote(1)} className="rounded bg-gray-800 py-1">+LEN</button></div><label className="block text-gray-500">VELOCITY {selectedNote.velocity.toFixed(2)}<input type="range" min="0.05" max="1" step="0.05" value={selectedNote.velocity} onChange={(event) => updateSelectedNote({ velocity: Number(event.target.value) })} className="w-full accent-cyan-400" /></label></div>}
       </div>
     </div>
   );
