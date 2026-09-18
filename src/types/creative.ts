@@ -38,7 +38,8 @@ export type SFXAutomationInterpolation = 'linear'|'step'|'smooth';
 export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; interpolation?:SFXAutomationInterpolation; points:SFXAutomationPoint[]; }
 export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
-export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[]; }
+export interface MusicInsertEffect { id:string;type:'gain'|'lowpass'|'delay';enabled:boolean;amount:number; }
+export interface MusicTrack { id:string;name:string;role:'Melody'|'Harmony'|'Bass'|'Rhythm';instrument:'synth_lead'|'synth_pad'|'sub_bass'|'cyber_drums'|'fm_bells';volume:number;pan:number;mute:boolean;solo:boolean;notes:NoteEvent[];effects?:MusicInsertEffect[]; }
 export interface MusicClip { id:string;trackId:string;name:string;startStep:number;lengthSteps:number;sourceStartStep:number;loop:boolean; }
 export interface MusicArrangement { totalSteps:number;clips:MusicClip[]; }
 export interface MioMusicProject { tempo:number;key:string;scale:'Major'|'Natural Minor'|'Dorian'|'Cyberpunk Aeolian';totalSteps:number;tracks:MusicTrack[];arrangement?:MusicArrangement; }
