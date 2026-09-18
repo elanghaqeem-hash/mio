@@ -10,7 +10,7 @@ import { envelopeTimes, normalizeSFXPatch, type SFXAutomationLane, type SFXAutom
 import { configureSFXDistortion, createSFXLayerSource, createSFXSharedDSPGraph } from '../../creative/SFXUnifiedGraph';
 import { importSFXSample, chooseWaveformLevel, getRuntimeSample } from '../../creative/SFXSampleRegistry';
 import { scheduleSFXSampleRegion } from '../../creative/SFXSampleRuntime';
-import { normalizeSampleRegion, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
+import { normalizeSampleRegion, regionTimelineDuration, splitSampleRegion } from '../../creative/SFXSampleWorkspace';
 
 const INITIAL_LAYERS: SFXLayer[] = [
   {
@@ -118,17 +118,15 @@ export const SFXStudioView: React.FC = () => {
 
   const activeAutomation = automationLanes.find((lane) => lane.layerId === selectedLayerId && lane.parameter === automationParameter);
   const importSample = async (file: File) => {
-    const context=audioCtxRef.current;if(!context)return;const id=`sample_${Date.now()}`;const imported=await importSFXSample(context,file,id);
-    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.sourceEnd),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);
+    const context=audioCtxRef.current;if(!context)return;if(context.state==='suspended')await context.resume();const id=`sample_${globalThis.crypto?.randomUUID?.()??`${Date.now()}_${Math.random().toString(36).slice(2)}`}`;const imported=await importSFXSample(context,file,id);
+    setPatch(current=>({...current,duration:Math.max(current.duration,imported.region.timelineStart+regionTimelineDuration(imported.region)),sampleAssets:[...(current.sampleAssets??[]),imported.asset],sampleRegions:[...(current.sampleRegions??[]),imported.region]}));setSelectedSampleRegionId(imported.region.id);
   };
   const selectedSampleRegion=patch.sampleRegions?.find(region=>region.id===selectedSampleRegionId)??patch.sampleRegions?.[0];
   const updateSampleRegion=(updates:Partial<NonNullable<MioSFXPatch['sampleRegions']>[number]>)=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).map(region=>region.id===selectedSampleRegion.id?normalizeSampleRegion({...region,...updates},asset):region)}));};
-  const splitSelectedSampleRegion=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const split=(selectedSampleRegion.sourceStart+selectedSampleRegion.sourceEnd)/2;const parts=splitSampleRegion(selectedSampleRegion,asset,split,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[0].id);};
-
-  const splitAtPlayhead=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const sourceTime=selectedSampleRegion.sourceStart+samplePlayhead*Math.max(.0001,selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart);const parts=splitSampleRegion(selectedSampleRegion,asset,sourceTime,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[1].id);};
+  const splitAtPlayhead=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const safePlayhead=Math.max(.001,Math.min(.999,samplePlayhead));const sourceTime=selectedSampleRegion.sourceStart+safePlayhead*Math.max(.0001,selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart);const parts=splitSampleRegion(selectedSampleRegion,asset,sourceTime,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[1].id);};
   const seekWaveform=(clientX:number)=>{const canvas=waveformRef.current;if(!canvas)return;const rect=canvas.getBoundingClientRect();setSamplePlayhead(Math.max(0,Math.min(1,(clientX-rect.left)/Math.max(1,rect.width))));};
 
-  useEffect(()=>{const canvas=waveformRef.current,region=patch.sampleRegions?.[0];if(!canvas||!region)return;const entry=getRuntimeSample(region.assetId),ctx=canvas.getContext('2d');if(!entry||!ctx)return;const level=chooseWaveformLevel(entry,canvas.width),peaks=level.channels[0]??[];ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#22d3ee';ctx.beginPath();peaks.forEach((p,i)=>{const x=i/Math.max(1,peaks.length-1)*canvas.width;ctx.moveTo(x,(1-p.max)*canvas.height/2);ctx.lineTo(x,(1-p.min)*canvas.height/2);});ctx.stroke();},[patch.sampleRegions,patch.sampleAssets]);
+  useEffect(()=>{const canvas=waveformRef.current,region=selectedSampleRegion;if(!canvas||!region)return;const entry=getRuntimeSample(region.assetId),ctx=canvas.getContext('2d');if(!entry||!ctx)return;const displayWidth=Math.max(1,Math.round(canvas.getBoundingClientRect().width));if(canvas.width!==displayWidth)canvas.width=displayWidth;const level=chooseWaveformLevel(entry,displayWidth),peaks=level?.channels[0]??[];ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#22d3ee';ctx.beginPath();peaks.forEach((p,i)=>{const x=i/Math.max(1,peaks.length-1)*canvas.width;ctx.moveTo(x,(1-p.max)*canvas.height/2);ctx.lineTo(x,(1-p.min)*canvas.height/2);});ctx.stroke();},[patch.sampleRegions,patch.sampleAssets,selectedSampleRegionId,waveformZoom]);
 
   const addAutomationPoint = (time: number, value: number) => {
     const lane = normalizeAutomationLane({ layerId: selectedLayerId, parameter: automationParameter, points: [...(activeAutomation?.points ?? []), { id: `automation_${Date.now()}_${automationPointSequenceRef.current++}`, time, value }] }, patch.duration);
@@ -237,7 +235,8 @@ export const SFXStudioView: React.FC = () => {
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
     master.connect(offline.destination);
-    normalizeSFXPatch(patch).layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, patch.duration));
+    const normalized=normalizeSFXPatch(patch);normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, normalized.duration));
+    const missing:string[]=[];normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(!entry){missing.push(region.assetId);return;}scheduleSFXSampleRegion(offline,entry.decoded,region,master,region.timelineStart);});if(missing.length)throw new Error(`SFX sample relink required before export: ${[...new Set(missing)].join(', ')}`);
     ExportManager.exportAudioAsWAV(await offline.startRendering(), `${patch.name}.wav`);
   };
 
