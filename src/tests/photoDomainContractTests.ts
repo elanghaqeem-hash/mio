@@ -15,6 +15,21 @@ export async function runPhotoDomainContractTests():Promise<{passed:number;total
   kernel.undo();assert(kernel.snapshot().nodes.layer_a.properties.opacity===1,'undo failed');
   kernel.redo();assert(validatePhotoDocument(kernel.snapshot() as any).valid,'photo document invalid after redo');
  }));
+ results.push(await test('photo masks and adjustments are undoable',()=>{
+  const kernel=new CreativeDocumentKernel(createPhotoDocument('Retouch',100,100,1,'photo_semantics'));
+  const layer=createPhotoNode('layer','Layer','photo.raster');kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.layer.create',node:layer})});
+  kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.mask.attach',nodeId:'layer',mask:{id:'mask',kind:'pixel',enabled:true,inverted:false,feather:0,density:1}})});
+  kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.mask.update',nodeId:'layer',maskId:'mask',changes:{feather:8,density:.7}})});
+  assert((kernel.snapshot().nodes.layer.properties as any).masks[0].feather===8,'mask update failed');kernel.undo();assert((kernel.snapshot().nodes.layer.properties as any).masks[0].feather===0,'mask undo failed');kernel.redo();
+  kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.adjustment.add',nodeId:'layer',adjustment:{id:'exp',kind:'exposure',enabled:true,parameters:{exposure:.5}}})});
+  kernel.execute({command:compilePhotoCommand(kernel.snapshot(),{type:'photo.adjustment.remove',nodeId:'layer',adjustmentId:'exp'})});assert((kernel.snapshot().nodes.layer.properties as any).adjustments.length===0,'adjustment removal failed');kernel.undo();assert((kernel.snapshot().nodes.layer.properties as any).adjustments.length===1,'adjustment undo failed');
+ }));
+ results.push(await test('photo semantics reject duplicate masks invalid sources and clipping cycles',()=>{
+  const doc=createPhotoDocument('Rules',100,100,1,'photo_rules'),a=createPhotoNode('a','A','photo.raster'),b=createPhotoNode('b','B','photo.raster');doc.nodes.a=a;doc.nodes.b=b;doc.rootNodeIds=['a','b'];
+  const mask={id:'same',kind:'pixel' as const,enabled:true,inverted:false,feather:0,density:1};a.properties.masks=[mask,{...mask}];assert(!validatePhotoDocument(doc).valid,'duplicate masks accepted');a.properties.masks=[];
+  let rejected=false;try{compilePhotoCommand(doc,{type:'photo.layer.bindSource',nodeId:'a',assetId:'missing'})}catch{rejected=true}assert(rejected,'missing source asset accepted');
+  (b.properties as any).clippingTargetId='a';rejected=false;try{compilePhotoCommand(doc,{type:'photo.layer.clip',nodeId:'a',targetId:'b'})}catch{rejected=true}assert(rejected,'clipping cycle accepted');
+ }));
  results.push(await test('photo validation rejects invalid opacity',()=>{
   const doc=createPhotoDocument('Invalid',10,10,1,'photo_invalid');const node=createPhotoNode('bad','Bad','photo.raster');node.properties.opacity=2;doc.nodes.bad=node;doc.rootNodeIds=['bad'];assert(!validatePhotoDocument(doc).valid,'invalid opacity accepted');
  }));
