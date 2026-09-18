@@ -39,6 +39,20 @@ export async function runCreativeDrawingRuntimeTests(): Promise<{ passed: number
     assert(session.status === 'COMMITTED', 'session did not commit');
   }));
 
+  results.push(await test('Stroke session rejects invalid style before collecting input', () => {
+    const invalidStyles = [
+      { ...style, color: 'black' },
+      { ...style, size: 0 },
+      { ...style, opacity: 2 },
+      { ...style, blendMode: 'overlay' },
+    ];
+    for (const invalidStyle of invalidStyles) {
+      let rejected = false;
+      try { new DrawingStrokeSession('invalid_style', layer(), sample(), invalidStyle as typeof style); } catch { rejected = true; }
+      assert(rejected, 'invalid stroke style was accepted at session start');
+    }
+  }));
+
   results.push(await test('Single-point stroke remains a valid dot', () => {
     const stroke = new DrawingStrokeSession('stroke_dot', layer(), sample(), style).finalize();
     assert(stroke.points.length === 1, 'single-point stroke was not preserved');
