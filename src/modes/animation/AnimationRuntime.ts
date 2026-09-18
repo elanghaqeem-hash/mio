@@ -1,6 +1,7 @@
 import type { AnimationConstraint, AnimationRig, AnimationTrack, BonePose, MioAnimationProject } from '../../types/creative';
 import type { BoneTransformChannel } from './AutoKeyOperations';
 import { solveTwoBoneIK } from './IKSolver';
+import { solveFABRIK } from './FABRIKSolver';
 import { aimBoneQuaternion } from './QuaternionAim';
 import { evaluateBezierSegment } from './BezierCurve';
 import { evaluateNLAChannels } from './AnimationNLAEvaluator';
@@ -95,6 +96,38 @@ const solveRigIK = (rig: AnimationRig, constraint: AnimationConstraint, poses: R
   if (!endBone || !upperBone) return;
 
   const world = evaluateRigWorldTransforms(rig, rigLocalPoses(rig, poses));
+  if (requestedChainLength > 2) {
+    const chain = [endBone];
+    let cursor = upperBone;
+    while (chain.length < requestedChainLength && cursor) {
+      chain.unshift(cursor);
+      if (!cursor.parentId) break;
+      const parent = rig.bones.find(bone => bone.id === cursor.parentId);
+      if (!parent) break;
+      cursor = parent;
+    }
+    if (chain.length > 2) {
+      const targetWorld = world.bones[constraint.targetId];
+      if (!targetWorld) return;
+      const joints = chain.map(bone => world.bones[bone.id]?.head).filter((value): value is [number,number,number] => !!value);
+      const lastWorld = world.bones[endBone.id];
+      if (joints.length !== chain.length || !lastWorld) return;
+      joints.push(lastWorld.tail);
+      const result = solveFABRIK({ joints, lengths: chain.map(bone => bone.length), target: targetWorld.head });
+      const weight = Math.max(0, Math.min(1, constraint.influence));
+      let parentQuaternion = chain[0].parentId ? world.bones[chain[0].parentId]?.quaternion : undefined;
+      for (let i=0;i<chain.length;i++) {
+        const bone=chain[i], key=`${rig.id}:${bone.id}`, pose=poses[key];
+        if (!pose) continue;
+        const desiredWorld=aimBoneQuaternion(result.joints[i],result.joints[i+1],constraint.poleAngle??0);
+        if (!desiredWorld) continue;
+        const desiredLocal=localEulerFromWorldQuaternion(desiredWorld,parentQuaternion);
+        pose.rotation=quaternionToEulerXYZ(quaternionSlerp(eulerXYZToQuaternion(pose.rotation),eulerXYZToQuaternion(desiredLocal),weight));
+        parentQuaternion=desiredWorld;
+      }
+      return;
+    }
+  }
   const upperWorld = world.bones[upperBone.id];
   const targetWorld = world.bones[constraint.targetId];
   const poleWorld = constraint.poleTargetId ? world.bones[constraint.poleTargetId] : undefined;
