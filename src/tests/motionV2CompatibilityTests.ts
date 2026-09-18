@@ -55,6 +55,24 @@ export async function runMotionV2CompatibilityTests(): Promise<{ passed: number;
     assert(Math.abs(at15!.value[0] - 150) < .001 && Math.abs(at15!.value[1] - 100) < .001, "missing X axis was not interpolated at Y-only key");
   });
 
+  run("asynchronous XY merge preserves easing ownership and evaluated axis", () => {
+    const asyncEaseProject: MioMotionProject = {
+      ...project,
+      tracks: [
+        { id: "tx", nodeId: "title", property: "x", keyframes: [{ id: "x0", time: 0, value: 0, interpolation: "linear" }, { id: "x30", time: 1, value: 300, interpolation: "easeOut" }] },
+        { id: "ty", nodeId: "title", property: "y", keyframes: [{ id: "y0", time: 0, value: 0, interpolation: "linear" }, { id: "y15", time: .5, value: 100, interpolation: "easeIn" }, { id: "y30", time: 1, value: 200, interpolation: "linear" }] },
+      ],
+    };
+    const position = legacyMotionProjectToV2(asyncEaseProject).compositions[0].layers[0].transform.position;
+    const at15 = position.keyframes.find((key) => key.frame === 15)!;
+    assert(Math.abs(at15.value[0] - 150) < .001, "X interpolation at Y-owned union frame changed");
+    assert(at15.interpolation.type === "bezier", "Y-owned easing was not preserved");
+    if (at15.interpolation.type === "bezier") assert(at15.interpolation.out[0] === .42, "Y easeIn ownership changed");
+    const at30 = position.keyframes.find((key) => key.frame === 30)!;
+    assert(at30.interpolation.type === "bezier", "same-frame X priority was not preserved");
+    if (at30.interpolation.type === "bezier") assert(at30.interpolation.out[0] === 0, "same-frame interpolation priority must prefer X");
+  });
+
   for (const result of results) console.log(`${result.passed ? "✓" : "✗"} [${result.passed ? "PASS" : "FAIL"}] ${result.name}${result.error ? ` — ${result.error}` : ""}`);
   return { passed: results.filter((result) => result.passed).length, total: results.length };
 }
