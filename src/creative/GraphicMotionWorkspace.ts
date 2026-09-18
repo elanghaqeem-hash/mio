@@ -1,5 +1,19 @@
 import type { GraphicLayer, MioGraphicDocument, MioMotionProject, MotionLayer } from '../types/creative';
 
+export const graphicLayerLocalToWorld=(layer:GraphicLayer,point:Point2D):Point2D=>{const center={x:layer.x+layer.width/2,y:layer.y+layer.height/2},world={x:layer.x+point.x,y:layer.y+point.y};return rotateGraphicVector(world,center,layer.rotation??0);};
+export const graphicLayerWorldToLocal=(layer:GraphicLayer,point:Point2D):Point2D=>{const center={x:layer.x+layer.width/2,y:layer.y+layer.height/2},local=rotateGraphicVector(point,center,-(layer.rotation??0));return{x:local.x-layer.x,y:local.y-layer.y};};
+export const createGraphicVectorPath=(id:string,name:string,points:Point2D[],closed=true):GraphicLayer=>{const xs=points.map(p=>p.x),ys=points.map(p=>p.y),left=Math.min(...xs),top=Math.min(...ys),right=Math.max(...xs),bottom=Math.max(...ys);return{id,name,type:'vector',visible:true,locked:false,opacity:1,x:left,y:top,width:Math.max(1,right-left),height:Math.max(1,bottom-top),fill:'#00f0ff22',stroke:'#00f0ff',strokeWidth:2,path:{closed,points:points.map((p,index)=>({id:`${id}_p${index}`,x:p.x-left,y:p.y-top}))}};};
+export const moveGraphicPathPoint=(document:MioGraphicDocument,layerId:string,pointId:string,point:Point2D):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id!==layerId||layer.locked||!layer.path?layer:{...layer,path:{...layer.path,points:layer.path.points.map(item=>item.id===pointId?{...item,x:point.x,y:point.y}:item)}})});
+export const setGraphicPathPointHandles=(document:MioGraphicDocument,layerId:string,pointId:string,inHandle?:Point2D,outHandle?:Point2D):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id!==layerId||layer.locked||!layer.path?layer:{...layer,path:{...layer.path,points:layer.path.points.map(item=>item.id===pointId?{...item,inX:inHandle?.x,inY:inHandle?.y,outX:outHandle?.x,outY:outHandle?.y}:item)}})});
+export const setGraphicPathNodeType=(document:MioGraphicDocument,layerId:string,pointId:string,nodeType:'corner'|'smooth'):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id===layerId&&!layer.locked&&layer.path?{...layer,path:{...layer.path,points:layer.path.points.map(point=>point.id===pointId?{...point,nodeType}:point)}}:layer)});
+export const setGraphicSmoothPathHandle=(document:MioGraphicDocument,layerId:string,pointId:string,side:'in'|'out',handle:Point2D):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>{if(layer.id!==layerId||layer.locked||!layer.path)return layer;return{...layer,path:{...layer.path,points:layer.path.points.map(point=>{if(point.id!==pointId)return point;const dx=handle.x-point.x,dy=handle.y-point.y,opposite={x:point.x-dx,y:point.y-dy};return side==='in'?{...point,nodeType:'smooth',inX:handle.x,inY:handle.y,outX:opposite.x,outY:opposite.y}:{...point,nodeType:'smooth',outX:handle.x,outY:handle.y,inX:opposite.x,inY:opposite.y};})}};} )});
+export const beginGraphicPenPath=(document:MioGraphicDocument,point:Point2D,id=`vector_${Date.now().toString(36)}`):{document:MioGraphicDocument;layerId:string;pointId:string}=>{const layer=createGraphicVectorPath(id,'Vector Path',[point],false);return{document:{...document,layers:[...document.layers,layer],selectedLayerId:id},layerId:id,pointId:layer.path!.points[0].id};};
+export const appendGraphicPenPoint=(document:MioGraphicDocument,layerId:string,point:Point2D):{document:MioGraphicDocument;pointId?:string}=>{const before=document.layers.find(layer=>layer.id===layerId)?.path?.points.length??0,next=addGraphicPathPoint(document,layerId,point),layer=next.layers.find(item=>item.id===layerId),created=layer?.path?.points[before];return{document:next,pointId:created?.id};};
+export const finishGraphicPenPath=(document:MioGraphicDocument,layerId:string,closed=false):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id===layerId&&layer.path&&!layer.locked?{...layer,path:{...layer.path,closed:closed&&layer.path.points.length>=3}}:layer)});
+export const addGraphicPathPoint=(document:MioGraphicDocument,layerId:string,point:Point2D,afterPointId?:string):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>{if(layer.id!==layerId||layer.locked||!layer.path)return layer;const points=[...layer.path.points],index=afterPointId?points.findIndex(p=>p.id===afterPointId):-1,id=`${layerId}_p${Date.now().toString(36)}`,next={id,x:point.x,y:point.y,nodeType:'corner' as const};points.splice(index>=0?index+1:points.length,0,next);return{...layer,path:{...layer.path,points}};})});
+export const deleteGraphicPathPoint=(document:MioGraphicDocument,layerId:string,pointId:string):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>{if(layer.id!==layerId||layer.locked||!layer.path)return layer;const points=layer.path.points.filter(point=>point.id!==pointId);if(points.length===layer.path.points.length||points.length<2)return layer;return{...layer,path:{...layer.path,points,closed:layer.path.closed&&points.length>=3}};})});
+export const toggleGraphicPathClosed=(document:MioGraphicDocument,layerId:string):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id===layerId&&!layer.locked&&layer.path?{...layer,path:{...layer.path,closed:!layer.path.closed}}:layer)});
+
 export type AlignmentAxis = 'left'|'centerX'|'right'|'top'|'centerY'|'bottom';
 export type DistributionAxis = 'horizontal'|'vertical';
 
@@ -95,28 +109,23 @@ export const nudgeGraphicLayers=(document:MioGraphicDocument,ids:string[],dx:num
 
 
 export type GraphicResizeHandle='nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w';
-export interface GraphicResizeSession { id:string; handle:GraphicResizeHandle; start:Point2D; origin:{x:number;y:number;width:number;height:number}; aspectRatio:number; }
+export interface GraphicResizeSession { id:string; handle:GraphicResizeHandle; start:Point2D; origin:{x:number;y:number;width:number;height:number;rotation:number}; center:Point2D; localStart:Point2D; aspectRatio:number; }
 
+const rotateGraphicVector=(point:Point2D,center:Point2D,degrees:number):Point2D=>{const r=degrees*Math.PI/180,dx=point.x-center.x,dy=point.y-center.y,cos=Math.cos(r),sin=Math.sin(r);return{x:center.x+dx*cos-dy*sin,y:center.y+dx*sin+dy*cos};};
 export const beginGraphicResize=(document:MioGraphicDocument,id:string,handle:GraphicResizeHandle,start:Point2D):GraphicResizeSession|null=>{
-  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null;
-  return {id,handle,start,origin:{x:layer.x,y:layer.y,width:layer.width,height:layer.height},aspectRatio:layer.width/Math.max(1,layer.height)};
+  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null; const rotation=layer.rotation??0,center={x:layer.x+layer.width/2,y:layer.y+layer.height/2};
+  return {id,handle,start,center,localStart:rotateGraphicVector(start,center,-rotation),origin:{x:layer.x,y:layer.y,width:layer.width,height:layer.height,rotation},aspectRatio:layer.width/Math.max(1,layer.height)};
 };
 
 export const updateGraphicResize=(document:MioGraphicDocument,session:GraphicResizeSession,pointer:Point2D,keepAspect=false,minSize=4):MioGraphicDocument=>{
-  const dx=pointer.x-session.start.x,dy=pointer.y-session.start.y; const o=session.origin;
-  let x=o.x,y=o.y,width=o.width,height=o.height;
-  if(session.handle.includes('e')) width=Math.max(minSize,o.width+dx);
-  if(session.handle.includes('s')) height=Math.max(minSize,o.height+dy);
-  if(session.handle.includes('w')){width=Math.max(minSize,o.width-dx);x=o.x+o.width-width;}
-  if(session.handle.includes('n')){height=Math.max(minSize,o.height-dy);y=o.y+o.height-height;}
-  if(keepAspect){
-    const horizontal=session.handle==='e'||session.handle==='w';
-    if(horizontal) height=Math.max(minSize,width/session.aspectRatio);
-    else width=Math.max(minSize,height*session.aspectRatio);
-    if(session.handle.includes('w'))x=o.x+o.width-width;
-    if(session.handle.includes('n'))y=o.y+o.height-height;
-  }
-  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,x,y,width,height}:layer)};
+  const local=rotateGraphicVector(pointer,session.center,-session.origin.rotation),dx=local.x-session.localStart.x,dy=local.y-session.localStart.y,o=session.origin;
+  let left=o.x,right=o.x+o.width,top=o.y,bottom=o.y+o.height;
+  if(session.handle.includes('e'))right=Math.max(left+minSize,right+dx); if(session.handle.includes('w'))left=Math.min(right-minSize,left+dx);
+  if(session.handle.includes('s'))bottom=Math.max(top+minSize,bottom+dy); if(session.handle.includes('n'))top=Math.min(bottom-minSize,top+dy);
+  let width=right-left,height=bottom-top;
+  if(keepAspect){const horizontal=session.handle==='e'||session.handle==='w'; if(horizontal)height=Math.max(minSize,width/session.aspectRatio);else width=Math.max(minSize,height*session.aspectRatio); if(session.handle.includes('w'))left=right-width;else right=left+width;if(session.handle.includes('n'))top=bottom-height;else bottom=top+height;}
+  const localCenter={x:(left+right)/2,y:(top+bottom)/2},worldCenter=rotateGraphicVector(localCenter,session.center,o.rotation); width=right-left;height=bottom-top;
+  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,x:worldCenter.x-width/2,y:worldCenter.y-height/2,width,height}:layer)};
 };
 
 export const duplicateGraphicLayers=(document:MioGraphicDocument,ids:string[],offset=16):{document:MioGraphicDocument;ids:string[]}=>{
@@ -171,6 +180,14 @@ export const getGraphicLayerCorners=(layer:GraphicLayer):Point2D[]=>{
   const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2,r=(layer.rotation??0)*Math.PI/180,cos=Math.cos(r),sin=Math.sin(r);
   return [[layer.x,layer.y],[layer.x+layer.width,layer.y],[layer.x+layer.width,layer.y+layer.height],[layer.x,layer.y+layer.height]].map(([x,y])=>{const dx=x-cx,dy=y-cy;return {x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};});
 };
+export interface GraphicLayerHandlePoints { resize:Record<GraphicResizeHandle,Point2D>; rotation:Point2D; }
+export const getGraphicLayerHandlePoints=(layer:GraphicLayer,rotationOffset=28):GraphicLayerHandlePoints=>{
+  const [nw,ne,se,sw]=getGraphicLayerCorners(layer); const midpoint=(a:Point2D,b:Point2D):Point2D=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+  const n=midpoint(nw,ne),e=midpoint(ne,se),s=midpoint(sw,se),w=midpoint(nw,sw); const cx=layer.x+layer.width/2,cy=layer.y+layer.height/2;
+  const vx=n.x-cx,vy=n.y-cy,length=Math.max(1,Math.hypot(vx,vy));
+  return {resize:{nw,n,ne,e,se,s,sw,w},rotation:{x:n.x+vx/length*rotationOffset,y:n.y+vy/length*rotationOffset}};
+};
+
 export const getGraphicSelectionBounds=(document:MioGraphicDocument,ids:string[]):GraphicSelectionBounds|null=>{
   const points=document.layers.filter(layer=>ids.includes(layer.id)&&layer.visible).flatMap(getGraphicLayerCorners); if(!points.length)return null;
   const left=Math.min(...points.map(p=>p.x)),right=Math.max(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y)),bottom=Math.max(...points.map(p=>p.y));
@@ -192,6 +209,18 @@ export const updateGraphicGroupResize=(document:MioGraphicDocument,session:Graph
 };
 
 
+
+export interface GraphicDragSmartSnapResult { pointer:Point2D; guides:GraphicSmartGuide[]; delta:Point2D; }
+export const snapGraphicDragToSmartGuides=(document:MioGraphicDocument,session:GraphicDragSession,pointer:Point2D,tolerance=6):GraphicDragSmartSnapResult=>{
+  const movingIds=session.ids.filter(id=>session.origins[id]); const startBounds=getGraphicSelectionBounds(document,movingIds); if(!startBounds)return {pointer,guides:[],delta:{x:0,y:0}};
+  const rawDx=pointer.x-session.start.x,rawDy=pointer.y-session.start.y;
+  const xCandidates:GraphicSmartGuide[]=[{axis:'x',value:0,source:'canvas'},{axis:'x',value:document.width/2,source:'canvas'},{axis:'x',value:document.width,source:'canvas'}];
+  const yCandidates:GraphicSmartGuide[]=[{axis:'y',value:0,source:'canvas'},{axis:'y',value:document.height/2,source:'canvas'},{axis:'y',value:document.height,source:'canvas'}];
+  for(const layer of document.layers){if(!layer.visible||movingIds.includes(layer.id))continue;const b=getGraphicSelectionBounds(document,[layer.id]);if(!b)continue;xCandidates.push({axis:'x',value:b.left,source:'layer'},{axis:'x',value:b.centerX,source:'layer'},{axis:'x',value:b.right,source:'layer'});yCandidates.push({axis:'y',value:b.top,source:'layer'},{axis:'y',value:b.centerY,source:'layer'},{axis:'y',value:b.bottom,source:'layer'});}
+  const choose=(anchors:number[],candidates:GraphicSmartGuide[])=>anchors.flatMap(anchor=>candidates.map(guide=>({guide,adjustment:guide.value-anchor,distance:Math.abs(guide.value-anchor)}))).filter(item=>item.distance<=tolerance).sort((a,b)=>a.distance-b.distance||a.guide.value-b.guide.value)[0];
+  const sx=choose([startBounds.left+rawDx,startBounds.centerX+rawDx,startBounds.right+rawDx],xCandidates),sy=choose([startBounds.top+rawDy,startBounds.centerY+rawDy,startBounds.bottom+rawDy],yCandidates);
+  const dx=sx?.adjustment??0,dy=sy?.adjustment??0; return {pointer:{x:pointer.x+dx,y:pointer.y+dy},guides:[sx?.guide,sy?.guide].filter(Boolean) as GraphicSmartGuide[],delta:{x:dx,y:dy}};
+};
 export interface GraphicSmartGuide { axis:'x'|'y'; value:number; source:'canvas'|'layer'; }
 export interface GraphicSmartSnapResult { point:Point2D; guides:GraphicSmartGuide[]; }
 export const snapGraphicPointToSmartGuides=(document:MioGraphicDocument,point:Point2D,excludeIds:string[]=[],tolerance=6):GraphicSmartSnapResult=>{
