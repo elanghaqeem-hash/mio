@@ -143,3 +143,18 @@ export const moveMotionKeyframe=(project:MioMotionProject,trackId:string,keyId:s
 export const setMotionKeyframeInterpolation=(project:MioMotionProject,trackId:string,keyId:string,interpolation:import('../types/creative').AnimationInterpolation):MioMotionProject=>({...project,tracks:project.tracks.map(track=>track.id===trackId?{...track,keyframes:track.keyframes.map(key=>key.id===keyId?{...key,interpolation}:key)}:track)});
 
 const snapMotionProjectTime=(time:number,fps:number)=>Number((Math.round(time*fps)/fps).toFixed(3));
+
+
+export interface GraphicRotationSession { id:string; center:Point2D; startAngle:number; originRotation:number; }
+export const beginGraphicRotation=(document:MioGraphicDocument,id:string,start:Point2D):GraphicRotationSession|null=>{
+  const layer=document.layers.find(item=>item.id===id&&!item.locked); if(!layer)return null;
+  const center={x:layer.x+layer.width/2,y:layer.y+layer.height/2};
+  return {id,center,startAngle:Math.atan2(start.y-center.y,start.x-center.x),originRotation:layer.rotation??0};
+};
+export const updateGraphicRotation=(document:MioGraphicDocument,session:GraphicRotationSession,pointer:Point2D,snapDegrees=0):MioGraphicDocument=>{
+  const angle=Math.atan2(pointer.y-session.center.y,pointer.x-session.center.x);
+  let rotation=session.originRotation+(angle-session.startAngle)*180/Math.PI;
+  if(snapDegrees>0) rotation=Math.round(rotation/snapDegrees)*snapDegrees;
+  rotation=((rotation%360)+360)%360;
+  return {...document,layers:document.layers.map(layer=>layer.id===session.id?{...layer,rotation:Number(rotation.toFixed(2))}:layer)};
+};
