@@ -20,8 +20,14 @@ export function moveSelectedKeyframes<T extends { id: string; frame: number }>(
   keyframes: readonly T[], selectedIds: readonly string[], deltaFrames: number, minFrame = 0, maxFrame = Number.MAX_SAFE_INTEGER,
 ): T[] {
   const selected = new Set(selectedIds);
+  const selectedKeys = keyframes.filter((key) => selected.has(key.id));
+  if (!selectedKeys.length) return [...keyframes].sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id));
+  const requested = Math.round(deltaFrames);
+  const minSelected = Math.min(...selectedKeys.map((key) => key.frame));
+  const maxSelected = Math.max(...selectedKeys.map((key) => key.frame));
+  const boundedDelta = Math.max(minFrame - minSelected, Math.min(maxFrame - maxSelected, requested));
   return keyframes
-    .map((key) => selected.has(key.id) ? { ...key, frame: Math.max(minFrame, Math.min(maxFrame, key.frame + Math.round(deltaFrames))) } : key)
+    .map((key) => selected.has(key.id) ? { ...key, frame: key.frame + boundedDelta } : key)
     .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id));
 }
 
