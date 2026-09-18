@@ -6,7 +6,7 @@ export type MioVoiceTurnListener = (state: MioVoiceTurnState) => void;
 
 export interface MioVoiceActivityEvent { active: boolean; level?: number; timestamp?: number; }
 export interface MioVoiceActivityDetector { readonly id: string; start(onActivity: (event: MioVoiceActivityEvent) => void, signal?: AbortSignal): Promise<void> | void; stop(): Promise<void> | void; }
-export interface MioVoiceTurnOptions { preferredProviderId?: string; autoInterruptOnVoiceActivity?: boolean; onVoiceActivityInterrupt?: (event: MioVoiceActivityEvent) => void | Promise<void>; prosody?: MioVoiceProsodyHint; }
+export interface MioVoiceTurnOptions { preferredProviderId?: string; autoInterruptOnVoiceActivity?: boolean; voiceActivityInterruptMinLevel?: number; voiceActivityInterruptCooldownMs?: number; onVoiceActivityInterrupt?: (event: MioVoiceActivityEvent) => void | Promise<void>; prosody?: MioVoiceProsodyHint; }
 
 /** Coordinates conversational ownership above STT/TTS providers. */
 export class MioVoiceTurnManager {
@@ -15,6 +15,7 @@ export class MioVoiceTurnManager {
   private turnGeneration = 0;
   private vadController: AbortController | null = null;
   private vadInterruptPending = false;
+  private lastVadInterruptAt = 0;
 
   constructor(private readonly runtime: MioVoiceRuntimeV3 = mioVoiceRuntimeV3) {}
   getState() { return this.state; }
@@ -42,8 +43,14 @@ export class MioVoiceTurnManager {
     await this.detachVoiceActivityDetector(detector); const controller = new AbortController(); this.vadController = controller;
     await detector.start((event) => {
       if (!event.active || controller.signal.aborted || this.vadInterruptPending) return;
-      if (options.autoInterruptOnVoiceActivity && this.state === 'MIO_TURN') {
+      const minimumLevel = options.voiceActivityInterruptMinLevel ?? 0.045;
+      const cooldownMs = options.voiceActivityInterruptCooldownMs ?? 650;
+      const now = event.timestamp ?? Date.now();
+      const strongEnough = event.level === undefined || event.level >= minimumLevel;
+      const outsideCooldown = now - this.lastVadInterruptAt >= cooldownMs;
+      if (options.autoInterruptOnVoiceActivity && this.state === 'MIO_TURN' && strongEnough && outsideCooldown) {
         this.vadInterruptPending = true;
+        this.lastVadInterruptAt = now;
         void (async () => {
           try {
             await this.interrupt();
@@ -56,7 +63,7 @@ export class MioVoiceTurnManager {
   }
 
   async detachVoiceActivityDetector(detector: MioVoiceActivityDetector): Promise<void> {
-    this.vadController?.abort(); this.vadController = null; this.vadInterruptPending = false; await detector.stop();
+    this.vadController?.abort(); this.vadController = null; this.vadInterruptPending = false; this.lastVadInterruptAt = 0; await detector.stop();
   }
 }
 
