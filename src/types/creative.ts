@@ -34,7 +34,7 @@ export interface MioMotionProject { width:number;height:number;backgroundColor:s
 export interface SFXLayer { id:string;name:string;type:'transient'|'oscillator'|'noise'|'sub_harmonic';waveType:OscillatorType;baseFrequency:number;frequencySweep:number;attack:number;decay:number;sustain:number;release:number;filterCutoff:number;filterResonance:number;distortion:number;delayTime:number;delayFeedback:number;reverbMix:number;volume:number; }
 export interface SFXAutomationPoint { id?:string; time:number; value:number; }
 export type SFXAutomatableParameter = 'baseFrequency'|'frequencySweep'|'filterCutoff'|'filterResonance'|'distortion'|'delayTime'|'delayFeedback'|'reverbMix'|'volume';
-export type SFXAutomationInterpolation = 'linear'|'step';
+export type SFXAutomationInterpolation = 'linear'|'step'|'smooth';
 export interface SFXAutomationLane { layerId:string; parameter:SFXAutomatableParameter; interpolation?:SFXAutomationInterpolation; points:SFXAutomationPoint[]; }
 export interface MioSFXPatch { name:string;category:'UI'|'MECHANICAL'|'LASER'|'ENERGY'|'IMPACT'|'AMBIENCE';duration:number;layers:SFXLayer[];automationLanes?:SFXAutomationLane[]; }
 export interface NoteEvent { id:string;pitch:number;startStep:number;durationSteps:number;velocity:number; }
