@@ -1,5 +1,10 @@
 import type { GraphicLayer, MioGraphicDocument, MioMotionProject, MotionLayer } from '../types/creative';
 
+export const createGraphicVectorPath=(id:string,name:string,points:Point2D[],closed=true):GraphicLayer=>{const xs=points.map(p=>p.x),ys=points.map(p=>p.y),left=Math.min(...xs),top=Math.min(...ys),right=Math.max(...xs),bottom=Math.max(...ys);return{id,name,type:'vector',visible:true,locked:false,opacity:1,x:left,y:top,width:Math.max(1,right-left),height:Math.max(1,bottom-top),fill:'#00f0ff22',stroke:'#00f0ff',strokeWidth:2,path:{closed,points:points.map((p,index)=>({id:`${id}_p${index}`,x:p.x-left,y:p.y-top}))}};};
+export const moveGraphicPathPoint=(document:MioGraphicDocument,layerId:string,pointId:string,point:Point2D):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id!==layerId||layer.locked||!layer.path?layer:{...layer,path:{...layer.path,points:layer.path.points.map(item=>item.id===pointId?{...item,x:point.x,y:point.y}:item)}})});
+export const setGraphicPathPointHandles=(document:MioGraphicDocument,layerId:string,pointId:string,inHandle?:Point2D,outHandle?:Point2D):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id!==layerId||layer.locked||!layer.path?layer:{...layer,path:{...layer.path,points:layer.path.points.map(item=>item.id===pointId?{...item,inX:inHandle?.x,inY:inHandle?.y,outX:outHandle?.x,outY:outHandle?.y}:item)}})});
+export const toggleGraphicPathClosed=(document:MioGraphicDocument,layerId:string):MioGraphicDocument=>({...document,layers:document.layers.map(layer=>layer.id===layerId&&!layer.locked&&layer.path?{...layer,path:{...layer.path,closed:!layer.path.closed}}:layer)});
+
 export type AlignmentAxis = 'left'|'centerX'|'right'|'top'|'centerY'|'bottom';
 export type DistributionAxis = 'horizontal'|'vertical';
 
