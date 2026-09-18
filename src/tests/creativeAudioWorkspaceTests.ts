@@ -1,4 +1,4 @@
-import { audibleMusicTracks, envelopeTimes, musicStepDuration } from '../creative/AudioWorkspace';
+import { audibleMusicTracks, envelopeTimes, estimateTrackPeak, musicStepDuration, normalizeMusicProject, normalizeSFXPatch, quantizeNoteEvent, transposeNotes } from '../creative/AudioWorkspace';
 import { createCreativeWorkspaceId, migrateLegacyCreativeDocument } from '../creative/CreativeDocumentFactory';
 import { CreativeDocumentKernel } from '../creative/CreativeDocumentKernel';
 import { createStudioStateCommand } from '../creative/useCreativeStudioDocument';
@@ -39,6 +39,20 @@ export async function runCreativeAudioWorkspaceTests(): Promise<{ passed: number
     assert((musicKernel.snapshot().metadata.legacyData as MioMusicProject).tracks[0].solo === true, 'music solo edit was not stored');
     musicKernel.undo(); musicKernel.redo();
     assert((musicKernel.snapshot().metadata.legacyData as MioMusicProject).tracks[0].pan === -.6, 'music mixer redo failed');
+  }));
+  results.push(await test('Music authoring helpers quantize, transpose, de-duplicate and meter safely', () => {
+    const note = quantizeNoteEvent({ id: 'n', pitch: 60.4, startStep: 3, durationSteps: 3, velocity: 1.4 }, 2, 16);
+    assert(note.startStep === 4 && note.durationSteps === 4 && note.velocity === 1 && note.pitch === 60, 'quantize did not normalize note');
+    assert(transposeNotes([note], 80)[0].pitch === 127, 'transpose did not clamp MIDI pitch');
+    const project = normalizeMusicProject({ tempo: 999, key: 'C', scale: 'Major', totalSteps: 16, tracks: [musicTrack('lead', { volume: 2, pan: -4, notes: [note, { ...note, id: 'duplicate' }] })] });
+    assert(project.tempo === 300 && project.tracks[0].notes.length === 1, 'project normalization failed');
+    assert(estimateTrackPeak(project.tracks[0]) === 1, 'track peak estimate is incorrect');
+  }));
+  results.push(await test('SFX patch normalization clamps unsafe synthesis and effect values', () => {
+    const normalized = normalizeSFXPatch({ name: 'Unsafe', category: 'IMPACT', duration: 999, layers: [{ ...sfxLayer(), baseFrequency: -1, filterCutoff: 99999, delayFeedback: 2, reverbMix: -1, volume: 4 }] });
+    assert(normalized.duration === 60, 'patch duration was not bounded');
+    assert(normalized.layers[0].baseFrequency === 20 && normalized.layers[0].filterCutoff === 20000, 'frequency bounds failed');
+    assert(normalized.layers[0].delayFeedback === .85 && normalized.layers[0].reverbMix === 0 && normalized.layers[0].volume === 1, 'effect bounds failed');
   }));
   for (const result of results) console.log(`${result.passed ? '✓' : '✗'} [${result.passed ? 'PASS' : 'FAIL'}] ${result.name}${result.error ? ` — ${result.error}` : ''}`);
   return { passed: results.filter((item) => item.passed).length, total: results.length };
