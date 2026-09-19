@@ -11,3 +11,5 @@ export * from "./viewport";
 export * from "./workspaceController";
 export * from "./gestureTransaction";
 export * from "./timelineCommands";
+
+export * from './graphEditor';
