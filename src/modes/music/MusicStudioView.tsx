@@ -53,7 +53,7 @@ export const MusicStudioView: React.FC = () => {
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentStepRef = useRef(currentStep);
-  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);clearLiveTrackChannels();},[]);
+  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);clearLiveTrackChannels();},[clearLiveTrackChannels]);
   const transportGenerationRef = useRef(0);
   const schedulerRef = useRef<number | null>(null);
   const transportRevisionRef = useRef(0);
@@ -155,13 +155,13 @@ export const MusicStudioView: React.FC = () => {
     schedulerRef.current=scheduler;
 
     return()=>{window.clearInterval(scheduler);if(schedulerRef.current===scheduler)schedulerRef.current=null;for(const node of ownedNodes){try{node.disconnect();}catch{/* ended */}}};
-  },[isPlaying,project,currentStepRef.current]);
+  },[isPlaying,project,currentStep]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
   }), []);
 
-  const seekArrangementFromPointer = (clientX:number) => { const rect=arrangementTimelineRef.current?.getBoundingClientRect(); if(!rect)return; const total=project.arrangement?.totalSteps??project.totalSteps; const ratio=Math.min(1,Math.max(0,(clientX-rect.left)/rect.width)); setCurrentStep(Math.min(total-1,Math.max(0,Math.round(ratio*(total-1))))); };
+  const seekArrangementFromPointer = (clientX:number) => { const rect=arrangementTimelineRef.current?.getBoundingClientRect(); if(!rect)return; const total=project.arrangement?.totalSteps??project.totalSteps; const ratio=Math.min(1,Math.max(0,(clientX-rect.left)/rect.width)); rescheduleTransport(Math.min(total-1,Math.max(0,Math.round(ratio*(total-1))))); };
 
   const togglePlay = async () => {
     if (emergencyStop.isEmergencyStopped()) return;
@@ -236,7 +236,7 @@ export const MusicStudioView: React.FC = () => {
         <div className="flex items-center justify-between mb-3 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
           <div className="flex items-center gap-3">
             <button onClick={togglePlay} className="p-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg shadow-md shadow-cyan-500/20 flex items-center gap-2 cursor-pointer">{isPlaying ? <Square size={14} /> : <Play size={14} />}<span>{isPlaying ? 'STOP' : 'PLAY'}</span></button>
-            <button onClick={() => { setCurrentStep(0); setIsPlaying(false); }} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded cursor-pointer" title="Reset Playhead"><RotateCcw size={14} /></button>
+            <button onClick={() => { rescheduleTransport(0); setIsPlaying(false); }} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded cursor-pointer" title="Reset Playhead"><RotateCcw size={14} /></button>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">BPM:</span><input type="number" value={project.tempo} onChange={(event) => setProject((current) => ({ ...current, tempo: parseInt(event.target.value) || 120 }))} className="w-14 bg-[#141b2b] border border-gray-700 rounded px-1.5 py-0.5 text-white text-center text-xs" /></div>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">SCALE:</span><span className="text-cyan-300 font-bold">{project.key} {project.scale}</span></div>
             <button onClick={() => void exportWav()} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-gray-300"><Download size={12} />WAV</button><div className="flex items-center gap-1 border-l border-gray-800 pl-2"><button onClick={() => quantizeTrack(1)} className="rounded border border-gray-700 px-2 py-1 text-cyan-300">Q 1/16</button><button onClick={() => transposeTrack(-12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">-12</button><button onClick={() => transposeTrack(12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">+12</button></div>
