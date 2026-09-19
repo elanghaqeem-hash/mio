@@ -9,11 +9,13 @@ export const photoTilesForRegion=(documentId:string,revision:number,canvas:{widt
  return tiles;
 };
 export class PhotoTileCache<T>{
- private entries=new Map<string,{value:T;lastUsed:number}>();
- public constructor(private readonly capacity:number){if(!Number.isInteger(capacity)||capacity<1)throw new Error('Photo tile cache capacity must be a positive integer.');}
- public get(key:string):T|undefined{const e=this.entries.get(key);if(!e)return undefined;e.lastUsed=Date.now();return e.value;}
- public set(key:string,value:T):void{this.entries.set(key,{value,lastUsed:Date.now()});while(this.entries.size>this.capacity){let oldest:string|undefined,time=Infinity;for(const [k,e] of this.entries)if(e.lastUsed<time){oldest=k;time=e.lastUsed;}if(oldest)this.entries.delete(oldest);else break;}}
+ private entries=new Map<string,{value:T;lastUsed:number;bytes:number}>();
+ private clock=0; private bytesUsed=0;
+ public constructor(private readonly capacity:number,private readonly byteBudget=Infinity){if(!Number.isInteger(capacity)||capacity<1)throw new Error('Photo tile cache capacity must be a positive integer.');if(byteBudget<=0)throw new Error('Photo tile cache byte budget must be positive.');}
+ public get(key:string):T|undefined{const e=this.entries.get(key);if(!e)return undefined;e.lastUsed=++this.clock;return e.value;}
+ public set(key:string,value:T,bytes=1):void{if(!Number.isFinite(bytes)||bytes<0)throw new Error('Photo tile cache entry bytes must be finite and non-negative.');const previous=this.entries.get(key);if(previous)this.bytesUsed-=previous.bytes;this.entries.set(key,{value,lastUsed:++this.clock,bytes});this.bytesUsed+=bytes;while(this.entries.size>this.capacity||this.bytesUsed>this.byteBudget){let oldest:string|undefined,time=Infinity;for(const [k,e] of this.entries)if(e.lastUsed<time){oldest=k;time=e.lastUsed;}if(!oldest)break;const removed=this.entries.get(oldest);if(removed)this.bytesUsed-=removed.bytes;this.entries.delete(oldest);}}
  public has(key:string):boolean{return this.entries.has(key);}
- public clear():void{this.entries.clear();}
+ public clear():void{this.entries.clear();this.bytesUsed=0;}
  public get size():number{return this.entries.size;}
+ public get bytes():number{return this.bytesUsed;}
 }
