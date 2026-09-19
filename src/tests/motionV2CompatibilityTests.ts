@@ -73,6 +73,20 @@ export async function runMotionV2CompatibilityTests(): Promise<{ passed: number;
     if (at30.interpolation.type === "bezier") assert(at30.interpolation.out[0] === 0, "same-frame interpolation priority must prefer X");
   });
 
+  run("legacy easing identity survives V2 round trip", () => {
+    const easingProject: MioMotionProject = {
+      ...project,
+      tracks: [{ id: "tr", nodeId: "title", property: "rotation", keyframes: [
+        { id: "r0", time: 0, value: 0, interpolation: "easeIn" },
+        { id: "r1", time: .5, value: 45, interpolation: "easeOut" },
+        { id: "r2", time: 1, value: 90, interpolation: "easeInOut" },
+      ] }],
+    };
+    const projected = applyV2ToLegacyMotionProject(easingProject, legacyMotionProjectToV2(easingProject));
+    const rotation = projected.tracks.find(track => track.property === "rotation");
+    assert(rotation?.keyframes.map(key => key.interpolation).join(",") === "easeIn,easeOut,easeInOut", "easing identity changed");
+  });
+
   run("legacy scalar scale round-trips through V2 vector scale", () => {
     const scaleProject: MioMotionProject = {
       ...project,
