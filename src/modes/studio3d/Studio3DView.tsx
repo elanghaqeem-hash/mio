@@ -29,6 +29,7 @@ import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
 import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
 import { insetMeshFace } from './modeling/MeshFaceInset';
+import { insetMeshRegion } from './modeling/MeshRegionInset';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -514,6 +515,13 @@ export const Studio3DView: React.FC = () => {
     setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [result.insetFaceId] });
   };
 
+  const insetSelectedRegion = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2) return;
+    const result = insetMeshRegion(selectedObj.mesh, meshSelection.faceIds, insetRatio);
+    updateSelectedObject({ mesh: result.mesh });
+    setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.insetFaceIds });
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -544,6 +552,7 @@ export const Studio3DView: React.FC = () => {
           <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude Face</button>
           <button onClick={extrudeSelectedRegion} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2} className="rounded bg-cyan-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude Region</button>
           <button onClick={insetSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-violet-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Inset Face</button>
+          <button onClick={insetSelectedRegion} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2} className="rounded bg-fuchsia-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Inset Region</button>
           <input type="number" min="0.01" max="0.99" step="0.05" value={insetRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setInsetRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Inset ratio (0-1)" />
           <input type="number" step="0.05" value={extrudeDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && Math.abs(next) > Number.EPSILON) setExtrudeDistance(next); }} className="w-16 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Extrude distance; negative values extrude inward" />
           <label className="flex items-center gap-1 px-1 text-[10px] text-gray-300"><input type="checkbox" checked={transformSnapEnabled} onChange={(event) => setTransformSnapEnabled(event.target.checked)} className="accent-amber-400" /> SNAP</label>
