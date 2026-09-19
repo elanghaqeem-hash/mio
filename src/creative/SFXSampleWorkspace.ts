@@ -27,8 +27,8 @@ export const moveSampleRegion=(r:SFXSampleRegion,timelineStart:number):SFXSample
 export const splitSampleRegion=(r:SFXSampleRegion,a:SFXSampleAsset,offset:number,leftId:string,rightId:string):[SFXSampleRegion,SFXSampleRegion]|null=>{
  const n=normalizeSampleRegion(r,a),duration=n.sourceEnd-n.sourceStart;if(offset<=.001||offset>=duration-.001)return null;
  const splitSource=n.reverse?n.sourceEnd-offset:n.sourceStart+offset,boundary=clamp(splitSource,n.sourceStart+.001,n.sourceEnd-.001);
- const left=normalizeSampleRegion({...n,id:leftId,name:`${n.name} A`,sourceEnd:boundary,fadeOut:0,loop:false},a);
- const right=normalizeSampleRegion({...n,id:rightId,name:`${n.name} B`,sourceStart:boundary,timelineStart:n.timelineStart+offset/effectivePlaybackRate(n),fadeIn:0,loop:false},a);
+ const left=normalizeSampleRegion(n.reverse?{...n,id:leftId,name:`${n.name} A`,sourceStart:boundary,fadeOut:0,loop:false}:{...n,id:leftId,name:`${n.name} A`,sourceEnd:boundary,fadeOut:0,loop:false},a);
+ const right=normalizeSampleRegion(n.reverse?{...n,id:rightId,name:`${n.name} B`,sourceEnd:boundary,timelineStart:n.timelineStart+offset/effectivePlaybackRate(n),fadeIn:0,loop:false}:{...n,id:rightId,name:`${n.name} B`,sourceStart:boundary,timelineStart:n.timelineStart+offset/effectivePlaybackRate(n),fadeIn:0,loop:false},a);
  return [left,right];
 };
 export const regionGainAt=(r:SFXSampleRegion,localTime:number)=>{
