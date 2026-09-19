@@ -55,6 +55,7 @@ export const MusicStudioView: React.FC = () => {
   const currentStepRef = useRef(currentStep);
   const transportGenerationRef = useRef(0);
   const schedulerRef = useRef<number | null>(null);
+  const transportRevisionRef = useRef(0);
   const trackChannelRef=useRef<Map<string,{input:GainNode;volume:GainNode;panner:StereoPannerNode;output:GainNode;sends:Map<string,GainNode>}>>(new Map());
   const returnChannelRef=useRef<Map<string,{input:GainNode;output:GainNode}>>(new Map());
   const liveFxParamRef=useRef<Map<string,{amount?:AudioParam;mix?:AudioParam;feedback?:AudioParam;resonance?:AudioParam}>>(new Map());
@@ -101,6 +102,7 @@ export const MusicStudioView: React.FC = () => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
     transportGenerationRef.current += 1;
+    transportRevisionRef.current += 1;
     const generation = transportGenerationRef.current;
     if (!isPlaying) { if(schedulerRef.current!==null){window.clearInterval(schedulerRef.current);schedulerRef.current=null;} clearLiveTrackChannels(); return; }
 
@@ -111,6 +113,7 @@ export const MusicStudioView: React.FC = () => {
     const tickMs = 25;
     const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
     const transportOrigin = ctx.currentTime - (currentStepRef.current * stepDuration);
+    const revision = transportRevisionRef.current;
     const scheduled = new Set<string>();
     const ownedNodes = new Set<AudioNode>();
 
@@ -122,7 +125,7 @@ export const MusicStudioView: React.FC = () => {
       for(const track of audibleMusicTracks(project.tracks)){
         const runtimeNotes=project.arrangement?project.arrangement.clips.filter((clip)=>clip.trackId===track.id).flatMap((clip)=>notesForClip(track,clip)):track.notes;
         for(const note of runtimeNotes.filter((candidate)=>candidate.startStep===step)){
-          if(generation!==transportGenerationRef.current)return; const oscillator=ctx.createOscillator(),gain=ctx.createGain(),channel=ensureLiveTrackChannel(ctx,track,step); ownedNodes.add(oscillator);ownedNodes.add(gain);
+          if(generation!==transportGenerationRef.current||revision!==transportRevisionRef.current)return; const oscillator=ctx.createOscillator(),gain=ctx.createGain(),channel=ensureLiveTrackChannel(ctx,track,step); ownedNodes.add(oscillator);ownedNodes.add(gain);
           scheduleLiveAutomation(track,step,when);
           oscillator.frequency.setValueAtTime(440*Math.pow(2,(note.pitch-69)/12),when);
           oscillator.type=track.instrument==='sub_bass'?'sine':track.instrument==='synth_pad'?'triangle':'sawtooth';
