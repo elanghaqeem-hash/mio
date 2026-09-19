@@ -73,6 +73,21 @@ export async function runMotionV2CompatibilityTests(): Promise<{ passed: number;
     if (at30.interpolation.type === "bezier") assert(at30.interpolation.out[0] === 0, "same-frame interpolation priority must prefer X");
   });
 
+  run("legacy scalar scale round-trips through V2 vector scale", () => {
+    const scaleProject: MioMotionProject = {
+      ...project,
+      tracks: [...project.tracks, { id: "ts", nodeId: "title", property: "scale", keyframes: [{ id: "s0", time: 0, value: 1, interpolation: "linear" }, { id: "s1", time: 1, value: 2, interpolation: "easeInOut" }] }],
+    };
+    const v2 = legacyMotionProjectToV2(scaleProject);
+    const scale = v2.compositions[0].layers[0].transform.scale;
+    assert(scale.defaultValue[0] === 1 && scale.defaultValue[1] === 1, "scale default vectorization failed");
+    assert(scale.keyframes[1].value[0] === 2 && scale.keyframes[1].value[1] === 2, "scale key vectorization failed");
+    const projected = applyV2ToLegacyMotionProject(scaleProject, v2);
+    const legacyScale = projected.tracks.find(track => track.nodeId === "title" && track.property === "scale");
+    assert(legacyScale?.keyframes[1].value === 2, "scale reverse projection failed");
+    assert(projected.layers[0].scale === 1, "scale default reverse projection failed");
+  });
+
   run("V2 edits project through reverse legacy projection", () => {
     const v2 = legacyMotionProjectToV2(project);
     const edited = structuredClone(v2);
