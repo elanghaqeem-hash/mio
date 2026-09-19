@@ -102,3 +102,23 @@ export const moveMotionKeyframesCommand = (
       .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id)),
   };
 });
+
+export const updateMotionTransformDefaultsCommand = (
+  compositionId: string, layerId: string,
+  changes: Partial<{ position: readonly [number, number]; scale: readonly [number, number]; rotation: number; opacity: number }>,
+): MotionCommand => ({
+  id: `transform-defaults:${layerId}`, label: "Update transform",
+  apply: (document) => updateComposition(document, compositionId, (composition) => ({
+    ...composition,
+    layers: composition.layers.map((layer) => layer.id !== layerId ? layer : ({
+      ...layer,
+      transform: {
+        ...layer.transform,
+        position: changes.position ? { ...layer.transform.position, defaultValue: changes.position } : layer.transform.position,
+        scale: changes.scale ? { ...layer.transform.scale, defaultValue: changes.scale } : layer.transform.scale,
+        rotation: changes.rotation === undefined ? layer.transform.rotation : { ...layer.transform.rotation, defaultValue: changes.rotation },
+        opacity: changes.opacity === undefined ? layer.transform.opacity : { ...layer.transform.opacity, defaultValue: changes.opacity },
+      },
+    })),
+  })),
+});
