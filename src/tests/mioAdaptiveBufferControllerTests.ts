@@ -1,0 +1,13 @@
+import { MioAdaptiveBufferController } from '../services/voice/MioAdaptiveBufferController';
+
+export async function runMioAdaptiveBufferControllerTests(): Promise<{passed:number;total:number}> {
+  const results:{name:string;passed:boolean;error?:string}[]=[];
+  const assert=(c:unknown,m:string)=>{if(!c)throw new Error(m)};
+  const run=(name:string,fn:()=>void)=>{try{fn();results.push({name,passed:true})}catch(e){results.push({name,passed:false,error:e instanceof Error?e.message:String(e)})}};
+  run('Adaptive target stays bounded',()=>{const c=new MioAdaptiveBufferController(); for(let i=0;i<20;i++) c.decide({condition:'constrained',bufferAheadMs:0,rebufferCount:0,firstAudibleLatencyMs:null,nowMs:i*2000}); assert(c.getTargetChunks()===4,'max bound');});
+  run('Hysteresis prevents single-sample thrash',()=>{const c=new MioAdaptiveBufferController(); const s={condition:'constrained' as const,bufferAheadMs:0,rebufferCount:0,firstAudibleLatencyMs:null,nowMs:0}; assert(c.decide(s).targetChunks===1,'premature increase'); assert(c.decide({...s,nowMs:2000}).targetChunks===2,'second sample increase');});
+  run('Cooldown blocks immediate reversal',()=>{const c=new MioAdaptiveBufferController(); const base={condition:'constrained' as const,bufferAheadMs:0,rebufferCount:0,firstAudibleLatencyMs:null}; c.decide({...base,nowMs:0}); c.decide({...base,nowMs:2000}); assert(c.getTargetChunks()===2,'increase'); const d=c.decide({condition:'fast',bufferAheadMs:5000,rebufferCount:0,firstAudibleLatencyMs:null,nowMs:2500}); assert(d.reason==='hold'&&d.targetChunks===2,'cooldown');});
+  run('Rebuffer guard increases target immediately but remains bounded',()=>{const c=new MioAdaptiveBufferController(); const d=c.decide({condition:'stable',bufferAheadMs:300,rebufferCount:1,firstAudibleLatencyMs:null,nowMs:0}); assert(d.reason==='rebuffer-guard'&&d.targetChunks===2,'guard');});
+  run('Fast network with sustained headroom decreases one step',()=>{const c=new MioAdaptiveBufferController({minChunks:1,maxChunks:4,increaseThresholdMs:900,decreaseThresholdMs:2400,rebufferGuardCount:1,hysteresisSamples:2,cooldownMs:0}); const s={condition:'constrained' as const,bufferAheadMs:0,rebufferCount:0,firstAudibleLatencyMs:null}; c.decide({...s,nowMs:0}); c.decide({...s,nowMs:1}); assert(c.getTargetChunks()===2,'setup'); const f={condition:'fast' as const,bufferAheadMs:5000,rebufferCount:0,firstAudibleLatencyMs:null}; c.decide({...f,nowMs:2}); const d=c.decide({...f,nowMs:3}); assert(d.reason==='decrease'&&d.targetChunks===1,'decrease');});
+  return {passed:results.filter(r=>r.passed).length,total:results.length};
+}
