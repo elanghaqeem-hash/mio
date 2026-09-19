@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MioMusicProject, NoteEvent, MusicTrack } from '../../types/creative';
 import { Download, Play, Square, Music, Plus, ShieldCheck, RotateCcw, Trash2 } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -53,6 +53,7 @@ export const MusicStudioView: React.FC = () => {
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentStepRef = useRef(currentStep);
+  const [transportEpoch,setTransportEpoch]=useState(0);
   const transportGenerationRef = useRef(0);
   const schedulerRef = useRef<number | null>(null);
   const transportRevisionRef = useRef(0);
@@ -95,6 +96,7 @@ export const MusicStudioView: React.FC = () => {
   const ensureLiveReturnChannel=(ctx:AudioContext,bus:NonNullable<MioMusicProject['returnBuses']>[number],track:MusicTrack,step:number)=>{const existing=returnChannelRef.current.get(bus.id);if(existing)return existing;const input=ctx.createGain(),output=ctx.createGain();output.gain.value=bus.volume;connectTrackEffects(ctx,input,{...track,effects:[bus.effect]},output,step);output.connect(ctx.destination);returnChannelRef.current.set(bus.id,{input,output});return {input,output};};
   const ensureLiveTrackChannel=(ctx:AudioContext,track:MusicTrack,step:number)=>{const existing=trackChannelRef.current.get(track.id);if(existing)return existing;const input=ctx.createGain(),volume=ctx.createGain(),panner=ctx.createStereoPanner(),output=ctx.createGain(),sends=new Map<string,GainNode>();volume.gain.value=automationValue(track.id,'volume',step)??track.volume;input.connect(volume);volume.connect(panner);connectTrackEffects(ctx,panner,track,output,step,true);output.connect(ctx.destination);for(const send of track.sends??[]){const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId),level=automationValue(track.id,'sendLevel',step,send.busId)??send.level;if(!send.enabled||!bus)continue;const sendGain=ctx.createGain();sendGain.gain.value=Math.max(0,level);panner.connect(sendGain);sendGain.connect(ensureLiveReturnChannel(ctx,bus,track,step).input);sends.set(send.busId,sendGain);}const channel={input,volume,panner,output,sends};trackChannelRef.current.set(track.id,channel);return channel;};
   const clearLiveTrackChannels=()=>{for(const channel of trackChannelRef.current.values()){try{channel.input.disconnect();channel.volume.disconnect();channel.panner.disconnect();channel.output.disconnect();for(const send of channel.sends.values())send.disconnect();}catch{/* already disconnected */}}trackChannelRef.current.clear();for(const channel of returnChannelRef.current.values()){try{channel.input.disconnect();channel.output.disconnect();}catch{/* already disconnected */}}returnChannelRef.current.clear();liveFxParamRef.current.clear();};
+  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);setTransportEpoch(epoch=>epoch+1);clearLiveTrackChannels();},[]);
 
   useEffect(() => { currentStepRef.current=currentStep; }, [currentStep]);
 
@@ -154,13 +156,13 @@ export const MusicStudioView: React.FC = () => {
     schedulerRef.current=scheduler;
 
     return()=>{window.clearInterval(scheduler);if(schedulerRef.current===scheduler)schedulerRef.current=null;for(const node of ownedNodes){try{node.disconnect();}catch{/* ended */}}};
-  },[isPlaying,project]);
+  },[isPlaying,project,transportEpoch]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
   }), []);
 
-  const seekArrangementFromPointer = (clientX:number) => { const rect=arrangementTimelineRef.current?.getBoundingClientRect(); if(!rect)return; const total=project.arrangement?.totalSteps??project.totalSteps; const ratio=Math.min(1,Math.max(0,(clientX-rect.left)/rect.width)); setCurrentStep(Math.min(total-1,Math.max(0,Math.round(ratio*(total-1))))); };
+  const seekArrangementFromPointer = (clientX:number) => { const rect=arrangementTimelineRef.current?.getBoundingClientRect(); if(!rect)return; const total=project.arrangement?.totalSteps??project.totalSteps; const ratio=Math.min(1,Math.max(0,(clientX-rect.left)/rect.width)); rescheduleTransport(Math.min(total-1,Math.max(0,Math.round(ratio*(total-1))))); };
 
   const togglePlay = async () => {
     if (emergencyStop.isEmergencyStopped()) return;
@@ -235,7 +237,7 @@ export const MusicStudioView: React.FC = () => {
         <div className="flex items-center justify-between mb-3 bg-[#0d121d] p-3 rounded-xl border border-gray-800">
           <div className="flex items-center gap-3">
             <button onClick={togglePlay} className="p-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg shadow-md shadow-cyan-500/20 flex items-center gap-2 cursor-pointer">{isPlaying ? <Square size={14} /> : <Play size={14} />}<span>{isPlaying ? 'STOP' : 'PLAY'}</span></button>
-            <button onClick={() => { setCurrentStep(0); setIsPlaying(false); }} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded cursor-pointer" title="Reset Playhead"><RotateCcw size={14} /></button>
+            <button onClick={() => { rescheduleTransport(0); setIsPlaying(false); }} className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded cursor-pointer" title="Reset Playhead"><RotateCcw size={14} /></button>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">BPM:</span><input type="number" value={project.tempo} onChange={(event) => setProject((current) => ({ ...current, tempo: parseInt(event.target.value) || 120 }))} className="w-14 bg-[#141b2b] border border-gray-700 rounded px-1.5 py-0.5 text-white text-center text-xs" /></div>
             <div className="flex items-center gap-2 border-l border-gray-800 pl-3"><span className="text-gray-400">SCALE:</span><span className="text-cyan-300 font-bold">{project.key} {project.scale}</span></div>
             <button onClick={() => void exportWav()} className="flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-gray-300"><Download size={12} />WAV</button><div className="flex items-center gap-1 border-l border-gray-800 pl-2"><button onClick={() => quantizeTrack(1)} className="rounded border border-gray-700 px-2 py-1 text-cyan-300">Q 1/16</button><button onClick={() => transposeTrack(-12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">-12</button><button onClick={() => transposeTrack(12)} className="rounded border border-gray-700 px-2 py-1 text-gray-300">+12</button></div>
