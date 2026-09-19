@@ -33,6 +33,7 @@ import { insetMeshRegion } from './modeling/MeshRegionInset';
 import { weldMeshVertices, weldMeshVerticesByDistance } from './modeling/MeshVertexWeld';
 import { dissolveMeshEdge } from './modeling/MeshEdgeDissolve';
 import { cleanupMeshTopology, diagnoseMeshTopology } from './modeling/MeshTopologyDiagnostics';
+import { flipMeshFaces, recalculateMeshWinding } from './modeling/MeshFaceWinding';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -96,6 +97,7 @@ export const Studio3DView: React.FC = () => {
   );
   const duplicateFaceCount = selectedMeshDiagnostics?.duplicateFaceGroups.reduce((count, group) => count + Math.max(0, group.length - 1), 0) ?? 0;
   const canSafeCleanupMesh = Boolean((selectedMeshDiagnostics?.isolatedVertexIds.length ?? 0) > 0 || duplicateFaceCount > 0);
+  const canRecalculateWinding = Boolean(selectedObj?.mesh && (selectedMeshDiagnostics?.nonManifoldEdgeIds.length ?? 0) === 0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -581,6 +583,38 @@ export const Studio3DView: React.FC = () => {
     });
   };
 
+  const flipSelectedFaces = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'face' || meshSelection.faceIds.length < 1) return;
+    const result = flipMeshFaces(selectedObj.mesh, meshSelection.faceIds);
+    updateSelectedObject({ mesh: result.mesh });
+    setMeshSelection((previous) => normalizeMeshSelection(result.mesh, previous));
+    eventBus.emit('ACTIVITY_LOG', {
+      timestamp: activityTimestamp(),
+      message: `Flipped winding for ${result.flippedFaceIds.length} selected face(s).`,
+      mode: '3D',
+    });
+  };
+
+  const recalculateSelectedMeshWinding = () => {
+    if (!selectedObj?.mesh || !canRecalculateWinding) return;
+    try {
+      const result = recalculateMeshWinding(selectedObj.mesh);
+      updateSelectedObject({ mesh: result.mesh });
+      setMeshSelection((previous) => normalizeMeshSelection(result.mesh, previous));
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Recalculated mesh winding across ${result.componentCount} component(s); flipped ${result.flippedFaceIds.length} face(s).`,
+        mode: '3D',
+      });
+    } catch (reason) {
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Winding recalculation rejected: ${reason instanceof Error ? reason.message : String(reason)}`,
+        mode: '3D',
+      });
+    }
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -616,6 +650,8 @@ export const Studio3DView: React.FC = () => {
           <button onClick={weldSelectedVerticesByDistance} disabled={meshSelection.mode !== 'vertex' || meshSelection.vertexIds.length < 2} className="rounded bg-lime-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Weld Distance</button>
           <button onClick={dissolveSelectedEdge} disabled={!canDissolveSelectedEdge} title="Requires one internal manifold edge with matching material slots" className="rounded bg-rose-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Dissolve Edge</button>
           <button onClick={safeCleanupSelectedMesh} disabled={!canSafeCleanupMesh} title="Removes exact same-material duplicate faces and isolated vertices only" className="rounded bg-sky-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Safe Cleanup</button>
+          <button onClick={flipSelectedFaces} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 1} title="Reverse winding for selected faces" className="rounded bg-orange-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Flip Faces</button>
+          <button onClick={recalculateSelectedMeshWinding} disabled={!canRecalculateWinding} title="Make connected face winding internally consistent; does not guess global outward direction" className="rounded bg-indigo-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Recalc Winding</button>
           <input type="number" min="0.0001" step="0.01" value={weldDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0) setWeldDistance(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Weld-by-distance threshold" />
           <input type="number" min="0.01" max="0.99" step="0.05" value={insetRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setInsetRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Inset ratio (0-1)" />
           <input type="number" step="0.05" value={extrudeDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && Math.abs(next) > Number.EPSILON) setExtrudeDistance(next); }} className="w-16 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Extrude distance; negative values extrude inward" />
