@@ -18,8 +18,7 @@ export function runSFXUnifiedGraphContractTests(){
   assert.equal(n1.getData().length,8);assert.deepEqual(Array.from(n1.getData()),Array.from(n2.getData()));assert.ok(Array.from(n1.getData()).every(v=>v>=-1&&v<=1));passed++;
 
   const filter:any={...connectable(),type:''},distortion:any={...connectable(),curve:null,oversample:'none'},envelope:any=connectable(),dry:any=connectable(),delay:any=connectable(),feedback:any=connectable(),wet:any=connectable(),destination:any={};
-  const graphContext:any={createBiquadFilter:()=>filter,createWaveShaper:()=>distortion,createGain:()=>[envelope,dry,feedback,wet].shift?.(),createDelay:()=>delay};
-  const gains=[envelope,dry,feedback,wet];let gainIndex=0;graphContext.createGain=()=>gains[gainIndex++];
+  const gains=[envelope,dry,feedback,wet];let gainIndex=0;const graphContext:any={createBiquadFilter:()=>filter,createWaveShaper:()=>distortion,createGain:()=>gains[gainIndex++],createDelay:()=>delay};
   const graph=createSFXSharedDSPGraph(graphContext,destination);
   assert.equal(graph.input,filter);assert.equal(filter.type,'lowpass');assert.ok(filter.connections.includes(distortion));assert.ok(dry.connections.includes(destination));assert.ok(wet.connections.includes(destination));passed++;
 
