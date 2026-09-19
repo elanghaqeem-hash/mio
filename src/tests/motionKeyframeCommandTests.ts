@@ -1,5 +1,5 @@
 import { MotionCommandBus } from "../creative/motion/commands";
-import { deleteMotionKeyframeCommand, moveMotionKeyframesCommand, moveMotionKeyframeCommand, setMotionKeyframeInterpolationCommand, timelineTransaction, upsertMotionKeyframeCommand } from "../creative/motion/timelineCommands";
+import { deleteMotionKeyframeCommand, moveMotionKeyframesCommand, moveMotionKeyframeCommand, setMotionKeyframeInterpolationCommand, timelineTransaction, updateMotionTransformDefaultsCommand, upsertMotionKeyframeCommand } from "../creative/motion/timelineCommands";
 import type { MotionDocument } from "../creative/motion/model";
 
 const assert=(ok:unknown,msg:string)=>{if(!ok)throw new Error(`Motion keyframe command test failed: ${msg}`)};
@@ -21,6 +21,10 @@ export function runMotionKeyframeCommandTests():void{
  ]));
  track=bus.document.compositions[0].layers[0].transform.position;
  assert(track.keyframes.map(k=>k.frame).join(",")==="20,25","group movement");
+  bus.execute(timelineTransaction("transform","Transform defaults",[updateMotionTransformDefaultsCommand("comp","layer",{position:[300,400],scale:[150,150],rotation:25,opacity:80})]));
+  const transformed=bus.document.compositions[0].layers[0].transform;
+  assert(transformed.position.defaultValue[0]===300 && transformed.position.defaultValue[1]===400,"position default");
+  assert(transformed.scale.defaultValue[0]===150 && transformed.rotation.defaultValue===25 && transformed.opacity.defaultValue===80,"transform defaults");
  bus.execute(timelineTransaction("upsert","Upsert",[
   upsertMotionKeyframeCommand("comp","layer","position",{id:"p3",frame:30,value:[200,200],interpolation:{type:"linear"}}),
  ]));
