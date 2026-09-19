@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MioMusicProject, NoteEvent, MusicTrack } from '../../types/creative';
 import { Download, Play, Square, Music, Plus, ShieldCheck, RotateCcw, Trash2 } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -53,7 +53,7 @@ export const MusicStudioView: React.FC = () => {
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentStepRef = useRef(currentStep);
-  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);clearLiveTrackChannels();},[clearLiveTrackChannels]);
+  const [transportEpoch,setTransportEpoch]=useState(0);
   const transportGenerationRef = useRef(0);
   const schedulerRef = useRef<number | null>(null);
   const transportRevisionRef = useRef(0);
@@ -96,6 +96,7 @@ export const MusicStudioView: React.FC = () => {
   const ensureLiveReturnChannel=(ctx:AudioContext,bus:NonNullable<MioMusicProject['returnBuses']>[number],track:MusicTrack,step:number)=>{const existing=returnChannelRef.current.get(bus.id);if(existing)return existing;const input=ctx.createGain(),output=ctx.createGain();output.gain.value=bus.volume;connectTrackEffects(ctx,input,{...track,effects:[bus.effect]},output,step);output.connect(ctx.destination);returnChannelRef.current.set(bus.id,{input,output});return {input,output};};
   const ensureLiveTrackChannel=(ctx:AudioContext,track:MusicTrack,step:number)=>{const existing=trackChannelRef.current.get(track.id);if(existing)return existing;const input=ctx.createGain(),volume=ctx.createGain(),panner=ctx.createStereoPanner(),output=ctx.createGain(),sends=new Map<string,GainNode>();volume.gain.value=automationValue(track.id,'volume',step)??track.volume;input.connect(volume);volume.connect(panner);connectTrackEffects(ctx,panner,track,output,step,true);output.connect(ctx.destination);for(const send of track.sends??[]){const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId),level=automationValue(track.id,'sendLevel',step,send.busId)??send.level;if(!send.enabled||!bus)continue;const sendGain=ctx.createGain();sendGain.gain.value=Math.max(0,level);panner.connect(sendGain);sendGain.connect(ensureLiveReturnChannel(ctx,bus,track,step).input);sends.set(send.busId,sendGain);}const channel={input,volume,panner,output,sends};trackChannelRef.current.set(track.id,channel);return channel;};
   const clearLiveTrackChannels=()=>{for(const channel of trackChannelRef.current.values()){try{channel.input.disconnect();channel.volume.disconnect();channel.panner.disconnect();channel.output.disconnect();for(const send of channel.sends.values())send.disconnect();}catch{/* already disconnected */}}trackChannelRef.current.clear();for(const channel of returnChannelRef.current.values()){try{channel.input.disconnect();channel.output.disconnect();}catch{/* already disconnected */}}returnChannelRef.current.clear();liveFxParamRef.current.clear();};
+  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);setTransportEpoch(epoch=>epoch+1);clearLiveTrackChannels();},[]);
 
   useEffect(() => { currentStepRef.current=currentStep; }, [currentStep]);
 
@@ -155,7 +156,7 @@ export const MusicStudioView: React.FC = () => {
     schedulerRef.current=scheduler;
 
     return()=>{window.clearInterval(scheduler);if(schedulerRef.current===scheduler)schedulerRef.current=null;for(const node of ownedNodes){try{node.disconnect();}catch{/* ended */}}};
-  },[isPlaying,project,currentStep]);
+  },[isPlaying,project,transportEpoch]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
