@@ -28,6 +28,7 @@ import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperatio
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
+import { pickMeshEdgeScreenSpace, pickMeshVertexScreenSpace } from './modeling/MeshComponentPicking';
 import { BufferGeometry as ThreeBufferGeometry, Float32BufferAttribute } from 'three';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
@@ -270,17 +271,40 @@ export const Studio3DView: React.FC = () => {
   }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (workspaceMode !== 'edit' || meshSelection.mode !== 'face' || !selectedObj?.mesh) return;
+    if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const mesh = meshMapRef.current.get(selectedObj.id);
     const projection = meshProjectionMapRef.current.get(selectedObj.id);
-    if (!renderer || !camera || !mesh || !projection) return;
+    if (!renderer || !camera || !mesh) return;
     const rect = renderer.domElement.getBoundingClientRect();
     const pointer = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
+    const screenPointer = new Vector2(event.clientX - rect.left, event.clientY - rect.top);
+    if (meshSelection.mode === 'vertex') {
+      const picked = pickMeshVertexScreenSpace(selectedObj.mesh, mesh, camera, screenPointer, rect.width, rect.height);
+      if (!picked) { if (!event.shiftKey) setMeshSelection(clearMeshSelection('vertex')); return; }
+      setMeshSelection((previous) => {
+        const exists = previous.vertexIds.includes(picked.id);
+        const vertexIds = event.shiftKey ? (exists ? previous.vertexIds.filter((id) => id !== picked.id) : [...previous.vertexIds, picked.id]) : [picked.id];
+        return { mode: 'vertex', vertexIds, edgeIds: [], faceIds: [] };
+      });
+      return;
+    }
+    if (meshSelection.mode === 'edge') {
+      const picked = pickMeshEdgeScreenSpace(selectedObj.mesh, mesh, camera, screenPointer, rect.width, rect.height);
+      if (!picked) { if (!event.shiftKey) setMeshSelection(clearMeshSelection('edge')); return; }
+      setMeshSelection((previous) => {
+        const exists = previous.edgeIds.includes(picked.id);
+        const edgeIds = event.shiftKey ? (exists ? previous.edgeIds.filter((id) => id !== picked.id) : [...previous.edgeIds, picked.id]) : [picked.id];
+        return { mode: 'edge', vertexIds: [], edgeIds, faceIds: [] };
+      });
+      return;
+    }
+    const projectionForFace = meshProjectionMapRef.current.get(selectedObj.id);
+    if (!projectionForFace) return;
     const raycaster = new Raycaster();
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
@@ -288,7 +312,7 @@ export const Studio3DView: React.FC = () => {
       if (!event.shiftKey) setMeshSelection(clearMeshSelection('face'));
       return;
     }
-    const faceId = faceIdFromTriangleIndex(projection, hit.faceIndex);
+    const faceId = faceIdFromTriangleIndex(projectionForFace, hit.faceIndex);
     if (!faceId) return;
     setMeshSelection((previous) => toggleFaceSelection(previous, faceId, event.shiftKey));
   };
