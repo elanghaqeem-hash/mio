@@ -250,7 +250,7 @@ export const SFXStudioView: React.FC = () => {
     try {
     const normalized=normalizeSFXPatch(patch);
     const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]);
-    const offline = new OfflineAudioContext(1, Math.ceil(44100 * renderDuration), 44100);
+    const offline = new OfflineAudioContext(2, Math.ceil(44100 * renderDuration), 44100);
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
     master.connect(offline.destination);
