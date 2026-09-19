@@ -8,6 +8,7 @@ import { PhotoTileCache, photoTilesForRegion } from '../creative/photo/PhotoTile
 import { PhotoTileQueue, planPhotoTileQueue } from '../creative/photo/PhotoTileScheduler';
 import { blendSourceOver, createPhotoRenderSurface } from '../creative/photo/PhotoRenderer';
 import { applyPhotoMaskAlpha, compositePhotoLayer, compositePhotoLayers } from '../creative/photo/PhotoCpuCompositor';
+import { inverseMapPhotoPoint, samplePhotoPixel, transformPhotoBuffer } from '../creative/photo/PhotoTransformSampler';
 interface Result{name:string;passed:boolean;error?:string}
 const assert=(v:unknown,m:string)=>{if(!v)throw new Error(m)};
 const test=async(name:string,run:()=>void|Promise<void>):Promise<Result>=>{try{await run();return{name,passed:true}}catch(error){return{name,passed:false,error:error instanceof Error?error.message:String(error)}}};
