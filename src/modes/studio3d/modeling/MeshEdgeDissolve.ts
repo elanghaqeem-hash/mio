@@ -24,7 +24,7 @@ const complementPath=(face:MioMeshFace,a:string,b:string):string[]=>{
   const edgeIndex=directedEdgeIndex(face,a,b);
   if(edgeIndex<0)throw new Error(`Face ${face.id} does not contain directed edge ${a}->${b}.`);
   const path:string[]=[];
-  for(let step=1;step<face.vertexIds.length;step+=1)path.push(face.vertexIds[(edgeIndex+step)%face.vertexIds.length]);
+  for(let step=1;step<=face.vertexIds.length;step+=1)path.push(face.vertexIds[(edgeIndex+step)%face.vertexIds.length]);
   return path;
 };
 
