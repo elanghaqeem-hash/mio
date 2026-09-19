@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { buildWaveformPyramid, chooseWaveformLevel, type SFXRuntimeSampleEntry } from '../creative/SFXSampleRegistry';
+import { buildWaveformPyramid, chooseWaveformLevel, sampleAssetCompatible, type SFXRuntimeSampleEntry } from '../creative/SFXSampleRegistry';
 import { buildWaveformPeaks } from '../creative/SFXSampleWorkspace';
 
 const fakeBuffer=(channels:Float32Array[],sampleRate=48000)=>({
@@ -8,7 +8,7 @@ const fakeBuffer=(channels:Float32Array[],sampleRate=48000)=>({
 }) as AudioBuffer;
 
 export function runSFXWaveformRegistryContractTests(){
-  let passed=0;const total=7;
+  let passed=0;const total=8;
   const p=buildWaveformPeaks(new Float32Array([-1,-.5,0,.5,1]),3);
   assert.equal(p.length,3);passed++;
   assert.ok(p.every(x=>x.min>=-1&&x.max<=1&&x.min<=x.max));passed++;
@@ -20,5 +20,6 @@ export function runSFXWaveformRegistryContractTests(){
   assert.equal(chooseWaveformLevel(entry,999)?.buckets,5);passed++;
   const empty={waveform:[]} as unknown as SFXRuntimeSampleEntry;
   assert.equal(chooseWaveformLevel(empty,100),undefined);passed++;
+  const original={id:'a',name:'A',sampleRate:48000,channels:2,lengthSamples:96000,contentHash:'hash'};const resampled={...original,sampleRate:44100,lengthSamples:88200};assert.equal(sampleAssetCompatible(original,resampled),true);assert.equal(sampleAssetCompatible(original,{...resampled,channels:1}),false);assert.equal(sampleAssetCompatible(original,{...resampled,contentHash:'other'}),false);passed++;
   return{passed,total};
 }
