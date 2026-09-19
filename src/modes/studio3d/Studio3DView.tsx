@@ -271,12 +271,12 @@ export const Studio3DView: React.FC = () => {
   }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (workspaceMode !== 'edit' || meshSelection.mode !== 'face' || !selectedObj?.mesh) return;
+    if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const mesh = meshMapRef.current.get(selectedObj.id);
     const projection = meshProjectionMapRef.current.get(selectedObj.id);
-    if (!renderer || !camera || !mesh || !projection) return;
+    if (!renderer || !camera || !mesh) return;
     const rect = renderer.domElement.getBoundingClientRect();
     const pointer = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -303,6 +303,8 @@ export const Studio3DView: React.FC = () => {
       });
       return;
     }
+    const projectionForFace = meshProjectionMapRef.current.get(selectedObj.id);
+    if (!projectionForFace) return;
     const raycaster = new Raycaster();
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
@@ -310,7 +312,7 @@ export const Studio3DView: React.FC = () => {
       if (!event.shiftKey) setMeshSelection(clearMeshSelection('face'));
       return;
     }
-    const faceId = faceIdFromTriangleIndex(projection, hit.faceIndex);
+    const faceId = faceIdFromTriangleIndex(projectionForFace, hit.faceIndex);
     if (!faceId) return;
     setMeshSelection((previous) => toggleFaceSelection(previous, faceId, event.shiftKey));
   };
