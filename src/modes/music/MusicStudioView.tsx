@@ -97,37 +97,52 @@ export const MusicStudioView: React.FC = () => {
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
     if (!isPlaying) return;
 
-    const stepDurationMs = musicStepDuration(project.tempo) * 1000;
-    const timer = window.setInterval(() => {
-      setCurrentStep((previous) => {
-        const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
-        const next = (previous + 1) % runtimeSteps;
-        const ctx = audioCtxRef.current;
-        if (ctx?.state === 'running') {
-          const now = ctx.currentTime;
-          for (const track of audibleMusicTracks(project.tracks)) {
-            const runtimeNotes = project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes;
-            for (const note of runtimeNotes.filter((candidate) => candidate.startStep === next)) {
-              const oscillator = ctx.createOscillator();
-              const gain = ctx.createGain();
-              const channel=ensureLiveTrackChannel(ctx,track,next); scheduleLiveAutomation(track,next,now);
-              oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), now);
-              oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
-              const durationSec = note.durationSteps * musicStepDuration(project.tempo);
-              gain.gain.setValueAtTime(0.001, now);
-              gain.gain.exponentialRampToValueAtTime(note.velocity * 0.3, now + 0.02);
-              gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
-              channel.panner.pan.setValueAtTime((automationValue(track.id,'pan',next)??((track.pan+1)/2))*2-1, now); oscillator.connect(gain); gain.connect(channel.input); oscillator.start(now); oscillator.stop(now + durationSec);
-            }
-          }
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    const stepDuration = musicStepDuration(project.tempo);
+    const lookaheadSec = 0.12;
+    const tickMs = 25;
+    const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
+    const transportOrigin = ctx.currentTime - (currentStep * stepDuration);
+    const scheduled = new Set<string>();
+
+    const scheduleStep = (step:number, when:number) => {
+      const cycle=Math.floor((when-transportOrigin)/(runtimeSteps*stepDuration));
+      const key=`${cycle}:${step}`;
+      if(scheduled.has(key))return;
+      scheduled.add(key);
+      for(const track of audibleMusicTracks(project.tracks)){
+        const runtimeNotes=project.arrangement?project.arrangement.clips.filter((clip)=>clip.trackId===track.id).flatMap((clip)=>notesForClip(track,clip)):track.notes;
+        for(const note of runtimeNotes.filter((candidate)=>candidate.startStep===step)){
+          const oscillator=ctx.createOscillator(),gain=ctx.createGain(),channel=ensureLiveTrackChannel(ctx,track,step);
+          scheduleLiveAutomation(track,step,when);
+          oscillator.frequency.setValueAtTime(440*Math.pow(2,(note.pitch-69)/12),when);
+          oscillator.type=track.instrument==='sub_bass'?'sine':track.instrument==='synth_pad'?'triangle':'sawtooth';
+          const durationSec=note.durationSteps*stepDuration;
+          gain.gain.setValueAtTime(0.001,when);
+          gain.gain.exponentialRampToValueAtTime(note.velocity*0.3,when+0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001,when+durationSec);
+          oscillator.connect(gain);gain.connect(channel.input);oscillator.start(when);oscillator.stop(when+durationSec);
         }
-        return next;
-      });
-    }, stepDurationMs);
+      }
+    };
 
-    return () => window.clearInterval(timer);
-  }, [isPlaying, project]);
+    const scheduler=window.setInterval(()=>{
+      if(ctx.state!=='running')return;
+      const now=ctx.currentTime;
+      const elapsed=Math.max(0,now-transportOrigin);
+      const first=Math.floor(elapsed/stepDuration);
+      const horizon=now+lookaheadSec;
+      const last=Math.floor(Math.max(0,horizon-transportOrigin)/stepDuration);
+      for(let absolute=first;absolute<=last;absolute++){
+        const step=((absolute%runtimeSteps)+runtimeSteps)%runtimeSteps;
+        scheduleStep(step,transportOrigin+absolute*stepDuration);
+      }
+      setCurrentStep(((Math.floor(elapsed/stepDuration))%runtimeSteps+runtimeSteps)%runtimeSteps);
+    },tickMs);
 
+    return()=>window.clearInterval(scheduler);
+  },[isPlaying,project,currentStep]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
