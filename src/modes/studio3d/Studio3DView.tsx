@@ -24,7 +24,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
+import { Mio3DObject, Mio3DScene, MioMeshFace, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh, deriveMeshEdges } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
 import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
@@ -85,7 +85,7 @@ export const Studio3DView: React.FC = () => {
     : undefined;
   const selectedEdgeFaces = selectedEdgeForDissolve?.faceIds
     .map((faceId) => selectedObj?.mesh?.faces.find((face) => face.id === faceId))
-    .filter((face): face is NonNullable<typeof face> => Boolean(face)) ?? [];
+    .filter((face): face is MioMeshFace => Boolean(face)) ?? [];
   const canDissolveSelectedEdge = selectedEdgeForDissolve?.faceIds.length === 2
     && selectedEdgeFaces.length === 2
     && (selectedEdgeFaces[0].materialSlot ?? 0) === (selectedEdgeFaces[1].materialSlot ?? 0);
