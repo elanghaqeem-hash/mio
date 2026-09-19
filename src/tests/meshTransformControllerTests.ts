@@ -1,0 +1,3 @@
+import { createCubeMesh } from '../modes/studio3d/modeling/MeshTopology';
+import { applyMeshTransformDelta, createMeshTransformState } from '../modes/studio3d/modeling/MeshTransformController';
+export async function runMeshTransformControllerTests():Promise<{passed:number;total:number}>{const mesh=createCubeMesh();const selection={mode:'vertex' as const,vertexIds:['v0','v1'],edgeIds:[],faceIds:[]};const s=createMeshTransformState(mesh,selection);s.axis='x';const next=applyMeshTransformDelta(mesh,selection,s,[1,2,3]);if(next.vertices.find(v=>v.id==='v0')?.position[1]!==-0.5)throw new Error('axis constraint failed');return{passed:1,total:1};}
