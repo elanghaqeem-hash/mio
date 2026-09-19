@@ -86,6 +86,15 @@ export const setMotionKeyframeInterpolationCommand = (
   ...track, keyframes: track.keyframes.map((key) => key.id === keyframeId ? { ...key, interpolation } : key),
 }));
 
+export const setMotionBezierHandlesCommand = (
+  compositionId: string, layerId: string, trackId: string, keyframeId: string,
+  outHandle: readonly [number, number], inHandle: readonly [number, number],
+): MotionCommand => setMotionKeyframeInterpolationCommand(compositionId, layerId, trackId, keyframeId, {
+  type: "bezier",
+  out: [Math.max(0, Math.min(1, outHandle[0])), outHandle[1]],
+  in: [Math.max(0, Math.min(1, inHandle[0])), inHandle[1]],
+});
+
 export const moveMotionKeyframesCommand = (
   compositionId: string, layerId: string, trackId: string,
   keyframeIds: readonly string[], deltaFrames: number, durationFrames: number,
