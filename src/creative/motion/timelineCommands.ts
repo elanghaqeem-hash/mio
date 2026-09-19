@@ -1,6 +1,6 @@
 import type { MotionCommand, MotionTransaction } from "./commands";
 import type { MotionComposition, MotionDocument, MotionInterpolation, MotionKeyframe, MotionLayer, MotionMarker, MotionTrack } from "./model";
-import type { TimelineMarker } from "./timeline";
+import { moveSelectedKeyframes, type TimelineMarker } from "./timeline";
 
 const updateComposition = (document: MotionDocument, compositionId: string, update: (composition: MotionComposition) => MotionComposition): MotionDocument => ({
   ...document,
@@ -89,19 +89,10 @@ export const setMotionKeyframeInterpolationCommand = (
 export const moveMotionKeyframesCommand = (
   compositionId: string, layerId: string, trackId: string,
   keyframeIds: readonly string[], deltaFrames: number, durationFrames: number,
-): MotionCommand => updateMotionTrack(compositionId, layerId, trackId, (track) => {
-  const selected = new Set(keyframeIds);
-  const selectedFrames = track.keyframes.filter((key) => selected.has(key.id)).map((key) => key.frame);
-  if (!selectedFrames.length) return track;
-  const requested = Math.round(deltaFrames);
-  const minFrame = Math.min(...selectedFrames), maxFrame = Math.max(...selectedFrames);
-  const bounded = Math.max(-minFrame, Math.min(durationFrames - 1 - maxFrame, requested));
-  return {
-    ...track,
-    keyframes: track.keyframes.map((key) => selected.has(key.id) ? { ...key, frame: key.frame + bounded } : key)
-      .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id)),
-  };
-});
+): MotionCommand => updateMotionTrack(compositionId, layerId, trackId, (track) => ({
+  ...track,
+  keyframes: moveSelectedKeyframes(track.keyframes, keyframeIds, deltaFrames, 0, durationFrames - 1),
+}));
 
 export const updateMotionTransformDefaultsCommand = (
   compositionId: string, layerId: string,
