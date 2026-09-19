@@ -35,14 +35,14 @@ export const normalizeTimelineMarkers = (markers: readonly TimelineMarker[], dur
 
 export const updateMotionTrack = (
   compositionId: string, layerId: string, trackId: string,
-  update: (track: MotionTrack) => MotionTrack,
+  update: (track: MotionTrack, composition: MotionComposition) => MotionTrack,
 ): MotionCommand => ({
   id: `track:${layerId}:${trackId}`, label: "Update motion track",
   apply: (document) => updateComposition(document, compositionId, (composition) => ({
     ...composition,
     layers: composition.layers.map((layer) => {
       if (layer.id !== layerId) return layer;
-      const replace = (track: MotionTrack): MotionTrack => track.id === trackId ? update(track) : track;
+      const replace = (track: MotionTrack): MotionTrack => track.id === trackId ? update(track, composition) : track;
       return {
         ...layer,
         transform: {
@@ -68,10 +68,10 @@ export const upsertMotionKeyframeCommand = (
 
 export const moveMotionKeyframeCommand = (
   compositionId: string, layerId: string, trackId: string, keyframeId: string, frame: number,
-): MotionCommand => updateMotionTrack(compositionId, layerId, trackId, (track) => {
+): MotionCommand => updateMotionTrack(compositionId, layerId, trackId, (track, composition) => {
   const key = track.keyframes.find((item) => item.id === keyframeId);
   if (!key) throw new Error(`Keyframe not found: ${keyframeId}`);
-  return { ...track, keyframes: track.keyframes.map((item) => item.id === keyframeId ? { ...item, frame: Math.round(frame) } : item).sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id)) };
+  return { ...track, keyframes: moveSelectedKeyframes(track.keyframes, [keyframeId], Math.round(frame) - key.frame, 0, composition.durationFrames - 1) };
 });
 
 export const deleteMotionKeyframeCommand = (
