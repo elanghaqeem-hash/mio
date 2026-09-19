@@ -113,9 +113,6 @@ export function applyV2ToLegacyMotionProject(project: MioMotionProject, document
   });
   const tracks: MioMotionProject["tracks"] = [];
   for (const layer of composition.layers) {
-    const push = (property: "x"|"y"|"scale"|"rotation"|"opacity", keys: readonly MotionKeyframe<number>) => {
-      if (keys) tracks.push({ id: `track_${layer.id}_${property}`, nodeId: layer.id, property, keyframes: keys as unknown as LegacyKeyframe[] });
-    };
     const position = layer.transform.position;
     tracks.push({ id: `track_${layer.id}_x`, nodeId: layer.id, property: "x", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[0]) }, composition.fps)) });
     tracks.push({ id: `track_${layer.id}_y`, nodeId: layer.id, property: "y", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[1]) }, composition.fps)) });
