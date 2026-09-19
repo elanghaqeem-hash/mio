@@ -27,6 +27,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
+import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -496,6 +497,13 @@ export const Studio3DView: React.FC = () => {
     setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [result.capFaceId] });
   };
 
+  const extrudeSelectedRegion = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2) return;
+    const result = extrudeMeshRegion(selectedObj.mesh, meshSelection.faceIds, 0.25);
+    updateSelectedObject({ mesh: result.mesh });
+    setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.capFaceIds });
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -523,7 +531,8 @@ export const Studio3DView: React.FC = () => {
           <button onClick={() => nudgeMeshSelection(0, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">X +0.1</button>
           <button onClick={() => nudgeMeshSelection(1, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Y +0.1</button>
           <button onClick={() => nudgeMeshSelection(2, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Z +0.1</button>
-          <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude +0.25</button>
+          <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude Face +0.25</button>
+          <button onClick={extrudeSelectedRegion} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2} className="rounded bg-cyan-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude Region +0.25</button>
           <label className="flex items-center gap-1 px-1 text-[10px] text-gray-300"><input type="checkbox" checked={transformSnapEnabled} onChange={(event) => setTransformSnapEnabled(event.target.checked)} className="accent-amber-400" /> SNAP</label>
           <input type="number" min="0.001" step="0.05" value={transformSnapStep} onChange={(event) => setTransformSnapStep(Math.max(0.001, Number(event.target.value) || 0.1))} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Transform snap step" />
           <span className="px-2 text-[10px] text-gray-500">V {selectedObj.mesh.vertices.length} / F {selectedObj.mesh.faces.length}</span>
