@@ -226,13 +226,13 @@ export class MioStreamingAudioPlayer {
     this.activeAudio = audio;
     try {
       const playbackStartedAt = performance.now();
-      const playing = this.waitForPlaying(audio, generation, signal);
+      const playing = this.waitForPlaying(audio, generation, startedAt, signal);
       await audio.play();
       const firstAudibleLatencyMs = await playing;
       this.lastTelemetry = {
         bufferedBytes: bytes,
         firstChunkLatencyMs,
-        firstAudibleLatencyMs:
+        firstAudibleLatencyMs,
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'blob-fallback',
         appendCount,
