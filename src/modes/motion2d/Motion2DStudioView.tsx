@@ -135,7 +135,7 @@ export const Motion2DStudioView: React.FC = () => {
   }; window.addEventListener('keydown',onKey); return()=>window.removeEventListener('keydown',onKey); },[selectedKeyIds,keyClipboard,project.tracks,project.fps,selected,currentFrame,setProject]);
   const graphOwner=selectedKey&&selectedKeyId?resolveLegacyKeyToV2(selectedKey.track.id,selectedKeyId):null;
   const graphComponent=selectedKey?.track.property==='y'?1:0;
-  const graphSamples=graphOwner?sampleMotionGraph(graphOwner.track,0,compositionV2.durationFrames-1,graphComponent,Math.max(1,Math.round(compositionV2.durationFrames/180))):[];
+  const graphSamples=graphOwner?sampleMotionGraph(graphOwner.track,0,compositionV2.durationFrames-1,graphComponent,1):[];
   const graphRange=graphValueRange(graphSamples,graphMode);
   const graphPath=graphSamples.length?graphSamples.map((sample,index)=>{const x=sample.frame/Math.max(1,compositionV2.durationFrames-1)*100;const raw=graphMode==='value'?sample.value:sample.speed;const y=100-(raw-graphRange[0])/Math.max(.000001,graphRange[1]-graphRange[0])*100;return `${index?'L':'M'} ${x.toFixed(3)} ${y.toFixed(3)}`;}).join(' '):'';
   const nudgeBezier=(side:'out'|'in',dx:number,dy:number)=>{if(!graphOwner)return;const current=graphOwner.key.interpolation.type==='bezier'?graphOwner.key.interpolation:{type:'bezier' as const,out:[.42,0] as const,in:[.58,1] as const};const out=side==='out'?[current.out[0]+dx,current.out[1]+dy] as const:current.out;const incoming=side==='in'?[current.in[0]+dx,current.in[1]+dy] as const:current.in;commitMotion(timelineTransaction(`graph_handle_${graphOwner.key.id}`,'Edit graph handle',[setMotionBezierHandlesCommand(compositionV2.id,graphOwner.layer.id,graphOwner.track.id,graphOwner.key.id,out,incoming)]));};
