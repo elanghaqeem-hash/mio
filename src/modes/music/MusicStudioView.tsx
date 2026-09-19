@@ -224,14 +224,21 @@ export const MusicStudioView: React.FC = () => {
   };
 
   const exportWav = async () => {
-    const stepDuration = musicStepDuration(project.tempo); const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps; const length = Math.ceil(44100 * runtimeSteps * stepDuration); const offline = new OfflineAudioContext(2, length, 44100);
-    for (const track of audibleMusicTracks(project.tracks)) for (const note of (project.arrangement ? project.arrangement.clips.filter((clip) => clip.trackId === track.id).flatMap((clip) => notesForClip(track, clip)) : track.notes)) {
-      const start = note.startStep * stepDuration; const duration = note.durationSteps * stepDuration; const oscillator = offline.createOscillator(); const gain = offline.createGain(); const panner = offline.createStereoPanner();
-      oscillator.frequency.setValueAtTime(440 * Math.pow(2, (note.pitch - 69) / 12), start); oscillator.type = track.instrument === 'sub_bass' ? 'sine' : track.instrument === 'synth_pad' ? 'triangle' : 'sawtooth';
-      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.001, (automationValue(track.id,'volume',note.startStep)??track.volume) * note.velocity * .3), start + .02); gain.gain.exponentialRampToValueAtTime(.0001, start + duration); panner.pan.setValueAtTime((automationValue(track.id,'pan',note.startStep)??((track.pan+1)/2))*2-1, start);
-      oscillator.connect(gain); gain.connect(panner); connectTrackEffects(offline,panner,track,offline.destination,note.startStep); connectReturnSends(offline,panner,track,offline.destination,note.startStep); oscillator.start(start); oscillator.stop(start + duration);
+    const stepDuration=musicStepDuration(project.tempo),runtimeSteps=project.arrangement?.totalSteps??project.totalSteps,length=Math.ceil(44100*runtimeSteps*stepDuration),offline=new OfflineAudioContext(2,length,44100);
+    const trackChannels=new Map<string,{input:GainNode;volume:GainNode;panner:StereoPannerNode}>();
+    const returnChannels=new Map<string,{input:GainNode;output:GainNode}>();
+    const ensureReturn=(bus:NonNullable<MioMusicProject['returnBuses']>[number])=>{const existing=returnChannels.get(bus.id);if(existing)return existing;const input=offline.createGain(),output=offline.createGain();output.gain.value=bus.volume;connectTrackEffects(offline,input,{id:`return_${bus.id}`,effects:[bus.effect]} as MusicTrack,output,0);output.connect(offline.destination);const channel={input,output};returnChannels.set(bus.id,channel);return channel;};
+    const ensureTrack=(track:MusicTrack)=>{const existing=trackChannels.get(track.id);if(existing)return existing;const input=offline.createGain(),volume=offline.createGain(),panner=offline.createStereoPanner();volume.gain.value=track.volume;input.connect(volume);volume.connect(panner);connectTrackEffects(offline,panner,track,offline.destination,0);panner.pan.value=track.pan;for(const send of track.sends??[]){const bus=project.returnBuses?.find(b=>b.id===send.busId);if(!send.enabled||!bus)continue;const sendGain=offline.createGain();sendGain.gain.value=send.level;panner.connect(sendGain);sendGain.connect(ensureReturn(bus).input);}const channel={input,volume,panner};trackChannels.set(track.id,channel);return channel;};
+    for(const track of audibleMusicTracks(project.tracks)){
+      const channel=ensureTrack(track);
+      for(const lane of (project.automationLanes??[]).filter(l=>l.trackId===track.id)){
+        const target=lane.parameter==='volume'?channel.volume.gain:lane.parameter==='pan'?channel.panner.pan:undefined;if(!target)continue;
+        const points=lane.points;for(let i=0;i<points.length;i++){const p=points[i],next=points[i+1]??p,t=p.step*stepDuration,value=lane.parameter==='pan'?p.value*2-1:p.value;target.setValueAtTime(value,t);if(next!==p&&lane.interpolation!=='step'){const nt=next.step*stepDuration,nv=lane.parameter==='pan'?next.value*2-1:next.value;if(lane.interpolation==='linear')target.linearRampToValueAtTime(nv,nt);else target.setValueCurveAtTime(new Float32Array([value,value+(nv-value)*.15625,value+(nv-value)*.5,value+(nv-value)*.84375,nv]),t,Math.max(.001,nt-t));}}
+      }
+      const notes=project.arrangement?project.arrangement.clips.filter(c=>c.trackId===track.id).flatMap(c=>notesForClip(track,c)):track.notes;
+      for(const note of notes){const start=note.startStep*stepDuration,duration=note.durationSteps*stepDuration,oscillator=offline.createOscillator(),gain=offline.createGain();oscillator.frequency.setValueAtTime(440*Math.pow(2,(note.pitch-69)/12),start);oscillator.type=track.instrument==='sub_bass'?'sine':track.instrument==='synth_pad'?'triangle':'sawtooth';gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(Math.max(.001,note.velocity*.3),start+.02);gain.gain.exponentialRampToValueAtTime(.0001,start+duration);oscillator.connect(gain);gain.connect(channel.input);oscillator.start(start);oscillator.stop(start+duration);}
     }
-    await ExportManager.exportAudioAsWAV(await offline.startRendering(), 'MIO_Music_Project.wav', 'MUSIC');
+    await ExportManager.exportAudioAsWAV(await offline.startRendering(),'MIO_Music_Project.wav','MUSIC');
   };
 
   return (
