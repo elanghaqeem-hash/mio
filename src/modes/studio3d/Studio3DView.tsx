@@ -6,9 +6,13 @@ import {
   CylinderGeometry,
   DirectionalLight,
   GridHelper,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Points,
+  PointsMaterial,
   Raycaster,
   Scene,
   Vector2,
@@ -23,6 +27,8 @@ import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
+import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
+import { BufferGeometry as ThreeBufferGeometry, Float32BufferAttribute } from 'three';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { eventBus } from '../../core/EventBus';
@@ -49,6 +55,7 @@ export const Studio3DView: React.FC = () => {
   const controlsRef = useRef<OrbitControls | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
+  const editOverlayRef = useRef<Array<Points | LineSegments | Mesh>>([]);
   const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
   const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
@@ -164,6 +171,43 @@ export const Studio3DView: React.FC = () => {
       meshMapRef.current.set(object.id, mesh);
     }
   }, [sceneData.objects]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    editOverlayRef.current.forEach((overlay) => {
+      scene?.remove(overlay);
+      const drawable = overlay as Points | LineSegments | Mesh;
+      drawable.geometry?.dispose();
+      const material = drawable.material;
+      if (material && !Array.isArray(material)) material.dispose();
+    });
+    editOverlayRef.current = [];
+    if (!scene || workspaceMode !== 'edit' || !selectedObj?.mesh) return;
+    const sourceMesh = meshMapRef.current.get(selectedObj.id);
+    if (!sourceMesh) return;
+    const attachTransform = (object: Points | LineSegments | Mesh) => {
+      object.position.copy(sourceMesh.position);
+      object.rotation.copy(sourceMesh.rotation);
+      object.scale.copy(sourceMesh.scale);
+      object.renderOrder = 10;
+      scene.add(object);
+      editOverlayRef.current.push(object);
+    };
+    if (meshSelection.mode === 'vertex') {
+      const geometry = new ThreeBufferGeometry();
+      geometry.setAttribute('position', new Float32BufferAttribute(buildVertexOverlayPositions(selectedObj.mesh), 3));
+      attachTransform(new Points(geometry, new PointsMaterial({ color: 0xffc107, size: 0.08, sizeAttenuation: true, depthTest: false })));
+    }
+    if (meshSelection.mode === 'edge') {
+      const geometry = new ThreeBufferGeometry();
+      geometry.setAttribute('position', new Float32BufferAttribute(buildEdgeOverlayPositions(selectedObj.mesh), 3));
+      attachTransform(new LineSegments(geometry, new LineBasicMaterial({ color: 0xffc107, depthTest: false })));
+    }
+    if (meshSelection.mode === 'face' && meshSelection.faceIds.length) {
+      const geometry = buildSelectedFaceOverlayGeometry(selectedObj.mesh, meshSelection);
+      attachTransform(new Mesh(geometry, new MeshStandardMaterial({ color: 0xffc107, transparent: true, opacity: 0.38, depthTest: false })));
+    }
+  }, [workspaceMode, meshSelection, selectedObj]);
 
   const updateSelectedObject = (updates: Partial<Mio3DObject>) => {
     if (!selectedId) return;
