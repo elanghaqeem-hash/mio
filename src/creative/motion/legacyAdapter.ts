@@ -93,8 +93,9 @@ export function legacyMotionProjectToV2(project: MioMotionProject, documentId = 
 const fromInterpolation = (interpolation: MotionInterpolation): LegacyKeyframe["interpolation"] => {
   if (interpolation.type === "hold") return "step";
   if (interpolation.type === "linear") return "linear";
-  if (interpolation.out[0] >= 0.5 && interpolation.in[0] <= 1) return "easeIn";
-  if (interpolation.out[0] <= 0.1 && interpolation.in[0] >= 0.5) return "easeOut";
+  const near = (value: number, target: number): boolean => Math.abs(value - target) < 1e-6;
+  if (near(interpolation.out[0], .42) && near(interpolation.in[0], 1)) return "easeIn";
+  if (near(interpolation.out[0], 0) && near(interpolation.in[0], .58)) return "easeOut";
   return "easeInOut";
 };
 
