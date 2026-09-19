@@ -53,6 +53,8 @@ export const MusicStudioView: React.FC = () => {
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentStepRef = useRef(currentStep);
+  const transportGenerationRef = useRef(0);
+  const schedulerRef = useRef<number | null>(null);
   const trackChannelRef=useRef<Map<string,{input:GainNode;volume:GainNode;panner:StereoPannerNode;output:GainNode;sends:Map<string,GainNode>}>>(new Map());
   const returnChannelRef=useRef<Map<string,{input:GainNode;output:GainNode}>>(new Map());
   const liveFxParamRef=useRef<Map<string,{amount?:AudioParam;mix?:AudioParam;feedback?:AudioParam;resonance?:AudioParam}>>(new Map());
@@ -98,7 +100,9 @@ export const MusicStudioView: React.FC = () => {
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
-    if (!isPlaying) return;
+    transportGenerationRef.current += 1;
+    const generation = transportGenerationRef.current;
+    if (!isPlaying) { if(schedulerRef.current!==null){window.clearInterval(schedulerRef.current);schedulerRef.current=null;} clearLiveTrackChannels(); return; }
 
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -108,6 +112,7 @@ export const MusicStudioView: React.FC = () => {
     const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
     const transportOrigin = ctx.currentTime - (currentStepRef.current * stepDuration);
     const scheduled = new Set<string>();
+    const ownedNodes = new Set<AudioNode>();
 
     const scheduleStep = (step:number, when:number) => {
       const cycle=Math.floor((when-transportOrigin)/(runtimeSteps*stepDuration));
@@ -117,7 +122,7 @@ export const MusicStudioView: React.FC = () => {
       for(const track of audibleMusicTracks(project.tracks)){
         const runtimeNotes=project.arrangement?project.arrangement.clips.filter((clip)=>clip.trackId===track.id).flatMap((clip)=>notesForClip(track,clip)):track.notes;
         for(const note of runtimeNotes.filter((candidate)=>candidate.startStep===step)){
-          const oscillator=ctx.createOscillator(),gain=ctx.createGain(),channel=ensureLiveTrackChannel(ctx,track,step);
+          if(generation!==transportGenerationRef.current)return; const oscillator=ctx.createOscillator(),gain=ctx.createGain(),channel=ensureLiveTrackChannel(ctx,track,step); ownedNodes.add(oscillator);ownedNodes.add(gain);
           scheduleLiveAutomation(track,step,when);
           oscillator.frequency.setValueAtTime(440*Math.pow(2,(note.pitch-69)/12),when);
           oscillator.type=track.instrument==='sub_bass'?'sine':track.instrument==='synth_pad'?'triangle':'sawtooth';
@@ -143,8 +148,9 @@ export const MusicStudioView: React.FC = () => {
       }
       setCurrentStep(((Math.floor(elapsed/stepDuration))%runtimeSteps+runtimeSteps)%runtimeSteps);
     },tickMs);
+    schedulerRef.current=scheduler;
 
-    return()=>window.clearInterval(scheduler);
+    return()=>{window.clearInterval(scheduler);if(schedulerRef.current===scheduler)schedulerRef.current=null;for(const node of ownedNodes){try{node.disconnect();}catch{/* ended */}}};
   },[isPlaying,project]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
