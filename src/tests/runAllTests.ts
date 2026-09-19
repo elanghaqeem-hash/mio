@@ -69,6 +69,7 @@ import { runMeshTransformTransactionTests } from './meshTransformTransactionTest
 import { runCreativeDrawingGraphicWorkspaceTests } from './creativeDrawingGraphicWorkspaceTests';
 import { runCreativeDrawingRuntimeTests } from './creativeDrawingRuntimeTests';
 import { runCreativeDrawingCommitRuntimeTests } from './creativeDrawingCommitRuntimeTests';
+import { runCreativeDrawingRendererTests } from './creativeDrawingRendererTests';
 import { runCreativePhotoWorkspaceTests } from './creativePhotoWorkspaceTests';
 import { runPhotoDomainContractTests } from './photoDomainContractTests';
 import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTests';
