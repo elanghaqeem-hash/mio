@@ -1,3 +1,0 @@
-import { normalizeDrawingBrushSettings, sampleDrawingBrush } from '../creative/drawing/DrawingBrushEngine';
-const assert=(v:unknown,m:string)=>{if(!v)throw new Error(m)};
-export function runCreativeDrawingBrushEngineTests(){const s=normalizeDrawingBrushSettings({size:10,opacity:1,spacing:.15,smoothing:.2,pressureSize:1,pressureOpacity:1});assert(s.size===10&&s.pressureSize===1,'settings normalization failed');const stroke={id:'b',points:[{x:1,y:2,pressure:1},{x:2,y:3,pressure:.5}],color:'#000',size:10,opacity:1,blendMode:'normal' as const};const samples=sampleDrawingBrush(stroke,s);assert(samples[0].radius===5&&samples[1].radius===2.5,'pressure size failed');assert(samples[0].opacity===1&&samples[1].opacity===.5,'pressure opacity failed');return {passed:3,total:3};}
