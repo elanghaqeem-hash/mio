@@ -31,6 +31,13 @@ const initialTelemetry = (): MioAudioPlaybackTelemetry => ({
  * Uses MediaSource only when the runtime explicitly supports the encoded stream,
  * and preserves the deterministic Blob path for Safari/iOS and other runtimes.
  */
+class MioMediaSourceCommittedError extends Error {
+  constructor(readonly cause: unknown) {
+    super('Mio MediaSource failed after incremental playback committed.');
+    this.name = 'MioMediaSourceCommittedError';
+  }
+}
+
 export class MioStreamingAudioPlayer {
   private activeAudio: HTMLAudioElement | null = null;
   private objectUrls = new Set<string>();
@@ -41,12 +48,16 @@ export class MioStreamingAudioPlayer {
 
   async play(chunks: AsyncIterable<MioSynthesisChunk>, signal?: AbortSignal): Promise<void> {
     const generation = ++this.generation;
+    const startedAt = performance.now();
     const iterator = chunks[Symbol.asyncIterator]();
-    const first = await iterator.next();
+    let first = await iterator.next();
+    while (!first.done && !first.value.data.byteLength) {
+      if (signal?.aborted || generation !== this.generation) return;
+      first = await iterator.next();
+    }
     if (first.done || signal?.aborted || generation !== this.generation) return;
 
-    const startedAt = performance.now();
-    const firstChunkLatencyMs = 0;
+    const firstChunkLatencyMs = performance.now() - startedAt;
     const mime = first.value.format;
     if (this.canUseMediaSource(mime)) {
       try {
@@ -54,7 +65,9 @@ export class MioStreamingAudioPlayer {
         return;
       } catch (error) {
         if (signal?.aborted || generation !== this.generation || (error instanceof DOMException && error.name === 'AbortError')) throw error;
-        // Capability checks can still fail at runtime. Fall back without losing the first chunk.
+        if (error instanceof MioMediaSourceCommittedError) throw error.cause ?? error;
+        // Only setup failures before the first encoded chunk is committed may
+        // reuse the untouched iterator in the deterministic Blob fallback.
       }
     }
     await this.playBlob(first.value, iterator, generation, startedAt, firstChunkLatencyMs, signal);
@@ -97,6 +110,7 @@ export class MioStreamingAudioPlayer {
     const onWaiting = () => { if (hasStarted) { rebufferCount += 1; updateBufferTelemetry(); } };
     audio.addEventListener('waiting', onWaiting);
 
+    let committed = false;
     try {
       await new Promise<void>((resolve, reject) => {
         mediaSource.addEventListener('sourceopen', () => resolve(), { once: true });
@@ -119,6 +133,7 @@ export class MioStreamingAudioPlayer {
 
       let current = first;
       await append(current.data);
+      committed = true;
       bytes += current.data.byteLength;
       appendCount += 1;
       while (!current.final && appendCount < prebufferTargetChunks) {
@@ -132,11 +147,13 @@ export class MioStreamingAudioPlayer {
         }
       }
       const playbackStartedAt = performance.now();
+      const playing = this.waitForPlaying(audio, generation, startedAt, signal);
       await audio.play();
+      const firstAudibleLatencyMs = await playing;
       this.lastTelemetry = {
         bufferedBytes: bytes,
         firstChunkLatencyMs,
-        firstAudibleLatencyMs: performance.now() - startedAt,
+        firstAudibleLatencyMs,
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'media-source',
         appendCount,
@@ -161,6 +178,11 @@ export class MioStreamingAudioPlayer {
       }
       if (mediaSource.readyState === 'open' && !sourceBuffer.updating) mediaSource.endOfStream();
       await this.waitForEnd(audio, generation, signal);
+    } catch (error) {
+      if (committed && !(error instanceof DOMException && error.name === 'AbortError')) {
+        throw new MioMediaSourceCommittedError(error);
+      }
+      throw error;
     } finally {
       audio.removeEventListener('waiting', onWaiting);
       audio.onerror = null;
@@ -204,11 +226,13 @@ export class MioStreamingAudioPlayer {
     this.activeAudio = audio;
     try {
       const playbackStartedAt = performance.now();
+      const playing = this.waitForPlaying(audio, generation, startedAt, signal);
       await audio.play();
+      const firstAudibleLatencyMs = await playing;
       this.lastTelemetry = {
         bufferedBytes: bytes,
         firstChunkLatencyMs,
-        firstAudibleLatencyMs: performance.now() - startedAt,
+        firstAudibleLatencyMs,
         playbackStartLatencyMs: playbackStartedAt - startedAt,
         playbackMode: 'blob-fallback',
         appendCount,
@@ -222,6 +246,20 @@ export class MioStreamingAudioPlayer {
       URL.revokeObjectURL(url);
       this.objectUrls.delete(url);
     }
+  }
+
+  private waitForPlaying(audio: HTMLAudioElement, generation: number, startedAt: number, signal?: AbortSignal): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      const cleanup = () => {
+        audio.removeEventListener('playing', onPlaying);
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const onPlaying = () => { cleanup(); resolve(performance.now() - startedAt); };
+      const onAbort = () => { cleanup(); reject(new DOMException('Playback aborted.', 'AbortError')); };
+      audio.addEventListener('playing', onPlaying, { once: true });
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted || generation !== this.generation) onAbort();
+    });
   }
 
   private waitForEnd(audio: HTMLAudioElement, generation: number, signal?: AbortSignal): Promise<void> {
