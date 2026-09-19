@@ -4,7 +4,7 @@ import{Animation3DViewport,type ViewPreset}from'./Animation3DViewport';
 import type{PointerPoint,ScreenAxis}from'./TransformGizmoController';
 import{DEFAULT_POSE_CONTROL_STATE,type PoseControlState}from'./PoseControlModel';
 import{beginNativePoseDrag,cancelNativePoseDrag,commitNativePoseDrag,updateNativePoseDrag,type NativePoseViewportState}from'./NativePoseViewportController';
-import{requestFrameSelected,selectAnimationBone,setAnimationEditorAutoKey,setAnimationEditorAxis,setAnimationEditorOrientation,setAnimationEditorTool,setAnimationEditorViewPreset,type AnimationEditorState}from'./AnimationEditorState';
+import{setIKPoleTargetSafe,setIKTargetSafe}from'./IKAuthoringOperations';import{requestFrameSelected,selectAnimationBone,setAnimationEditorAutoKey,setAnimationEditorAxis,setAnimationEditorOrientation,setAnimationEditorTool,setAnimationEditorViewPreset,type AnimationEditorState}from'./AnimationEditorState';
 
 export interface Animation3DViewportBridgeProps{project:MioAnimationProject;editor:AnimationEditorState;setEditor:React.Dispatch<React.SetStateAction<AnimationEditorState>>;onCommitProject:(project:MioAnimationProject)=>void}
 const editorToControl=(editor:AnimationEditorState,control:PoseControlState):PoseControlState=>({...control,selection:editor.selection,tool:editor.poseTool,axis:editor.poseAxis,autoKey:editor.autoKey,orientation:editor.orientation});
