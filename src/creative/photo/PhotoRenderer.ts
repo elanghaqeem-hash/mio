@@ -4,7 +4,6 @@ export interface PhotoRenderFrame {documentId:string;revision:number;surface:Pho
 export interface PhotoRenderer {readonly id:string;render(frame:PhotoRenderFrame):Promise<PhotoRenderSurface>|PhotoRenderSurface;}
 export const createPhotoRenderSurface=(width:number,height:number):PhotoRenderSurface=>{if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1)throw new Error('Photo render surface dimensions must be positive integers.');return {width,height,pixels:{width,height,data:new Uint8ClampedArray(width*height*4)}};};
 export const clearPhotoRenderSurface=(surface:PhotoRenderSurface,r=0,g=0,b=0,a=0):void=>{for(let i=0;i<surface.pixels.data.length;i+=4){surface.pixels.data[i]=r;surface.pixels.data[i+1]=g;surface.pixels.data[i+2]=b;surface.pixels.data[i+3]=a;}};
-export class PhotoCpuReferenceRenderer implements PhotoRenderer {
- readonly id='cpu-reference';
- render(frame:PhotoRenderFrame):PhotoRenderSurface{return frame.surface;}
-}
+const clamp01=(v:number)=>Math.max(0,Math.min(1,v));
+export const blendSourceOver=(dst:PhotoPixelBuffer,src:PhotoPixelBuffer,opacity=1):void=>{if(dst.width!==src.width||dst.height!==src.height)throw new Error('Pixel buffer dimensions must match.');const oa=clamp01(opacity);for(let i=0;i<dst.data.length;i+=4){const sa=(src.data[i+3]/255)*oa,da=dst.data[i+3]/255,outA=sa+da*(1-sa);if(outA<=0){dst.data[i]=dst.data[i+1]=dst.data[i+2]=dst.data[i+3]=0;continue;}const sr=src.data[i]/255,sg=src.data[i+1]/255,sb=src.data[i+2]/255,dr=dst.data[i]/255,dg=dst.data[i+1]/255,db=dst.data[i+2]/255;dst.data[i]=Math.round(((sr*sa+dr*da*(1-sa))/outA)*255);dst.data[i+1]=Math.round(((sg*sa+dg*da*(1-sa))/outA)*255);dst.data[i+2]=Math.round(((sb*sa+db*da*(1-sa))/outA)*255);dst.data[i+3]=Math.round(outA*255);}};
+export class PhotoCpuReferenceRenderer implements PhotoRenderer {readonly id='cpu-reference';render(frame:PhotoRenderFrame):PhotoRenderSurface{return frame.surface;}}
