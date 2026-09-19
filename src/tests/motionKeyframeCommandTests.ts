@@ -1,5 +1,5 @@
 import { MotionCommandBus } from "../creative/motion/commands";
-import { deleteMotionKeyframeCommand, moveMotionKeyframesCommand, moveMotionKeyframeCommand, setMotionKeyframeInterpolationCommand, timelineTransaction, updateMotionTransformDefaultsCommand, upsertMotionKeyframeCommand } from "../creative/motion/timelineCommands";
+import { deleteMotionKeyframeCommand, moveMotionKeyframesCommand, moveMotionKeyframeCommand, setMotionBezierHandlesCommand, setMotionKeyframeInterpolationCommand, timelineTransaction, updateMotionTransformDefaultsCommand, upsertMotionKeyframeCommand } from "../creative/motion/timelineCommands";
 import type { MotionDocument } from "../creative/motion/model";
 
 const assert=(ok:unknown,msg:string)=>{if(!ok)throw new Error(`Motion keyframe command test failed: ${msg}`)};
@@ -36,4 +36,5 @@ export function runMotionKeyframeCommandTests():void{
  bus.undo(); assert(bus.document.compositions[0].layers[0].transform.position.keyframes.length===3,"undo delete");
  bus.undo(); assert(bus.document.compositions[0].layers[0].transform.position.keyframes.map(k=>k.frame).join(",")==="15,20","undo group move");
  const collisionBus=new MotionCommandBus(doc()); collisionBus.execute(timelineTransaction("collision","Collision-safe single move",[moveMotionKeyframeCommand("comp","layer","position","p1",20)])); const collisionFrames=collisionBus.document.compositions[0].layers[0].transform.position.keyframes.map(k=>k.frame); assert(collisionFrames.join(",")==="19,20","single move must stop before occupied frame");
+ const handleBus=new MotionCommandBus(doc()); handleBus.execute(timelineTransaction("handles","Bezier handles",[setMotionBezierHandlesCommand("comp","layer","position","p1",[1.5,-.25],[-.2,1.25])])); const interpolation=handleBus.document.compositions[0].layers[0].transform.position.keyframes[0].interpolation; assert(interpolation.type==="bezier","handle command type"); if(interpolation.type==="bezier")assert(interpolation.out[0]===1&&interpolation.in[0]===0,"handle command clamp"); handleBus.undo(); assert(handleBus.document.compositions[0].layers[0].transform.position.keyframes[0].interpolation.type==="linear","handle undo");
 }
