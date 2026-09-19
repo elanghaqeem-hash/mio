@@ -52,6 +52,7 @@ export const MusicStudioView: React.FC = () => {
   const clipResizeRef = useRef<{id:string;startX:number;originLength:number}|null>(null);
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const currentStepRef = useRef(currentStep);
   const trackChannelRef=useRef<Map<string,{input:GainNode;volume:GainNode;panner:StereoPannerNode;output:GainNode;sends:Map<string,GainNode>}>>(new Map());
   const returnChannelRef=useRef<Map<string,{input:GainNode;output:GainNode}>>(new Map());
   const liveFxParamRef=useRef<Map<string,{amount?:AudioParam;mix?:AudioParam;feedback?:AudioParam;resonance?:AudioParam}>>(new Map());
@@ -92,6 +93,8 @@ export const MusicStudioView: React.FC = () => {
   const ensureLiveTrackChannel=(ctx:AudioContext,track:MusicTrack,step:number)=>{const existing=trackChannelRef.current.get(track.id);if(existing)return existing;const input=ctx.createGain(),volume=ctx.createGain(),panner=ctx.createStereoPanner(),output=ctx.createGain(),sends=new Map<string,GainNode>();volume.gain.value=automationValue(track.id,'volume',step)??track.volume;input.connect(volume);volume.connect(panner);connectTrackEffects(ctx,panner,track,output,step,true);output.connect(ctx.destination);for(const send of track.sends??[]){const bus=project.returnBuses?.find(candidate=>candidate.id===send.busId),level=automationValue(track.id,'sendLevel',step,send.busId)??send.level;if(!send.enabled||!bus)continue;const sendGain=ctx.createGain();sendGain.gain.value=Math.max(0,level);panner.connect(sendGain);sendGain.connect(ensureLiveReturnChannel(ctx,bus,track,step).input);sends.set(send.busId,sendGain);}const channel={input,volume,panner,output,sends};trackChannelRef.current.set(track.id,channel);return channel;};
   const clearLiveTrackChannels=()=>{for(const channel of trackChannelRef.current.values()){try{channel.input.disconnect();channel.volume.disconnect();channel.panner.disconnect();channel.output.disconnect();for(const send of channel.sends.values())send.disconnect();}catch{/* already disconnected */}}trackChannelRef.current.clear();for(const channel of returnChannelRef.current.values()){try{channel.input.disconnect();channel.output.disconnect();}catch{/* already disconnected */}}returnChannelRef.current.clear();liveFxParamRef.current.clear();};
 
+  useEffect(() => { currentStepRef.current=currentStep; }, [currentStep]);
+
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass && !audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
@@ -103,7 +106,7 @@ export const MusicStudioView: React.FC = () => {
     const lookaheadSec = 0.12;
     const tickMs = 25;
     const runtimeSteps = project.arrangement?.totalSteps ?? project.totalSteps;
-    const transportOrigin = ctx.currentTime - (currentStep * stepDuration);
+    const transportOrigin = ctx.currentTime - (currentStepRef.current * stepDuration);
     const scheduled = new Set<string>();
 
     const scheduleStep = (step:number, when:number) => {
@@ -142,7 +145,7 @@ export const MusicStudioView: React.FC = () => {
     },tickMs);
 
     return()=>window.clearInterval(scheduler);
-  },[isPlaying,project,currentStep]);
+  },[isPlaying,project]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
