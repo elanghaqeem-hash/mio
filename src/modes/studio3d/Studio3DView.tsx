@@ -22,12 +22,14 @@ import {
   type BufferGeometry,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
+import { pickMeshEdgeScreenSpace, pickMeshVertexScreenSpace } from './modeling/MeshComponentPicking';
 import { BufferGeometry as ThreeBufferGeometry, Float32BufferAttribute } from 'three';
 import { ExportManager } from '../../project/ExportManager';
 import { Box, Circle, Copy, Cylinder, Layers, Download, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
@@ -53,6 +55,8 @@ export const Studio3DView: React.FC = () => {
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const transformControlsRef = useRef<TransformControls | null>(null);
+  const transformHelperRef = useRef<ReturnType<TransformControls['getHelper']> | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
   const editOverlayRef = useRef<Array<Points | LineSegments | Mesh>>([]);
@@ -131,6 +135,10 @@ export const Studio3DView: React.FC = () => {
       });
       meshMap.clear();
       controls.dispose();
+      transformControlsRef.current?.detach();
+      transformControlsRef.current?.dispose();
+      transformControlsRef.current = null;
+      transformHelperRef.current = null;
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
@@ -172,6 +180,55 @@ export const Studio3DView: React.FC = () => {
     }
   }, [sceneData.objects]);
 
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const orbit = controlsRef.current;
+    if (!scene || !camera || !renderer || !orbit) return;
+    const previous = transformControlsRef.current;
+    if (previous) {
+      const previousHelper = transformHelperRef.current;
+      if (previousHelper) scene.remove(previousHelper);
+      previous.detach();
+      previous.dispose();
+      transformHelperRef.current = null;
+      transformControlsRef.current = null;
+    }
+    if (workspaceMode !== 'object' || transformMode === 'select' || !selectedObj) return;
+    const target = meshMapRef.current.get(selectedObj.id);
+    if (!target) return;
+    const gizmo = new TransformControls(camera, renderer.domElement);
+    gizmo.setMode(transformMode === 'move' ? 'translate' : transformMode);
+    gizmo.setSpace('world');
+    gizmo.setSize(0.85);
+    gizmo.attach(target);
+    const helper = gizmo.getHelper();
+    scene.add(helper);
+    const onDraggingChanged = (event: { value: unknown }) => {
+      const dragging = Boolean(event.value);
+      orbit.enabled = !dragging;
+      if (!dragging) {
+        updateSelectedObject({
+          position: [target.position.x, target.position.y, target.position.z],
+          rotation: [target.rotation.x, target.rotation.y, target.rotation.z],
+          scale: [target.scale.x, target.scale.y, target.scale.z],
+        });
+      }
+    };
+    gizmo.addEventListener('dragging-changed', onDraggingChanged);
+    transformHelperRef.current = helper;
+    transformControlsRef.current = gizmo;
+    return () => {
+      orbit.enabled = true;
+      gizmo.removeEventListener('dragging-changed', onDraggingChanged);
+      gizmo.detach();
+      scene.remove(helper);
+      gizmo.dispose();
+      if (transformControlsRef.current === gizmo) transformControlsRef.current = null;
+    };
+  }, [workspaceMode, transformMode, selectedId, selectedObj?.id]);
+ 
   useEffect(() => {
     const scene = sceneRef.current;
     editOverlayRef.current.forEach((overlay) => {
@@ -270,17 +327,40 @@ export const Studio3DView: React.FC = () => {
   }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (workspaceMode !== 'edit' || meshSelection.mode !== 'face' || !selectedObj?.mesh) return;
+    if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const mesh = meshMapRef.current.get(selectedObj.id);
     const projection = meshProjectionMapRef.current.get(selectedObj.id);
-    if (!renderer || !camera || !mesh || !projection) return;
+    if (!renderer || !camera || !mesh) return;
     const rect = renderer.domElement.getBoundingClientRect();
     const pointer = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
+    const screenPointer = new Vector2(event.clientX - rect.left, event.clientY - rect.top);
+    if (meshSelection.mode === 'vertex') {
+      const picked = pickMeshVertexScreenSpace(selectedObj.mesh, mesh, camera, screenPointer, rect.width, rect.height);
+      if (!picked) { if (!event.shiftKey) setMeshSelection(clearMeshSelection('vertex')); return; }
+      setMeshSelection((previous) => {
+        const exists = previous.vertexIds.includes(picked.id);
+        const vertexIds = event.shiftKey ? (exists ? previous.vertexIds.filter((id) => id !== picked.id) : [...previous.vertexIds, picked.id]) : [picked.id];
+        return { mode: 'vertex', vertexIds, edgeIds: [], faceIds: [] };
+      });
+      return;
+    }
+    if (meshSelection.mode === 'edge') {
+      const picked = pickMeshEdgeScreenSpace(selectedObj.mesh, mesh, camera, screenPointer, rect.width, rect.height);
+      if (!picked) { if (!event.shiftKey) setMeshSelection(clearMeshSelection('edge')); return; }
+      setMeshSelection((previous) => {
+        const exists = previous.edgeIds.includes(picked.id);
+        const edgeIds = event.shiftKey ? (exists ? previous.edgeIds.filter((id) => id !== picked.id) : [...previous.edgeIds, picked.id]) : [picked.id];
+        return { mode: 'edge', vertexIds: [], edgeIds, faceIds: [] };
+      });
+      return;
+    }
+    const projectionForFace = meshProjectionMapRef.current.get(selectedObj.id);
+    if (!projectionForFace) return;
     const raycaster = new Raycaster();
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObject(mesh, false)[0];
@@ -288,7 +368,7 @@ export const Studio3DView: React.FC = () => {
       if (!event.shiftKey) setMeshSelection(clearMeshSelection('face'));
       return;
     }
-    const faceId = faceIdFromTriangleIndex(projection, hit.faceIndex);
+    const faceId = faceIdFromTriangleIndex(projectionForFace, hit.faceIndex);
     if (!faceId) return;
     setMeshSelection((previous) => toggleFaceSelection(previous, faceId, event.shiftKey));
   };
