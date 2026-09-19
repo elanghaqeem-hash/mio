@@ -10,7 +10,7 @@ export const rotateMeshSelection = (
   if(!pivot)return structuredClone(mesh);
   const ids=new Set(meshSelectionVertexIds(mesh,selection));
   const [rx,ry,rz]=rotation; const cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry),cz=Math.cos(rz),sz=Math.sin(rz);
-  return structuredClone(mesh).constructor === Object ? {
+  return {
     ...structuredClone(mesh),
     vertices:mesh.vertices.map(v=>{
       if(!ids.has(v.id))return structuredClone(v);
@@ -20,7 +20,7 @@ export const rotateMeshSelection = (
       nx=x*cz-y*sz;ny=x*sz+y*cz;x=nx;y=ny;
       return {...v,position:[x+pivot[0],y+pivot[1],z+pivot[2]] as [number,number,number]};
     }),
-  } : structuredClone(mesh);
+  };
 };
 
 export const scaleMeshSelection = (
