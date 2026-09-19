@@ -70,6 +70,7 @@ import { runCreativeDrawingGraphicWorkspaceTests } from './creativeDrawingGraphi
 import { runCreativeDrawingRuntimeTests } from './creativeDrawingRuntimeTests';
 import { runCreativeDrawingCommitRuntimeTests } from './creativeDrawingCommitRuntimeTests';
 import { runCreativeDrawingRendererTests } from './creativeDrawingRendererTests';
+import { runCreativeDrawingBrushEngineTests } from './creativeDrawingBrushEngineTests';
 import { runCreativePhotoWorkspaceTests } from './creativePhotoWorkspaceTests';
 import { runPhotoDomainContractTests } from './photoDomainContractTests';
 import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTests';
