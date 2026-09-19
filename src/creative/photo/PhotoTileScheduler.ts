@@ -12,3 +12,14 @@ export const schedulePhotoTiles=(tiles:PhotoTile[],viewport:PhotoViewport,genera
 export const isPhotoTileScheduleCurrent=(task:PhotoScheduledTile,currentGeneration:number)=>task.generation===currentGeneration;
 
 export const planPhotoTileQueue=(tiles:PhotoTile[],viewport:PhotoViewport,generation:number,options:PhotoTileSchedulerOptions={}):PhotoScheduledTile[]=>{const base=schedulePhotoTiles(tiles,viewport,generation,options.preload??512);const vx=options.velocity?.x??0,vy=options.velocity?.y??0;return base.map(t=>{const hit=options.cachedKeys?.has(t.tile.cacheKey)??false;const projected=t.tile.bounds.x*vx+t.tile.bounds.y*vy;return {...t,cacheHit:hit,score:t.score+(hit?1_000_000:0)-projected*0.001};}).filter(t=>!t.cacheHit).slice(0,Math.max(1,options.maxConcurrent??base.length));};
+
+export class PhotoTileQueue {
+ private pending:PhotoScheduledTile[]=[]; private active=0;
+ public constructor(private readonly concurrency=4){}
+ public enqueue(tasks:PhotoScheduledTile[]):void{this.pending.push(...tasks);this.pending.sort((a,b)=>a.score-b.score||a.tile.id.localeCompare(b.tile.id));}
+ public cancelStale(generation:number):void{this.pending=this.pending.filter(t=>t.generation===generation);}
+ public next(generation:number):PhotoScheduledTile|undefined{if(this.active>=this.concurrency)return undefined;while(this.pending.length){const task=this.pending.shift()!;if(task.generation!==generation)continue;this.active++;return task;}return undefined;}
+ public complete():void{if(this.active>0)this.active--;}
+ public get pendingCount():number{return this.pending.length;}
+ public get activeCount():number{return this.active;}
+}
