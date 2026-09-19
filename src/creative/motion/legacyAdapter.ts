@@ -79,3 +79,53 @@ export function legacyMotionProjectToV2(project: MioMotionProject, documentId = 
     }],
   };
 }
+
+const fromInterpolation = (interpolation: MotionInterpolation): LegacyKeyframe["interpolation"] => {
+  if (interpolation.type === "hold") return "step";
+  if (interpolation.type === "linear") return "linear";
+  if (interpolation.out[0] >= 0.5 && interpolation.in[0] <= 1) return "easeIn";
+  if (interpolation.out[0] <= 0.1 && interpolation.in[0] >= 0.5) return "easeOut";
+  return "easeInOut";
+};
+
+const fromKey = (key: MotionKeyframe<number>, fps: number): LegacyKeyframe => ({
+  id: key.id,
+  time: key.frame / fps,
+  value: key.value,
+  interpolation: fromInterpolation(key.interpolation),
+});
+
+export function applyV2ToLegacyMotionProject(project: MioMotionProject, document: MotionDocument): MioMotionProject {
+  const composition = document.compositions.find((item) => item.id === document.activeCompositionId);
+  if (!composition) throw new Error("Active motion composition is missing");
+  const layers = project.layers.map((layer) => {
+    const source = composition.layers.find((item) => item.id === layer.id);
+    if (!source) return layer;
+    const position = source.transform.position.keyframes;
+    return {
+      ...layer,
+      x: Number(source.transform.position.defaultValue[0]),
+      y: Number(source.transform.position.defaultValue[1]),
+      scale: Number(source.transform.scale.defaultValue),
+      rotation: Number(source.transform.rotation.defaultValue),
+      opacity: Number(source.transform.opacity.defaultValue),
+    };
+  });
+  const tracks: MioMotionProject["tracks"] = [];
+  for (const layer of composition.layers) {
+    const push = (property: "x"|"y"|"scale"|"rotation"|"opacity", keys: readonly MotionKeyframe<number>) => {
+      if (keys) tracks.push({ id: `track_${layer.id}_${property}`, nodeId: layer.id, property, keyframes: keys as unknown as LegacyKeyframe[] });
+    };
+    const position = layer.transform.position;
+    tracks.push({ id: `track_${layer.id}_x`, nodeId: layer.id, property: "x", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[0]) }, composition.fps)) });
+    tracks.push({ id: `track_${layer.id}_y`, nodeId: layer.id, property: "y", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[1]) }, composition.fps)) });
+    for (const track of [layer.transform.scale, layer.transform.rotation, layer.transform.opacity]) {
+      if (track.keyframes.length) tracks.push({ id: track.id, nodeId: layer.id, property: track.property as "scale"|"rotation"|"opacity", keyframes: track.keyframes.map((key) => fromKey(key as MotionKeyframe<number>, composition.fps)) });
+    }
+    for (const track of layer.tracks ?? []) {
+      if (track.property === "x" || track.property === "y" || track.property === "scale" || track.property === "rotation" || track.property === "opacity") continue;
+      if (track.keyframes.length) tracks.push({ id: track.id, nodeId: layer.id, property: track.property as MioMotionProject["tracks"][number]["property"], keyframes: track.keyframes.map((key) => fromKey(key as MotionKeyframe<number>, composition.fps)) });
+    }
+  }
+  return { ...project, duration: composition.durationFrames / composition.fps, fps: composition.fps, tracks };
+}
