@@ -13,8 +13,11 @@
 ## Important semantic boundary
 Recalculate Winding makes each connected component internally consistent. It does not guess which side is globally "outside"; outward/inward orientation needs a separate volume-aware operation.
 
+- Edit Mode exposes Flip Faces for selected faces and Recalculate Winding for the whole editable mesh.
+- Automatic recalculation is disabled when diagnostics detect non-manifold edges.
+- Operations emit activity-log summaries, and rejected recalculations are reported without mutating the mesh.
+
 ## Next
-- Edit Mode Flip Faces and Recalculate Winding actions;
 - outward orientation for closed volumes;
 - normal visualization;
 - bevel;
