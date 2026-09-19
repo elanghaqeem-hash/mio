@@ -203,16 +203,6 @@ export const Studio3DView: React.FC = () => {
     gizmo.setSpace('world');
     gizmo.setSize(0.85);
     gizmo.attach(target);
-    const onDraggingChanged = (event: { value: boolean }) => {
-      orbit.enabled = !event.value;
-      if (!event.value) {
-        updateSelectedObject({
-          position: [target.position.x, target.position.y, target.position.z],
-          rotation: [target.rotation.x, target.rotation.y, target.rotation.z],
-          scale: [target.scale.x, target.scale.y, target.scale.z],
-        });
-      }
-    };
     const helper = gizmo.getHelper();
     scene.add(helper);
     const onDraggingChanged = (event: { value: unknown }) => {
