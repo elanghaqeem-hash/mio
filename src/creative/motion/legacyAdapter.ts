@@ -22,6 +22,16 @@ export const legacyTrackToV2 = (project: MioMotionProject, layerId: string, prop
   return { id: source?.id ?? `track_${layerId}_${property}`, property, defaultValue: fallback, keyframes: source?.keyframes.map((key) => toKey(key, project.fps)) ?? [] };
 };
 
+export const legacyScaleTrackToV2 = (project: MioMotionProject, layerId: string, fallback: number): MotionTrack<readonly [number, number]> => {
+  const scalar = legacyTrackToV2(project, layerId, "scale", fallback);
+  return {
+    id: scalar.id,
+    property: "scale",
+    defaultValue: [fallback, fallback] as const,
+    keyframes: scalar.keyframes.map((key) => ({ ...key, value: [key.value, key.value] as const })),
+  };
+};
+
 export function mergeLegacyPositionTrack(project: MioMotionProject, layerId: string, fallbackX: number, fallbackY: number): MotionTrack<readonly [number, number]> {
   const x = legacyTrackToV2(project, layerId, "x", fallbackX);
   const y = legacyTrackToV2(project, layerId, "y", fallbackY);
@@ -67,7 +77,7 @@ export function legacyMotionProjectToV2(project: MioMotionProject, documentId = 
         locked: layer.locked,
         transform: {
           position: mergeLegacyPositionTrack(project, layer.id, layer.x, layer.y),
-          scale: legacyTrackToV2(project, layer.id, "scale", layer.scale),
+          scale: legacyScaleTrackToV2(project, layer.id, layer.scale),
           rotation: legacyTrackToV2(project, layer.id, "rotation", layer.rotation),
           opacity: legacyTrackToV2(project, layer.id, "opacity", layer.opacity),
         },
@@ -101,12 +111,11 @@ export function applyV2ToLegacyMotionProject(project: MioMotionProject, document
   const layers = project.layers.map((layer) => {
     const source = composition.layers.find((item) => item.id === layer.id);
     if (!source) return layer;
-    const position = source.transform.position.keyframes;
     return {
       ...layer,
       x: Number(source.transform.position.defaultValue[0]),
       y: Number(source.transform.position.defaultValue[1]),
-      scale: Number(source.transform.scale.defaultValue),
+      scale: Number(source.transform.scale.defaultValue[0]),
       rotation: Number(source.transform.rotation.defaultValue),
       opacity: Number(source.transform.opacity.defaultValue),
     };
@@ -116,8 +125,9 @@ export function applyV2ToLegacyMotionProject(project: MioMotionProject, document
     const position = layer.transform.position;
     tracks.push({ id: `track_${layer.id}_x`, nodeId: layer.id, property: "x", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[0]) }, composition.fps)) });
     tracks.push({ id: `track_${layer.id}_y`, nodeId: layer.id, property: "y", keyframes: position.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[1]) }, composition.fps)) });
-    for (const track of [layer.transform.scale, layer.transform.rotation, layer.transform.opacity]) {
-      if (track.keyframes.length) tracks.push({ id: track.id, nodeId: layer.id, property: track.property as "scale"|"rotation"|"opacity", keyframes: track.keyframes.map((key) => fromKey(key as MotionKeyframe<number>, composition.fps)) });
+    if (layer.transform.scale.keyframes.length) tracks.push({ id: layer.transform.scale.id, nodeId: layer.id, property: "scale", keyframes: layer.transform.scale.keyframes.map((key) => fromKey({ ...key, value: Number(key.value[0]) }, composition.fps)) });
+    for (const track of [layer.transform.rotation, layer.transform.opacity]) {
+      if (track.keyframes.length) tracks.push({ id: track.id, nodeId: layer.id, property: track.property as "rotation"|"opacity", keyframes: track.keyframes.map((key) => fromKey(key as MotionKeyframe<number>, composition.fps)) });
     }
     for (const track of layer.tracks ?? []) {
       if (track.property === "x" || track.property === "y" || track.property === "scale" || track.property === "rotation" || track.property === "opacity") continue;
