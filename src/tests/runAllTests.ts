@@ -67,6 +67,7 @@ import { runMeshSelectionOverlayTests } from './meshSelectionOverlayTests';
 import { runCreativeDrawingGraphicWorkspaceTests } from './creativeDrawingGraphicWorkspaceTests';
 import { runCreativeDrawingRuntimeTests } from './creativeDrawingRuntimeTests';
 import { runCreativeDrawingCommitRuntimeTests } from './creativeDrawingCommitRuntimeTests';
+import { runCreativeDrawingRendererTests } from './creativeDrawingRendererTests';
 import { runCreativePhotoWorkspaceTests } from './creativePhotoWorkspaceTests';
 import { runPhotoDomainContractTests } from './photoDomainContractTests';
 import { runCreativeMotion2DWorkspaceTests } from './creativeMotion2DWorkspaceTests';
