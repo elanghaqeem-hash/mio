@@ -56,6 +56,7 @@ export const Studio3DView: React.FC = () => {
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const transformControlsRef = useRef<TransformControls | null>(null);
+  const transformHelperRef = useRef<ReturnType<TransformControls['getHelper']> | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
   const editOverlayRef = useRef<Array<Points | LineSegments | Mesh>>([]);
@@ -137,6 +138,7 @@ export const Studio3DView: React.FC = () => {
       transformControlsRef.current?.detach();
       transformControlsRef.current?.dispose();
       transformControlsRef.current = null;
+      transformHelperRef.current = null;
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
@@ -186,16 +188,18 @@ export const Studio3DView: React.FC = () => {
     if (!scene || !camera || !renderer || !orbit) return;
     const previous = transformControlsRef.current;
     if (previous) {
-      scene.remove(previous);
+      const previousHelper = transformHelperRef.current;
+      if (previousHelper) scene.remove(previousHelper);
       previous.detach();
       previous.dispose();
+      transformHelperRef.current = null;
       transformControlsRef.current = null;
     }
     if (workspaceMode !== 'object' || transformMode === 'select' || !selectedObj) return;
     const target = meshMapRef.current.get(selectedObj.id);
     if (!target) return;
     const gizmo = new TransformControls(camera, renderer.domElement);
-    gizmo.setMode(transformMode);
+    gizmo.setMode(transformMode === 'move' ? 'translate' : transformMode);
     gizmo.setSpace('world');
     gizmo.setSize(0.85);
     gizmo.attach(target);
@@ -209,14 +213,27 @@ export const Studio3DView: React.FC = () => {
         });
       }
     };
+    const helper = gizmo.getHelper();
+    scene.add(helper);
+    const onDraggingChanged = (event: { value: unknown }) => {
+      const dragging = Boolean(event.value);
+      orbit.enabled = !dragging;
+      if (!dragging) {
+        updateSelectedObject({
+          position: [target.position.x, target.position.y, target.position.z],
+          rotation: [target.rotation.x, target.rotation.y, target.rotation.z],
+          scale: [target.scale.x, target.scale.y, target.scale.z],
+        });
+      }
+    };
     gizmo.addEventListener('dragging-changed', onDraggingChanged);
-    scene.add(gizmo);
+    transformHelperRef.current = helper;
     transformControlsRef.current = gizmo;
     return () => {
       orbit.enabled = true;
       gizmo.removeEventListener('dragging-changed', onDraggingChanged);
       gizmo.detach();
-      scene.remove(gizmo);
+      scene.remove(helper);
       gizmo.dispose();
       if (transformControlsRef.current === gizmo) transformControlsRef.current = null;
     };
