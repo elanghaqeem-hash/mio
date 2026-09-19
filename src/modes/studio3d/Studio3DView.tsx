@@ -22,6 +22,7 @@ import {
   type BufferGeometry,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
@@ -54,6 +55,7 @@ export const Studio3DView: React.FC = () => {
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const transformControlsRef = useRef<TransformControls | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
   const editOverlayRef = useRef<Array<Points | LineSegments | Mesh>>([]);
@@ -132,6 +134,9 @@ export const Studio3DView: React.FC = () => {
       });
       meshMap.clear();
       controls.dispose();
+      transformControlsRef.current?.detach();
+      transformControlsRef.current?.dispose();
+      transformControlsRef.current = null;
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
@@ -173,6 +178,50 @@ export const Studio3DView: React.FC = () => {
     }
   }, [sceneData.objects]);
 
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const orbit = controlsRef.current;
+    if (!scene || !camera || !renderer || !orbit) return;
+    const previous = transformControlsRef.current;
+    if (previous) {
+      scene.remove(previous);
+      previous.detach();
+      previous.dispose();
+      transformControlsRef.current = null;
+    }
+    if (workspaceMode !== 'object' || transformMode === 'select' || !selectedObj) return;
+    const target = meshMapRef.current.get(selectedObj.id);
+    if (!target) return;
+    const gizmo = new TransformControls(camera, renderer.domElement);
+    gizmo.setMode(transformMode);
+    gizmo.setSpace('world');
+    gizmo.setSize(0.85);
+    gizmo.attach(target);
+    const onDraggingChanged = (event: { value: boolean }) => {
+      orbit.enabled = !event.value;
+      if (!event.value) {
+        updateSelectedObject({
+          position: [target.position.x, target.position.y, target.position.z],
+          rotation: [target.rotation.x, target.rotation.y, target.rotation.z],
+          scale: [target.scale.x, target.scale.y, target.scale.z],
+        });
+      }
+    };
+    gizmo.addEventListener('dragging-changed', onDraggingChanged);
+    scene.add(gizmo);
+    transformControlsRef.current = gizmo;
+    return () => {
+      orbit.enabled = true;
+      gizmo.removeEventListener('dragging-changed', onDraggingChanged);
+      gizmo.detach();
+      scene.remove(gizmo);
+      gizmo.dispose();
+      if (transformControlsRef.current === gizmo) transformControlsRef.current = null;
+    };
+  }, [workspaceMode, transformMode, selectedId, selectedObj?.id]);
+ 
   useEffect(() => {
     const scene = sceneRef.current;
     editOverlayRef.current.forEach((overlay) => {
