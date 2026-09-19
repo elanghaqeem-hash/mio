@@ -30,7 +30,7 @@ import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperatio
 import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
 import { insetMeshFace } from './modeling/MeshFaceInset';
 import { insetMeshRegion } from './modeling/MeshRegionInset';
-import { weldMeshVertices } from './modeling/MeshVertexWeld';
+import { weldMeshVertices, weldMeshVerticesByDistance } from './modeling/MeshVertexWeld';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -76,6 +76,7 @@ export const Studio3DView: React.FC = () => {
   const [transformSnapStep, setTransformSnapStep] = useState(0.1);
   const [extrudeDistance, setExtrudeDistance] = useState(0.25);
   const [insetRatio, setInsetRatio] = useState(0.25);
+  const [weldDistance, setWeldDistance] = useState(0.05);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
 
@@ -530,6 +531,16 @@ export const Studio3DView: React.FC = () => {
     setMeshSelection({ mode: 'vertex', vertexIds: [result.survivorVertexId], edgeIds: [], faceIds: [] });
   };
 
+  const weldSelectedVerticesByDistance = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'vertex' || meshSelection.vertexIds.length < 2) return;
+    const result = weldMeshVerticesByDistance(selectedObj.mesh, weldDistance, meshSelection.vertexIds);
+    updateSelectedObject({ mesh: result.mesh });
+    const survivors = result.weldedGroups.length
+      ? result.survivorVertexIds
+      : meshSelection.vertexIds.filter((id) => result.mesh.vertices.some((vertex) => vertex.id === id));
+    setMeshSelection({ mode: 'vertex', vertexIds: survivors, edgeIds: [], faceIds: [] });
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -562,6 +573,8 @@ export const Studio3DView: React.FC = () => {
           <button onClick={insetSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-violet-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Inset Face</button>
           <button onClick={insetSelectedRegion} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 2} className="rounded bg-fuchsia-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Inset Region</button>
           <button onClick={weldSelectedVertices} disabled={meshSelection.mode !== 'vertex' || meshSelection.vertexIds.length < 2} className="rounded bg-emerald-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Weld Vertices</button>
+          <button onClick={weldSelectedVerticesByDistance} disabled={meshSelection.mode !== 'vertex' || meshSelection.vertexIds.length < 2} className="rounded bg-lime-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Weld Distance</button>
+          <input type="number" min="0.0001" step="0.01" value={weldDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0) setWeldDistance(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Weld-by-distance threshold" />
           <input type="number" min="0.01" max="0.99" step="0.05" value={insetRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setInsetRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Inset ratio (0-1)" />
           <input type="number" step="0.05" value={extrudeDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && Math.abs(next) > Number.EPSILON) setExtrudeDistance(next); }} className="w-16 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Extrude distance; negative values extrude inward" />
           <label className="flex items-center gap-1 px-1 text-[10px] text-gray-300"><input type="checkbox" checked={transformSnapEnabled} onChange={(event) => setTransformSnapEnabled(event.target.checked)} className="accent-amber-400" /> SNAP</label>
