@@ -35,6 +35,9 @@ const canonicalCycleSignature=(vertexIds:string[]):string=>{
   return [...forward,...reverse].sort((a,b)=>a.localeCompare(b))[0];
 };
 
+const duplicateFaceSignature=(face:MioMeshFace):string=>
+  `${canonicalCycleSignature(face.vertexIds)}::material:${face.materialSlot??'none'}`;
+
 const directedEdgeSign=(face:MioMeshFace,a:string,b:string):number=>{
   for(let index=0;index<face.vertexIds.length;index+=1){
     const current=face.vertexIds[index];
@@ -76,7 +79,7 @@ export const diagnoseMeshTopology=(mesh:MioMeshData):MeshTopologyDiagnostics=>{
 
   const signatureGroups=new Map<string,string[]>();
   for(const face of mesh.faces){
-    const signature=canonicalCycleSignature(face.vertexIds);
+    const signature=duplicateFaceSignature(face);
     const group=signatureGroups.get(signature)??[];
     group.push(face.id);
     signatureGroups.set(signature,group);
@@ -124,7 +127,7 @@ export const cleanupMeshTopology=(mesh:MioMeshData):MeshCleanupResult=>{
   const keptFaces:MioMeshFace[]=[];
 
   for(const face of [...mesh.faces].sort((a,b)=>a.id.localeCompare(b.id))){
-    const signature=canonicalCycleSignature(face.vertexIds);
+    const signature=duplicateFaceSignature(face);
     if(signatureOwner.has(signature)){
       removedFaceIds.push(face.id);
       continue;
