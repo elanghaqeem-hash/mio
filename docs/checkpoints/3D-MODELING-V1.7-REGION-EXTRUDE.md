@@ -8,7 +8,7 @@
 - Shared/internal edges inside the selected region do not generate internal walls.
 - Region direction is derived from the normalized sum of selected face normals.
 - Resulting topology is validated before returning.
-- Edit Mode exposes a dedicated "Extrude Region +0.25" action for multi-face selections.
+- Edit Mode exposes dedicated Face and Region Extrude actions with a configurable signed distance; negative values extrude inward.
 - Regression tests cover single-face region behavior, adjacent-face topology, internal-edge suppression, and missing face IDs.
 
 ## Architecture
