@@ -1,5 +1,5 @@
 import { evaluateTrack } from "../creative/motion/evaluator";
-import { legacyMotionProjectToV2 } from "../creative/motion/legacyAdapter";
+import { legacyMotionProjectToV2, applyV2ToLegacyMotionProject } from "../creative/motion/legacyAdapter";
 import { evaluateMotionKeyframes } from "../creative/MotionWorkspace";
 import type { MioMotionProject } from "../types/creative";
 
@@ -71,6 +71,21 @@ export async function runMotionV2CompatibilityTests(): Promise<{ passed: number;
     const at30 = position.keyframes.find((key) => key.frame === 30)!;
     assert(at30.interpolation.type === "bezier", "same-frame X priority was not preserved");
     if (at30.interpolation.type === "bezier") assert(at30.interpolation.out[0] === 0, "same-frame interpolation priority must prefer X");
+  });
+
+  run("V2 edits project through reverse legacy projection", () => {
+    const v2 = legacyMotionProjectToV2(project);
+    const edited = structuredClone(v2);
+    const layer = edited.compositions[0].layers[0];
+    layer.transform.position = {
+      ...layer.transform.position,
+      keyframes: [{ id: "key_x", frame: 15, value: [123, 456], interpolation: { type: "linear" } }],
+    };
+    const projected = applyV2ToLegacyMotionProject(project, edited);
+    const x = projected.tracks.find(track => track.nodeId === layer.id && track.property === "x")?.keyframes[0];
+    const y = projected.tracks.find(track => track.nodeId === layer.id && track.property === "y")?.keyframes[0];
+    assert(x?.time === 0.5 && x.value === 123, "X reverse projection");
+    assert(y?.time === 0.5 && y.value === 456, "Y reverse projection");
   });
 
   for (const result of results) console.log(`${result.passed ? "✓" : "✗"} [${result.passed ? "PASS" : "FAIL"}] ${result.name}${result.error ? ` — ${result.error}` : ""}`);
