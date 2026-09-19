@@ -35,4 +35,5 @@ export function runMotionKeyframeCommandTests():void{
  assert(bus.document.compositions[0].layers[0].transform.position.keyframes.length===2,"delete keyframe");
  bus.undo(); assert(bus.document.compositions[0].layers[0].transform.position.keyframes.length===3,"undo delete");
  bus.undo(); assert(bus.document.compositions[0].layers[0].transform.position.keyframes.map(k=>k.frame).join(",")==="15,20","undo group move");
+ const collisionBus=new MotionCommandBus(doc()); collisionBus.execute(timelineTransaction("collision","Collision-safe single move",[moveMotionKeyframeCommand("comp","layer","position","p1",20)])); const collisionFrames=collisionBus.document.compositions[0].layers[0].transform.position.keyframes.map(k=>k.frame); assert(collisionFrames.join(",")==="19,20","single move must stop before occupied frame");
 }
