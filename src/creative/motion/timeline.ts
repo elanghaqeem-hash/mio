@@ -26,8 +26,12 @@ export function moveSelectedKeyframes<T extends { id: string; frame: number }>(
   const minSelected = Math.min(...selectedKeys.map((key) => key.frame));
   const maxSelected = Math.max(...selectedKeys.map((key) => key.frame));
   const boundedDelta = Math.max(minFrame - minSelected, Math.min(maxFrame - maxSelected, requested));
+  const occupied = new Set(keyframes.filter((key) => !selected.has(key.id)).map((key) => key.frame));
+  const collisionFree = (delta: number): boolean => selectedKeys.every((key) => !occupied.has(key.frame + delta));
+  let safeDelta = boundedDelta;
+  while (safeDelta !== 0 && !collisionFree(safeDelta)) safeDelta += safeDelta > 0 ? -1 : 1;
   return keyframes
-    .map((key) => selected.has(key.id) ? { ...key, frame: key.frame + boundedDelta } : key)
+    .map((key) => selected.has(key.id) ? { ...key, frame: key.frame + safeDelta } : key)
     .sort((a, b) => a.frame - b.frame || a.id.localeCompare(b.id));
 }
 
