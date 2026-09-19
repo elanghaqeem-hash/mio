@@ -36,7 +36,7 @@ const canonicalCycleSignature=(vertexIds:string[]):string=>{
 };
 
 const duplicateFaceSignature=(face:MioMeshFace):string=>
-  `${canonicalCycleSignature(face.vertexIds)}::material:${face.materialSlot??'none'}`;
+  `${canonicalCycleSignature(face.vertexIds)}::material:${face.materialSlot??0}`;
 
 const directedEdgeSign=(face:MioMeshFace,a:string,b:string):number=>{
   for(let index=0;index<face.vertexIds.length;index+=1){
@@ -122,19 +122,21 @@ export const cleanupMeshTopology=(mesh:MioMeshData):MeshCleanupResult=>{
   const validation=validateMeshTopology(mesh);
   if(!validation.valid)throw new Error(`Cannot clean invalid mesh topology: ${validation.errors.join(' ')}`);
 
-  const signatureOwner=new Map<string,string>();
-  const removedFaceIds:string[]=[];
-  const keptFaces:MioMeshFace[]=[];
-
-  for(const face of [...mesh.faces].sort((a,b)=>a.id.localeCompare(b.id))){
+  const groups=new Map<string,string[]>();
+  for(const face of mesh.faces){
     const signature=duplicateFaceSignature(face);
-    if(signatureOwner.has(signature)){
-      removedFaceIds.push(face.id);
-      continue;
-    }
-    signatureOwner.set(signature,face.id);
-    keptFaces.push(structuredClone(face));
+    const ids=groups.get(signature)??[];
+    ids.push(face.id);
+    groups.set(signature,ids);
   }
+  const keepFaceIds=new Set<string>();
+  const removedFaceIds:string[]=[];
+  for(const ids of groups.values()){
+    const ordered=[...ids].sort((a,b)=>a.localeCompare(b));
+    if(ordered[0])keepFaceIds.add(ordered[0]);
+    removedFaceIds.push(...ordered.slice(1));
+  }
+  const keptFaces=mesh.faces.filter(face=>keepFaceIds.has(face.id)).map(face=>structuredClone(face));
 
   const referenced=new Set(keptFaces.flatMap(face=>face.vertexIds));
   const removedVertexIds=mesh.vertices.filter(vertex=>!referenced.has(vertex.id)).map(vertex=>vertex.id);
