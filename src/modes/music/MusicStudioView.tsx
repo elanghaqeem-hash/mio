@@ -53,6 +53,7 @@ export const MusicStudioView: React.FC = () => {
   const arrangementTimelineRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const currentStepRef = useRef(currentStep);
+  const rescheduleTransport=useCallback((nextStep:number)=>{transportGenerationRef.current+=1;transportRevisionRef.current+=1;setCurrentStep(nextStep);clearLiveTrackChannels();},[]);
   const transportGenerationRef = useRef(0);
   const schedulerRef = useRef<number | null>(null);
   const transportRevisionRef = useRef(0);
@@ -154,7 +155,7 @@ export const MusicStudioView: React.FC = () => {
     schedulerRef.current=scheduler;
 
     return()=>{window.clearInterval(scheduler);if(schedulerRef.current===scheduler)schedulerRef.current=null;for(const node of ownedNodes){try{node.disconnect();}catch{/* ended */}}};
-  },[isPlaying,project]);
+  },[isPlaying,project,currentStepRef.current]);
   useEffect(() => emergencyStop.registerAbortHandler(() => {
     setIsPlaying(false);
     void audioCtxRef.current?.suspend();
