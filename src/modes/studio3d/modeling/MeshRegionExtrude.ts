@@ -1,5 +1,5 @@
 import type { MioMeshData, MioMeshFace, MioMeshVertex } from '../../../types/creative';
-import { deriveMeshEdges, validateMeshTopology } from './MeshTopology';
+import { canonicalMeshEdgeId, validateMeshTopology } from './MeshTopology';
 
 export interface MeshRegionExtrudeResult {
   mesh: MioMeshData;
@@ -87,15 +87,25 @@ export const extrudeMeshRegion = (
     return { ...face, id, vertexIds:face.vertexIds.map(vertexId=>duplicateBySource.get(vertexId)!) };
   });
 
-  const selectedEdges=deriveMeshEdges(mesh).filter(edge=>edge.faceIds.some(faceId=>selectedSet.has(faceId)));
-  const boundaryEdges=selectedEdges.filter(edge=>edge.faceIds.filter(faceId=>selectedSet.has(faceId)).length===1);
+  const boundaryMap=new Map<string,{a:string;b:string;count:number}>();
+  for(const face of selectedFaces){
+    for(let index=0;index<face.vertexIds.length;index+=1){
+      const a=face.vertexIds[index];
+      const b=face.vertexIds[(index+1)%face.vertexIds.length];
+      const key=canonicalMeshEdgeId(a,b);
+      const existing=boundaryMap.get(key);
+      if(existing)existing.count+=1;
+      else boundaryMap.set(key,{a,b,count:1});
+    }
+  }
+  const boundaryEdges=[...boundaryMap.values()].filter(edge=>edge.count===1);
   const sideFaces:MioMeshFace[]=[];
 
   for(const edge of boundaryEdges){
-    const [a,b]=edge.vertexIds;
+    const {a,b}=edge;
     const da=duplicateBySource.get(a);
     const db=duplicateBySource.get(b);
-    if(!da||!db)throw new Error(`Boundary edge ${edge.id} could not map to duplicated region vertices.`);
+    if(!da||!db)throw new Error(`Boundary edge ${a}->${b} could not map to duplicated region vertices.`);
     const id=uniqueId(`region_side_${a}_${b}`,usedFaceIds);
     usedFaceIds.add(id);
     sideFaces.push({id,vertexIds:[a,b,db,da]});
