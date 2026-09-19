@@ -10,6 +10,7 @@ import {
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   PerspectiveCamera,
   Points,
   PointsMaterial,
@@ -26,6 +27,8 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { Mio3DObject, Mio3DScene, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh } from './modeling/MeshTopology';
 import { extrudeMeshFace, translateMeshSelection } from './modeling/MeshOperations';
+import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
+import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
@@ -65,6 +68,8 @@ export const Studio3DView: React.FC = () => {
   const [selectedId, setSelectedId] = useState('obj_core_1');
   const [transformMode, setTransformMode] = useState<'select' | 'move' | 'rotate' | 'scale'>('select');
   const [workspaceMode, setWorkspaceMode] = useState<'object' | 'edit'>('object');
+  const [transformSnapEnabled, setTransformSnapEnabled] = useState(false);
+  const [transformSnapStep, setTransformSnapStep] = useState(0.1);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
 
@@ -230,6 +235,92 @@ export const Studio3DView: React.FC = () => {
   }, [workspaceMode, transformMode, selectedId, selectedObj?.id]);
  
   useEffect(() => {
+    if (workspaceMode !== 'edit' || transformMode === 'select' || !selectedObj?.mesh) return;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const orbit = controlsRef.current;
+    const sourceMesh = meshMapRef.current.get(selectedObj.id);
+    const pivot = meshSelectionPivot(selectedObj.mesh, meshSelection);
+    if (!scene || !camera || !renderer || !orbit || !sourceMesh || !pivot) return;
+
+    const proxy = new Object3D();
+    proxy.name = 'MIO_Component_Transform_Proxy';
+    proxy.position.set(...pivot);
+    sourceMesh.add(proxy);
+
+    const originalMesh = structuredClone(selectedObj.mesh);
+    let previewMesh = structuredClone(originalMesh);
+    let dragging = false;
+
+    const gizmo = new TransformControls(camera, renderer.domElement);
+    gizmo.setMode(transformMode === 'move' ? 'translate' : transformMode);
+    gizmo.setSpace('local');
+    gizmo.setSize(0.72);
+    gizmo.setTranslationSnap(transformSnapEnabled ? transformSnapStep : null);
+    gizmo.setScaleSnap(transformSnapEnabled ? transformSnapStep : null);
+    gizmo.setRotationSnap(transformSnapEnabled ? Math.PI / 12 : null);
+    gizmo.attach(proxy);
+    const helper = gizmo.getHelper();
+    scene.add(helper);
+    transformControlsRef.current = gizmo;
+    transformHelperRef.current = helper;
+
+    const projectPreview = () => {
+      const pose = identityComponentGizmoPose(pivot);
+      pose.position = [proxy.position.x, proxy.position.y, proxy.position.z];
+      pose.rotation = [proxy.rotation.x, proxy.rotation.y, proxy.rotation.z];
+      pose.scale = [proxy.scale.x, proxy.scale.y, proxy.scale.z];
+      previewMesh = applyComponentGizmoPreview(originalMesh, meshSelection, transformMode, pivot, pose);
+      const projection = projectMeshToBufferGeometry(previewMesh);
+      sourceMesh.geometry.dispose();
+      sourceMesh.geometry = projection.geometry;
+      meshProjectionMapRef.current.set(selectedObj.id, projection);
+    };
+
+    const onObjectChange = () => {
+      if (dragging) projectPreview();
+    };
+    const onDraggingChanged = (event: { value: unknown }) => {
+      dragging = Boolean(event.value);
+      orbit.enabled = !dragging;
+      if (!dragging && JSON.stringify(previewMesh) !== JSON.stringify(originalMesh)) {
+        updateSelectedObject({ mesh: previewMesh });
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !dragging) return;
+      previewMesh = structuredClone(originalMesh);
+      const projection = projectMeshToBufferGeometry(previewMesh);
+      sourceMesh.geometry.dispose();
+      sourceMesh.geometry = projection.geometry;
+      meshProjectionMapRef.current.set(selectedObj.id, projection);
+      proxy.position.set(...pivot);
+      proxy.rotation.set(0, 0, 0);
+      proxy.scale.set(1, 1, 1);
+      (gizmo as unknown as { reset?: () => void }).reset?.();
+      dragging = false;
+      orbit.enabled = true;
+    };
+
+    gizmo.addEventListener('objectChange', onObjectChange);
+    gizmo.addEventListener('dragging-changed', onDraggingChanged);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      orbit.enabled = true;
+      window.removeEventListener('keydown', onKeyDown);
+      gizmo.removeEventListener('objectChange', onObjectChange);
+      gizmo.removeEventListener('dragging-changed', onDraggingChanged);
+      gizmo.detach();
+      scene.remove(helper);
+      sourceMesh.remove(proxy);
+      gizmo.dispose();
+      if (transformControlsRef.current === gizmo) transformControlsRef.current = null;
+      if (transformHelperRef.current === helper) transformHelperRef.current = null;
+    };
+  }, [workspaceMode, transformMode, selectedId, selectedObj?.mesh, meshSelection, transformSnapEnabled, transformSnapStep]);
+
+  useEffect(() => {
     const scene = sceneRef.current;
     editOverlayRef.current.forEach((overlay) => {
       scene?.remove(overlay);
@@ -328,6 +419,8 @@ export const Studio3DView: React.FC = () => {
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
+    const activeGizmoAxis = (transformControlsRef.current as unknown as { axis?: string | null } | null)?.axis;
+    if (activeGizmoAxis) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const mesh = meshMapRef.current.get(selectedObj.id);
@@ -431,6 +524,8 @@ export const Studio3DView: React.FC = () => {
           <button onClick={() => nudgeMeshSelection(1, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Y +0.1</button>
           <button onClick={() => nudgeMeshSelection(2, 0.1)} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300">Z +0.1</button>
           <button onClick={extrudeSelectedFace} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length !== 1} className="rounded bg-amber-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Extrude +0.25</button>
+          <label className="flex items-center gap-1 px-1 text-[10px] text-gray-300"><input type="checkbox" checked={transformSnapEnabled} onChange={(event) => setTransformSnapEnabled(event.target.checked)} className="accent-amber-400" /> SNAP</label>
+          <input type="number" min="0.001" step="0.05" value={transformSnapStep} onChange={(event) => setTransformSnapStep(Math.max(0.001, Number(event.target.value) || 0.1))} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Transform snap step" />
           <span className="px-2 text-[10px] text-gray-500">V {selectedObj.mesh.vertices.length} / F {selectedObj.mesh.faces.length}</span>
         </div>}
         <div ref={containerRef} onPointerDown={handleViewportPointerDown} className={`w-full flex-1 ${workspaceMode === 'edit' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`} />
