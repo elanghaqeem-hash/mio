@@ -14,8 +14,11 @@
 ## Architecture
 Edge Slide is a geometry operation over MioMeshData with topology-derived rail constraints. It is designed to consume the new loop-edge selection returned by Loop Cut.
 
+- Edit Mode exposes Edge Slide for one selected connected edge path/loop with a numeric rail ratio.
+- Selection remains on the same edge IDs because the operation changes geometry only.
+- Rejected slide attempts are reported through the activity log without mutating the mesh.
+
 ## Next
-- Edit Mode Edge Slide control;
 - interactive slide drag;
 - multi-loop cut spacing;
 - bevel/chamfer.
