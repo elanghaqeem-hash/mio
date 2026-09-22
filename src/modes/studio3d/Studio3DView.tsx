@@ -35,6 +35,7 @@ import { dissolveMeshEdge } from './modeling/MeshEdgeDissolve';
 import { cleanupMeshTopology, diagnoseMeshTopology } from './modeling/MeshTopologyDiagnostics';
 import { flipMeshFaces, recalculateMeshWinding } from './modeling/MeshFaceWinding';
 import { splitMeshEdge } from './modeling/MeshEdgeSplit';
+import { discoverQuadEdgeRing } from './modeling/MeshEdgeRing';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -633,6 +634,25 @@ export const Studio3DView: React.FC = () => {
     });
   };
 
+  const selectQuadEdgeRing = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length !== 1) return;
+    try {
+      const ring = discoverQuadEdgeRing(selectedObj.mesh, meshSelection.edgeIds[0]);
+      setMeshSelection({ mode: 'edge', vertexIds: [], edgeIds: ring.edgeIds, faceIds: [] });
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Selected ${ring.closed ? 'closed' : 'open'} quad edge ring with ${ring.edgeIds.length} edge(s).`,
+        mode: '3D',
+      });
+    } catch (reason) {
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Edge ring selection rejected: ${reason instanceof Error ? reason.message : String(reason)}`,
+        mode: '3D',
+      });
+    }
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -671,6 +691,7 @@ export const Studio3DView: React.FC = () => {
           <button onClick={flipSelectedFaces} disabled={meshSelection.mode !== 'face' || meshSelection.faceIds.length < 1} title="Reverse winding for selected faces" className="rounded bg-orange-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Flip Faces</button>
           <button onClick={recalculateSelectedMeshWinding} disabled={!canRecalculateWinding} title="Make connected face winding internally consistent; does not guess global outward direction" className="rounded bg-indigo-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Recalc Winding</button>
           <button onClick={splitSelectedEdge} disabled={!canSplitSelectedEdge} title="Split one selected boundary/manifold edge" className="rounded bg-teal-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Split Edge</button>
+          <button onClick={selectQuadEdgeRing} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length !== 1} title="Select the quad edge ring crossing the current edge" className="rounded bg-cyan-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Select Ring</button>
           <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSplitRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSplitRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge split ratio (0-1)" />
           <input type="number" min="0.0001" step="0.01" value={weldDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0) setWeldDistance(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Weld-by-distance threshold" />
           <input type="number" min="0.01" max="0.99" step="0.05" value={insetRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setInsetRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Inset ratio (0-1)" />
