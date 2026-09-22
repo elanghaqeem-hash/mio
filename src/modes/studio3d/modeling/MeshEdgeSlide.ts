@@ -126,8 +126,10 @@ export const slideMeshEdgeLoop=(mesh:MioMeshData,edgeIds:string[],ratio:number):
       });
       const neighborBySide:[string|null,string|null]=[null,null];
       for(const pair of pairs){
-        const side=labels[0]===pair.currentRail?0:labels[1]===pair.currentRail?1:-1;
-        if(side<0)throw new Error(`Face rail ${pair.currentRail} is not a valid rail neighbor of ${current}.`);
+        let side:0|1;
+        if(labels[0]===pair.currentRail)side=0;
+        else if(labels[1]===pair.currentRail)side=1;
+        else throw new Error(`Face rail ${pair.currentRail} is not a valid rail neighbor of ${current}.`);
         if(neighborBySide[side]&&neighborBySide[side]!==pair.neighborRail)throw new Error('Edge Slide rail-side mapping is contradictory.');
         neighborBySide[side]=pair.neighborRail;
       }
