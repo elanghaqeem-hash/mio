@@ -8,6 +8,7 @@ export interface MeshLoopCutResult {
   cutFaceIds: string[];
   newVertexIds: string[];
   newFaceIds: string[];
+  newLoopEdgeIds: string[];
   closed: boolean;
 }
 
@@ -140,6 +141,7 @@ export const loopCutMesh=(mesh:MioMeshData,seedEdgeId:string,ratio=0.5):MeshLoop
   }
 
   const cutFaceSet=new Set(ring.faceIds);
+  const cutVertexIdSet=new Set(cutVertexByEdge.values());
   const newFaceIds:string[]=[];
   const faces:MioMeshFace[]=[];
 
@@ -157,7 +159,7 @@ export const loopCutMesh=(mesh:MioMeshData,seedEdgeId:string,ratio=0.5):MeshLoop
       const cutVertexId=cutVertexByEdge.get(edgeId);
       if(cutVertexId)expanded.push(cutVertexId);
     }
-    const cutIndices=expanded.map((id,index)=>cutVertexByEdge.has([...cutVertexByEdge.entries()].find(([,vertexId])=>vertexId===id)?.[0]??'')?index:-1).filter(index=>index>=0);
+    const cutIndices=expanded.map((id,index)=>cutVertexIdSet.has(id)?index:-1).filter(index=>index>=0);
     if(cutIndices.length!==2)throw new Error(`Loop Cut expected two inserted vertices on face ${face.id}; found ${cutIndices.length}.`);
     const firstPath=cyclicPath(expanded,cutIndices[0],cutIndices[1]);
     const secondPath=cyclicPath(expanded,cutIndices[1],cutIndices[0]);
@@ -174,12 +176,16 @@ export const loopCutMesh=(mesh:MioMeshData,seedEdgeId:string,ratio=0.5):MeshLoop
     faces,
   };
   ensureValid(result);
+  const newLoopEdgeIds=deriveMeshEdges(result)
+    .filter(edge=>edge.vertexIds.every(vertexId=>cutVertexIdSet.has(vertexId)))
+    .map(edge=>edge.id);
   return{
     mesh:result,
     ringEdgeIds:[...ring.edgeIds],
     cutFaceIds:[...ring.faceIds],
     newVertexIds:createdVertices.map(vertex=>vertex.id),
     newFaceIds,
+    newLoopEdgeIds,
     closed:ring.closed,
   };
 };
