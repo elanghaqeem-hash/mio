@@ -39,6 +39,7 @@ import { discoverQuadEdgeRing } from './modeling/MeshEdgeRing';
 import { loopCutMesh } from './modeling/MeshLoopCut';
 import { dissolveValence2Vertex } from './modeling/MeshVertexDissolve';
 import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
+import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -88,6 +89,7 @@ export const Studio3DView: React.FC = () => {
   const [edgeSplitRatio, setEdgeSplitRatio] = useState(0.5);
   const [loopCutRatio, setLoopCutRatio] = useState(0.5);
   const [edgeSlideRatio, setEdgeSlideRatio] = useState(0.5);
+  const [bevelWidthRatio, setBevelWidthRatio] = useState(0.1);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
   const selectedEdgeForDissolve = selectedObj?.mesh && meshSelection.mode === 'edge' && meshSelection.edgeIds.length === 1
@@ -725,6 +727,26 @@ export const Studio3DView: React.FC = () => {
     }
   };
 
+  const bevelSelectedClosedLoop = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3) return;
+    try {
+      const result = bevelClosedEdgeLoop(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      updateSelectedObject({ mesh: result.mesh });
+      setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Beveled closed edge loop with ${result.bevelFaceIds.length} chamfer face(s) at width ratio ${bevelWidthRatio.toFixed(2)}.`,
+        mode: '3D',
+      });
+    } catch (reason) {
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Closed-loop bevel rejected: ${reason instanceof Error ? reason.message : String(reason)}`,
+        mode: '3D',
+      });
+    }
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -768,6 +790,8 @@ export const Studio3DView: React.FC = () => {
           <button onClick={dissolveSelectedVertex} disabled={!canDissolveSelectedVertex} title="Remove one valence-2 vertex and restore its neighboring edge" className="rounded bg-red-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Dissolve Vertex</button>
           <button onClick={slideSelectedEdgeLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} title="Slide the selected connected edge path/loop along its topology rails" className="rounded bg-blue-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Edge Slide</button>
           <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSlideRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSlideRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge Slide rail ratio (0-1)" />
+          <button onClick={bevelSelectedClosedLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3} title="Bevel one closed manifold edge loop; open loops and material boundaries are rejected" className="rounded bg-pink-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Loop</button>
+          <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel width as normalized rail ratio" />
           <input type="number" min="0.01" max="0.99" step="0.05" value={loopCutRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setLoopCutRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Loop Cut ratio (0-1)" />
           <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSplitRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSplitRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge split ratio (0-1)" />
           <input type="number" min="0.0001" step="0.01" value={weldDistance} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0) setWeldDistance(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Weld-by-distance threshold" />
