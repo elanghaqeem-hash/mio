@@ -86,8 +86,8 @@ export const discoverQuadEdgeRing=(mesh:MioMeshData,seedEdgeId:string):MeshEdgeR
   if(seedFaces.length===1){
     return{
       seedEdgeId,
-      edgeIds:[...first.edgeIds.reverse(),seedEdgeId],
-      faceIds:[...first.faceIds].reverse(),
+      edgeIds:[seedEdgeId,...first.edgeIds],
+      faceIds:[...first.faceIds],
       closed:false,
     };
   }
