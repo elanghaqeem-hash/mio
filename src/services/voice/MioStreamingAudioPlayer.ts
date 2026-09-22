@@ -1,4 +1,6 @@
 import type { MioSynthesisChunk } from './MioSynthesisProvider';
+import { mioAdaptiveBufferController } from './MioAdaptiveBufferController';
+import { classifyMioPlaybackCondition } from './MioPlaybackConditionClassifier';
 
 export type MioPlaybackMode = 'media-source' | 'blob-fallback';
 
@@ -99,7 +101,9 @@ export class MioStreamingAudioPlayer {
     let hasStarted = false;
     // Start conservatively with two encoded chunks when available. This bounded
     // prebuffer trades a small amount of latency for fewer immediate underruns.
-    const prebufferTargetChunks = 2;
+    // Adapt only at the safe startup boundary. The target is snapshotted once
+    // per playback so active SourceBuffer/iterator flow cannot be mutated mid-stream.
+    const prebufferTargetChunks = Math.max(1, Math.min(4, mioAdaptiveBufferController.getTargetChunks()));
     const updateBufferTelemetry = () => {
       if (!audio.buffered.length) return;
       const end = audio.buffered.end(audio.buffered.length - 1);
@@ -178,6 +182,14 @@ export class MioStreamingAudioPlayer {
       }
       if (mediaSource.readyState === 'open' && !sourceBuffer.updating) mediaSource.endOfStream();
       await this.waitForEnd(audio, generation, signal);
+      const condition = classifyMioPlaybackCondition(this.lastTelemetry);
+      mioAdaptiveBufferController.decide({
+        condition: condition.condition,
+        bufferAheadMs: condition.bufferAheadMs,
+        rebufferCount: condition.rebufferCount,
+        firstAudibleLatencyMs: condition.firstAudibleLatencyMs,
+        nowMs: performance.now(),
+      });
     } catch (error) {
       if (committed && !(error instanceof DOMException && error.name === 'AbortError')) {
         throw new MioMediaSourceCommittedError(error);
