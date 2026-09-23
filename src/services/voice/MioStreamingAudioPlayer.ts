@@ -45,6 +45,9 @@ export class MioStreamingAudioPlayer {
   private objectUrls = new Set<string>();
   private generation = 0;
   private lastTelemetry = initialTelemetry();
+  private completedAdaptiveSamples = 0;
+
+  getCompletedAdaptiveSamples(): number { return this.completedAdaptiveSamples; }
 
   getLastTelemetry(): MioAudioPlaybackTelemetry { return { ...this.lastTelemetry }; }
 
@@ -190,6 +193,7 @@ export class MioStreamingAudioPlayer {
         firstAudibleLatencyMs: condition.firstAudibleLatencyMs,
         nowMs: performance.now(),
       });
+      this.completedAdaptiveSamples += 1;
     } catch (error) {
       if (committed && !(error instanceof DOMException && error.name === 'AbortError')) {
         throw new MioMediaSourceCommittedError(error);
