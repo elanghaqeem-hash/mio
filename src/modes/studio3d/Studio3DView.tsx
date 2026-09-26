@@ -474,7 +474,17 @@ export const Studio3DView: React.FC = () => {
 
       if (bevelPreviewActive && event.key === 'Escape') {
         event.preventDefault();
-        cancelBevelPreview();
+        const session = bevelPreviewSessionRef.current;
+        const targetMesh = selectedObj ? meshMapRef.current.get(selectedObj.id) : undefined;
+        if (session && targetMesh) {
+          const restored = projectMeshToBufferGeometry(session.cancel());
+          targetMesh.geometry.dispose();
+          targetMesh.geometry = restored.geometry;
+          if (selectedObj) meshProjectionMapRef.current.set(selectedObj.id, restored);
+        }
+        bevelPreviewSessionRef.current = null;
+        bevelPreviewResultRef.current = null;
+        setBevelPreviewActive(false);
         return;
       }
 
@@ -530,7 +540,7 @@ export const Studio3DView: React.FC = () => {
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [bevelPreviewActive, cancelBevelPreview, deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, shortcutHelpOpen, workspaceMode]);
+  }, [bevelPreviewActive, deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, shortcutHelpOpen, workspaceMode]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
