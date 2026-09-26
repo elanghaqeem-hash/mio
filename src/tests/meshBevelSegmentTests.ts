@@ -1,0 +1,19 @@
+import { canonicalMeshEdgeId, createCubeMesh, validateMeshTopology } from '../modes/studio3d/modeling/MeshTopology';
+import { diagnoseMeshTopology } from '../modes/studio3d/modeling/MeshTopologyDiagnostics';
+import { loopCutMesh } from '../modes/studio3d/modeling/MeshLoopCut';
+import { bevelClosedEdgeLoop } from '../modes/studio3d/modeling/MeshClosedLoopBevel';
+import { bevelProfileParameter, segmentBevelFaces } from '../modes/studio3d/modeling/MeshBevelSegments';
+
+interface Result{name:string;passed:boolean;error?:string}
+const assert=(c:unknown,m:string):void=>{if(!c)throw new Error(m)};
+const test=async(name:string,run:()=>void|Promise<void>):Promise<Result>=>{try{await run();return{name,passed:true}}catch(e){return{name,passed:false,error:e instanceof Error?e.message:String(e)}}};
+
+export async function runMeshBevelSegmentTests():Promise<{passed:number;total:number}>{
+ const results:Result[]=[];
+ results.push(await test('profile parameter is symmetric and neutral at 0.5',()=>{assert(Math.abs(bevelProfileParameter(0.25,0.5)-0.25)<1e-9,'neutral profile should be linear');const a=bevelProfileParameter(0.25,0.7),b=bevelProfileParameter(0.75,0.7);assert(Math.abs((a+b)-1)<1e-9,'profile distribution must be symmetric')}));
+ results.push(await test('four-segment closed bevel replaces each chamfer quad with four quads',()=>{const cut=loopCutMesh(createCubeMesh(),canonicalMeshEdgeId('v0','v1'),0.5);const base=bevelClosedEdgeLoop(cut.mesh,cut.newLoopEdgeIds,0.1);const r=segmentBevelFaces(base.mesh,base.bevelFaceIds,4,0.5);assert(r.bevelFaceIds.length===16,'four original bevel faces should become sixteen');assert(r.createdVertexIds.length===24,'each bevel quad should create two vertices for each of three interior rails');assert(r.mesh.faces.length===26,'four chamfer faces become sixteen');assert(validateMeshTopology(r.mesh).valid,'segmented bevel must remain valid');const d=diagnoseMeshTopology(r.mesh);assert(d.nonManifoldEdgeIds.length===0,'segmented bevel must remain manifold');assert(d.inconsistentWindingEdgeIds.length===0,'segmented bevel winding must remain consistent')}));
+ results.push(await test('one segment is topology identity',()=>{const cut=loopCutMesh(createCubeMesh(),canonicalMeshEdgeId('v0','v1'),0.5);const base=bevelClosedEdgeLoop(cut.mesh,cut.newLoopEdgeIds,0.1);const r=segmentBevelFaces(base.mesh,base.bevelFaceIds,1,0.5);assert(r.mesh.vertices.length===base.mesh.vertices.length,'one segment adds no vertices');assert(r.mesh.faces.length===base.mesh.faces.length,'one segment adds no faces')}));
+ results.push(await test('segment count and profile bounds are guarded',()=>{const cut=loopCutMesh(createCubeMesh(),canonicalMeshEdgeId('v0','v1'),0.5);const base=bevelClosedEdgeLoop(cut.mesh,cut.newLoopEdgeIds,0.1);let segmentThrew=false,profileThrew=false;try{segmentBevelFaces(base.mesh,base.bevelFaceIds,17,0.5)}catch{segmentThrew=true}try{segmentBevelFaces(base.mesh,base.bevelFaceIds,2,1)}catch{profileThrew=true}assert(segmentThrew&&profileThrew,'invalid segment/profile values must reject')}));
+ for(const r of results)console.log(`${r.passed?'✓':'✗'} [${r.passed?'PASS':'FAIL'}] ${r.name}${r.error?` — ${r.error}`:''}`);
+ return{passed:results.filter(r=>r.passed).length,total:results.length};
+}
