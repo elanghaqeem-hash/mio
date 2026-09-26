@@ -24,7 +24,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { Mio3DObject, Mio3DScene, MioMeshFace, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
+import { Mio3DObject, Mio3DScene, MioMeshData, MioMeshFace, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh, deriveMeshEdges } from './modeling/MeshTopology';
 import { extrudeMeshFace, normalizeMeshSelection, translateMeshSelection } from './modeling/MeshOperations';
 import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
