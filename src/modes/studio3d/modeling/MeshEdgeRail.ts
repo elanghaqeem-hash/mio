@@ -116,12 +116,25 @@ export const resolveMeshEdgeRailSelection=(
 
   const railNeighbors=new Map<string,[string,string]>();
   for(const vertexId of selectedVertexIds){
-    const rails=allEdges
-      .filter(edge=>edge.vertexIds.includes(vertexId)&&!selectedEdgeSet.has(edge.id))
-      .map(edge=>edge.vertexIds[0]===vertexId?edge.vertexIds[1]:edge.vertexIds[0])
-      .filter(neighbor=>!selectedVertexSet.has(neighbor));
-    const unique=[...new Set(rails)].sort((a,b)=>a.localeCompare(b));
-    if(unique.length!==2)throw new Error(`Rail vertex ${vertexId} requires exactly two non-selected rail neighbors; found ${unique.length}.`);
+    const selectedPartners=[...(selectedAdjacency.get(vertexId)??[])];
+    let unique:string[];
+    if(!closed&&selectedPartners.length===1){
+      const selectedEdge=selectedEdges.find(edge=>edge.vertexIds.includes(vertexId)&&edge.vertexIds.includes(selectedPartners[0]));
+      if(!selectedEdge)throw new Error(`Could not resolve endpoint selected edge at ${vertexId}.`);
+      const endpointRails=selectedEdge.faceIds.map(faceId=>{
+        const face=faceById.get(faceId);
+        if(!face)throw new Error(`Endpoint selected edge references missing face ${faceId}.`);
+        return faceRailNeighbor(face,vertexId,selectedPartners[0]);
+      });
+      unique=[...new Set(endpointRails)].sort((a,b)=>a.localeCompare(b));
+    }else{
+      const rails=allEdges
+        .filter(edge=>edge.vertexIds.includes(vertexId)&&!selectedEdgeSet.has(edge.id))
+        .map(edge=>edge.vertexIds[0]===vertexId?edge.vertexIds[1]:edge.vertexIds[0])
+        .filter(neighbor=>!selectedVertexSet.has(neighbor));
+      unique=[...new Set(rails)].sort((a,b)=>a.localeCompare(b));
+    }
+    if(unique.length!==2)throw new Error(`Rail vertex ${vertexId} requires exactly two side rail neighbors; found ${unique.length}.`);
     railNeighbors.set(vertexId,[unique[0],unique[1]]);
   }
 
