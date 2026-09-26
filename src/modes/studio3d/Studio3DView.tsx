@@ -192,24 +192,6 @@ export const Studio3DView: React.FC = () => {
       currentRenderer.setSize(nextWidth, nextHeight);
     };
     window.addEventListener('resize', resize);
-    const handleViewportPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = bevelDragRef.current;
-    if (!bevelPreviewActive || !drag) return;
-    setBevelWidthRatio(bevelWidthFromPointer(drag, event.clientX));
-  };
-
-  const handleViewportPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!bevelDragRef.current) return;
-    bevelDragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-
-  const handleViewportWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!bevelPreviewActive) return;
-    event.preventDefault();
-    setBevelSegments((current) => bevelSegmentsFromWheel(current, event.deltaY));
-  };
-
   return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', resize);
@@ -939,6 +921,24 @@ export const Studio3DView: React.FC = () => {
       }} className="bg-[#141b2b] border border-gray-700 rounded px-1.5 py-1 text-white text-center text-xs" />)}</div>
     </div>
   );
+
+  const handleViewportPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = bevelDragRef.current;
+    if (!bevelPreviewActive || !drag) return;
+    setBevelWidthRatio(bevelWidthFromPointer(drag, event.clientX));
+  };
+
+  const handleViewportPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!bevelDragRef.current) return;
+    bevelDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const handleViewportWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!bevelPreviewActive) return;
+    event.preventDefault();
+    setBevelSegments((current) => bevelSegmentsFromWheel(current, event.deltaY));
+  };
 
   return (
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
