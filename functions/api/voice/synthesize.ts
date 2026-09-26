@@ -20,6 +20,8 @@ interface SynthesisRequest { text?: string; locale?: string; profile?: Synthesis
 const MAX_TEXT_CHARS = 8000;
 const MAX_BODY_BYTES = 32_000;
 const UPSTREAM_TIMEOUT_MS = 30_000;
+const RETRYABLE_UPSTREAM_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_UPSTREAM_ATTEMPTS = 2;
 type ProviderKind = 'generic' | 'openai-compatible';
 
 const ALLOWED_EMOTIONS = new Set(['neutral', 'warm', 'confident', 'gentle', 'focused', 'playful']);
@@ -207,24 +209,28 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   const downstreamAbort = () => controller.abort('client-disconnected');
   context.request.signal.addEventListener('abort', downstreamAbort, { once: true });
   try {
-    const upstream = await fetch(endpoint.toString(), {
-      method: 'POST',
-      signal: controller.signal,
-      redirect: 'error',
-      headers: {
-        'Authorization': `Bearer ${context.env.MIO_TTS_API_KEY!.trim()}`,
-        'Content-Type': 'application/json',
-        'Accept': 'audio/mpeg, audio/wav, audio/ogg',
-      },
-      body: JSON.stringify(providerPayload(context.env, normalized)),
-    });
-    if (!upstream.ok) return json({ error: 'Licensed synthesis provider request failed', upstreamStatus: upstream.status }, 502);
+    let upstream: Response | null = null;
+    for (let attempt = 1; attempt <= MAX_UPSTREAM_ATTEMPTS; attempt += 1) {
+      upstream = await fetch(endpoint.toString(), {
+        method: 'POST',
+        signal: controller.signal,
+        redirect: 'error',
+        headers: {
+          'Authorization': `Bearer ${context.env.MIO_TTS_API_KEY!.trim()}`,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg, audio/wav, audio/ogg',
+        },
+        body: JSON.stringify(providerPayload(context.env, normalized)),
+      });
+      if (upstream.ok || !RETRYABLE_UPSTREAM_STATUS.has(upstream.status) || attempt === MAX_UPSTREAM_ATTEMPTS) break;
+    }
+    if (!upstream?.ok) return json({ error: 'Licensed synthesis provider request failed', upstreamStatus: upstream?.status ?? 502 }, 502);
     if (!upstream.body) return json({ error: 'Licensed synthesis provider returned no audio stream' }, 502);
     const contentType = upstream.headers.get('content-type') ?? 'audio/mpeg';
     if (!/^audio\/(mpeg|wav|x-wav|ogg)(?:;|$)/i.test(contentType)) return json({ error: 'Licensed synthesis provider returned an unsupported media type' }, 502);
     return new Response(upstream.body, {
       status: 200,
-      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.5', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
+      headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.7', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
     });
   } catch {
     const aborted = controller.signal.aborted;
