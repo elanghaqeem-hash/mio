@@ -42,6 +42,7 @@ import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
 import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { bevelBoundaryOpenEdgePath } from './modeling/MeshBoundaryOpenBevel';
 import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
+import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCatalog';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -93,6 +94,7 @@ export const Studio3DView: React.FC = () => {
   const [edgeSlideRatio, setEdgeSlideRatio] = useState(0.5);
   const [bevelWidthRatio, setBevelWidthRatio] = useState(0.1);
   const [editToolGroup, setEditToolGroup] = useState<'transform' | 'build' | 'topology' | 'repair'>('build');
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   const selectedObj = sceneData.objects.find((object) => object.id === selectedId);
   const selectedEdgeForDissolve = selectedObj?.mesh && meshSelection.mode === 'edge' && meshSelection.edgeIds.length === 1
@@ -463,6 +465,12 @@ export const Studio3DView: React.FC = () => {
         || (target instanceof HTMLElement && target.isContentEditable)
       ) return;
 
+      if (shortcutHelpOpen && event.key === 'Escape') {
+        event.preventDefault();
+        setShortcutHelpOpen(false);
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
         event.preventDefault();
         duplicateObject(selectedId);
@@ -482,6 +490,11 @@ export const Studio3DView: React.FC = () => {
       });
       if (!action) return;
 
+      if (action.type === 'toggle-help') {
+        event.preventDefault();
+        setShortcutHelpOpen((previous) => !previous);
+        return;
+      }
       if (action.type === 'transform-mode') {
         setTransformMode(action.mode);
         return;
@@ -504,7 +517,7 @@ export const Studio3DView: React.FC = () => {
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, workspaceMode]);
+  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, shortcutHelpOpen, workspaceMode]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
@@ -824,12 +837,30 @@ export const Studio3DView: React.FC = () => {
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
       <CreativeWorkspaceToolbar workspace={workspace} />
       <div className="relative flex-1 h-full flex flex-col">
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>{workspaceMode.toUpperCase()} MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span></div>
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>{workspaceMode.toUpperCase()} MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span><button onClick={() => setShortcutHelpOpen(true)} title="Open modeling shortcuts (?)" className="ml-1 rounded border border-cyan-500/30 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-950/60">? Shortcuts</button></div>
         <div className="absolute left-3 top-12 z-10 flex max-w-[calc(100%-1.5rem)] flex-row gap-1 overflow-x-auto rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono sm:flex-col sm:overflow-visible">{(['select', 'move', 'rotate', 'scale'] as const).map((mode) => <button key={mode} onClick={() => setTransformMode(mode)} className={`whitespace-nowrap rounded px-2 py-1 text-left text-[10px] uppercase ${transformMode === mode ? 'bg-cyan-500 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'select' ? 'Q Select' : mode === 'move' ? 'W Move' : mode === 'rotate' ? 'E Rotate' : 'R Scale'}</button>)}</div>
         <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono">
           <button onClick={() => setWorkspaceMode('object')} title="Tab toggles Object/Edit Mode" className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'object' ? 'bg-cyan-500 text-black' : 'text-gray-300'}`}>OBJECT</button>
           <button onClick={enterEditMode} title="Tab toggles Object/Edit Mode" disabled={!selectedObj || (!selectedObj.mesh && selectedObj.type !== 'cube')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'edit' ? 'bg-amber-400 text-black' : 'text-gray-300'} disabled:opacity-30`}>EDIT</button>
         </div>
+        {shortcutHelpOpen && <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/55 px-3 pt-20 backdrop-blur-sm" onPointerDown={() => setShortcutHelpOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="3D modeling shortcuts" onPointerDown={(event) => event.stopPropagation()} className="max-h-[75vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-cyan-500/30 bg-[#0d121d]/95 p-4 font-mono shadow-2xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div><div className="text-sm font-bold text-cyan-200">3D MODELING SHORTCUTS</div><div className="mt-0.5 text-[10px] text-gray-500">Press ? to toggle · Esc to close</div></div>
+              <button onClick={() => setShortcutHelpOpen(false)} aria-label="Close shortcut help" className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800">Close</button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {MESH_MODELING_SHORTCUT_GROUPS.map((group) => <div key={group.title} className="rounded-lg border border-gray-800 bg-[#111827]/80 p-3">
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">{group.title}</div>
+                <div className="space-y-1.5">{group.items.map((item) => <div key={`${group.title}:${item.keys}`} className="flex items-center gap-2 text-[10px]">
+                  <kbd className="min-w-20 rounded border border-gray-700 bg-[#090d15] px-2 py-1 text-center text-cyan-200">{item.keys}</kbd>
+                  <span className="flex-1 text-gray-300">{item.action}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] ${item.scope === 'Edit' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyan-400/10 text-cyan-300'}`}>{item.scope}</span>
+                </div>)}</div>
+              </div>)}
+            </div>
+          </div>
+        </div>}
         {workspaceMode === 'edit' && selectedObj?.mesh && <div className="absolute left-3 right-3 top-24 z-10 max-h-[42vh] overflow-y-auto rounded-lg border border-amber-500/30 bg-[#0d121d]/90 p-2 font-mono backdrop-blur-md sm:left-28 sm:top-12">
           <div className="flex flex-wrap items-center gap-1">
             {(['vertex','edge','face'] as MioMeshSelectionMode[]).map((mode) => <button key={mode} onClick={() => setMeshSelectionMode(mode)} className={`rounded px-2 py-1 text-[10px] uppercase ${meshSelection.mode === mode ? 'bg-amber-400 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'vertex' ? '1 Vertex' : mode === 'edge' ? '2 Edge' : '3 Face'}</button>)}
