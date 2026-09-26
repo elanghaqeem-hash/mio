@@ -1,0 +1,16 @@
+import { resolveMeshModelingShortcut } from '../modes/studio3d/modeling/MeshModelingShortcuts';
+
+interface Result{name:string;passed:boolean;error?:string}
+const assert=(c:unknown,m:string):void=>{if(!c)throw new Error(m)};
+const test=async(name:string,run:()=>void|Promise<void>):Promise<Result>=>{try{await run();return{name,passed:true}}catch(e){return{name,passed:false,error:e instanceof Error?e.message:String(e)}}};
+
+export async function runMeshModelingShortcutTests():Promise<{passed:number;total:number}>{
+ const results:Result[]=[];
+ results.push(await test('QWER resolve transform modes case-insensitively',()=>{assert(resolveMeshModelingShortcut({key:'q',workspaceMode:'object'})?.type==='transform-mode','Q should resolve transform action');assert((resolveMeshModelingShortcut({key:'W',workspaceMode:'edit'}) as {mode?:string}|null)?.mode==='move','W should resolve move');assert((resolveMeshModelingShortcut({key:'e',workspaceMode:'edit'}) as {mode?:string}|null)?.mode==='rotate','E should resolve rotate');assert((resolveMeshModelingShortcut({key:'R',workspaceMode:'object'}) as {mode?:string}|null)?.mode==='scale','R should resolve scale')}));
+ results.push(await test('Tab resolves workspace toggle in object and edit modes',()=>{assert(resolveMeshModelingShortcut({key:'Tab',workspaceMode:'object'})?.type==='toggle-workspace','object Tab should toggle');assert(resolveMeshModelingShortcut({key:'Tab',workspaceMode:'edit'})?.type==='toggle-workspace','edit Tab should toggle')}));
+ results.push(await test('1 2 3 resolve component modes only in Edit Mode',()=>{assert((resolveMeshModelingShortcut({key:'1',workspaceMode:'edit'}) as {mode?:string}|null)?.mode==='vertex','1 should select vertex mode');assert((resolveMeshModelingShortcut({key:'2',workspaceMode:'edit'}) as {mode?:string}|null)?.mode==='edge','2 should select edge mode');assert((resolveMeshModelingShortcut({key:'3',workspaceMode:'edit'}) as {mode?:string}|null)?.mode==='face','3 should select face mode');assert(resolveMeshModelingShortcut({key:'1',workspaceMode:'object'})===null,'1 must not change object mode selection state')}));
+ results.push(await test('browser or command modified shortcuts are ignored by modeling resolver',()=>{assert(resolveMeshModelingShortcut({key:'Tab',workspaceMode:'edit',ctrlKey:true})===null,'Ctrl+Tab must remain browser-reserved');assert(resolveMeshModelingShortcut({key:'w',workspaceMode:'edit',metaKey:true})===null,'Meta+W must remain application/browser-reserved');assert(resolveMeshModelingShortcut({key:'1',workspaceMode:'edit',altKey:true})===null,'Alt+1 must remain reserved')}));
+ results.push(await test('unmapped keys resolve to null',()=>{assert(resolveMeshModelingShortcut({key:'x',workspaceMode:'edit'})===null,'X should remain unmapped');assert(resolveMeshModelingShortcut({key:'Escape',workspaceMode:'edit'})===null,'Escape belongs to transform cancel flow')}));
+ for(const r of results)console.log(`${r.passed?'✓':'✗'} [${r.passed?'PASS':'FAIL'}] ${r.name}${r.error?` — ${r.error}`:''}`);
+ return{passed:results.filter(r=>r.passed).length,total:results.length};
+}
