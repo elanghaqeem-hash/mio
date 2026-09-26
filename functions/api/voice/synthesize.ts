@@ -168,7 +168,8 @@ async function readJsonBody(request: Request): Promise<SynthesisRequest | Respon
 function gatewayReady(env: Env): boolean {
   const providerReady = configured(env) && Boolean(safeProviderEndpoint(env));
   const sessionReady = !voiceSessionRequired(env) || voiceSessionVerificationConfigured(env);
-  return providerReady && sessionReady;
+  const rateLimitReady = !mioVoiceRateLimitRequired(env.MIO_VOICE_REQUIRE_RATE_LIMIT) || Boolean(env.MIO_VOICE_RATE_LIMIT);
+  return providerReady && sessionReady && rateLimitReady;
 }
 
 export function onRequestHead(context: PagesContext): Response {
@@ -179,7 +180,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   const ready = gatewayReady(context.env);
   return json({
     service: 'mio-voice-v4-synthesis',
-    engine: 'v4.5',
+    engine: 'v4.7',
     ready,
     provider: providerKind(context.env),
     voiceConfigured: Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
@@ -188,6 +189,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     allowedOriginsConfigured: Boolean(context.env.MIO_VOICE_ALLOWED_ORIGINS?.trim()),
     sessionRequired: voiceSessionRequired(context.env),
     sessionVerificationConfigured: voiceSessionVerificationConfigured(context.env),
+    rateLimitRequired: mioVoiceRateLimitRequired(context.env.MIO_VOICE_REQUIRE_RATE_LIMIT),
+    rateLimitBindingConfigured: Boolean(context.env.MIO_VOICE_RATE_LIMIT),
     detail: ready ? 'Server-side licensed synthesis gateway is configured.' : 'Production synthesis is not configured; Mio will use its device voice fallback.',
     authority: 'readiness only; no provider secret or voice enrollment data is exposed',
   }, ready ? 200 : 503);
@@ -239,8 +242,12 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
       headers: { ...securityHeaders(contentType), 'X-Mio-Voice-Engine': 'v4.7', 'X-Mio-Voice-Streaming': 'upstream-pass-through', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
     });
   } catch {
-    const aborted = controller.signal.aborted;
-    return json({ error: aborted ? 'Synthesis request timed out or was cancelled' : 'Synthesis gateway request failed' }, aborted ? 504 : 502);
+    if (controller.signal.aborted) {
+      const reason = controller.signal.reason;
+      if (reason === 'client-disconnected') return json({ error: 'Synthesis request was cancelled by the client' }, 499);
+      return json({ error: 'Synthesis request timed out' }, 504);
+    }
+    return json({ error: 'Synthesis gateway request failed' }, 502);
   } finally {
     clearTimeout(timeout);
     context.request.signal.removeEventListener('abort', downstreamAbort);
