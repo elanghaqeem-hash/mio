@@ -90,7 +90,8 @@ export const bevelTriCornerJunction=(mesh:MioMeshData,edgeIds:string[],widthRati
   if(current!==first)throw new Error('Tri-corner cap boundary did not close.');
 
   const miterId=unique(`${junction.vertexId}_tri_miter`,usedFaceIds);
-  const miterFace:MioMeshFace={id:miterId,vertexIds:orderedCutIds,...(firstFace.materialSlot===undefined?{}:{materialSlot:firstFace.materialSlot})};
+  const miterMaterialSlot=incidentFaces[0].materialSlot;
+  const miterFace:MioMeshFace={id:miterId,vertexIds:orderedCutIds,...(miterMaterialSlot===undefined?{}:{materialSlot:miterMaterialSlot})};
   let result:MioMeshData={vertices:[...mesh.vertices.filter(v=>v.id!==junction.vertexId).map(v=>structuredClone(v)),...created],faces:[...replacementFaces,miterFace]};
   let diagnostics=diagnoseMeshTopology(result);
   if(diagnostics.inconsistentWindingEdgeIds.length){
