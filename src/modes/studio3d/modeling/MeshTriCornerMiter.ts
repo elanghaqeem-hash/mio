@@ -67,28 +67,28 @@ export const bevelTriCornerJunction=(mesh:MioMeshData,edgeIds:string[],widthRati
     const nextCut=cutVertexByEdge.get(canonicalMeshEdgeId(junction.vertexId,next));
     if(!prevCut||!nextCut)throw new Error(`Tri-corner face ${face.id} could not resolve both cut vertices.`);
     const ids:string[]=[];
-    for(const id of face.vertexIds){if(id===junction.vertexId)ids.push(nextCut,prevCut);else ids.push(id);}
+    for(const id of face.vertexIds){if(id===junction.vertexId)ids.push(prevCut,nextCut);else ids.push(id);}
     replacementFaces.push({...structuredClone(face),vertexIds:ids});
   }
 
+  const cutIds=new Set(cutVertexByEdge.values());
+  const temporary:MioMeshData={vertices:[...mesh.vertices.filter(v=>v.id!==junction.vertexId).map(v=>structuredClone(v)),...created],faces:replacementFaces};
+  const capBoundaryEdges=deriveMeshEdges(temporary).filter(edge=>edge.faceIds.length===1&&edge.vertexIds.every(id=>cutIds.has(id)));
+  if(capBoundaryEdges.length!==3)throw new Error(`Tri-corner miter expected three cap boundary edges; found ${capBoundaryEdges.length}.`);
+  const adjacency=new Map<string,string[]>();
+  for(const edge of capBoundaryEdges){const[a,b]=edge.vertexIds;adjacency.set(a,[...(adjacency.get(a)??[]),b]);adjacency.set(b,[...(adjacency.get(b)??[]),a]);}
+  if([...adjacency.values()].some(neighbors=>neighbors.length!==2))throw new Error('Tri-corner cap boundary is not one closed three-edge cycle.');
   const orderedCutIds:string[]=[];
-  const firstFace=incidentFaces[0];
-  const centerIndex=firstFace.vertexIds.indexOf(junction.vertexId);
-  const firstNext=firstFace.vertexIds[(centerIndex+1)%firstFace.vertexIds.length];
-  let currentEdge=canonicalMeshEdgeId(junction.vertexId,firstNext);
-  orderedCutIds.push(cutVertexByEdge.get(currentEdge)!);
+  const first=[...cutIds].sort((a,b)=>a.localeCompare(b))[0];
+  let previous:string|undefined,current=first;
   while(orderedCutIds.length<3){
-    const currentNeighbor=neighborByEdge.get(currentEdge)!;
-    const candidateFace=incidentFaces.find(face=>edgeInFace(face,junction.vertexId,currentNeighbor)&&face!==firstFace);
-    const sourceFace=candidateFace??incidentFaces.find(face=>edgeInFace(face,junction.vertexId,currentNeighbor));
-    if(!sourceFace)break;
-    const otherEdge=junction.incidentSelectedEdgeIds.find(id=>id!==currentEdge&&edgeInFace(sourceFace,junction.vertexId,neighborByEdge.get(id)!));
-    if(!otherEdge)break;
-    const cutId=cutVertexByEdge.get(otherEdge)!;
-    if(orderedCutIds.includes(cutId))break;
-    orderedCutIds.push(cutId);currentEdge=otherEdge;
+    orderedCutIds.push(current);
+    const next=(adjacency.get(current)??[]).find(id=>id!==previous);
+    if(!next)throw new Error('Tri-corner cap cycle traversal failed.');
+    previous=current;current=next;
   }
-  if(orderedCutIds.length!==3)throw new Error('Tri-corner miter could not derive a stable cap cycle.');
+  if(current!==first)throw new Error('Tri-corner cap boundary did not close.');
+
   const miterId=unique(`${junction.vertexId}_tri_miter`,usedFaceIds);
   const miterFace:MioMeshFace={id:miterId,vertexIds:orderedCutIds,...(firstFace.materialSlot===undefined?{}:{materialSlot:firstFace.materialSlot})};
   let result:MioMeshData={vertices:[...mesh.vertices.filter(v=>v.id!==junction.vertexId).map(v=>structuredClone(v)),...created],faces:[...replacementFaces,miterFace]};
