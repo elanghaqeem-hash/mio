@@ -41,6 +41,7 @@ import { dissolveValence2Vertex } from './modeling/MeshVertexDissolve';
 import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
 import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { bevelBoundaryOpenEdgePath } from './modeling/MeshBoundaryOpenBevel';
+import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -454,17 +455,56 @@ export const Studio3DView: React.FC = () => {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      if (event.key.toLowerCase() === 'w') setTransformMode('move');
-      if (event.key.toLowerCase() === 'e') setTransformMode('rotate');
-      if (event.key.toLowerCase() === 'r') setTransformMode('scale');
-      if (event.key.toLowerCase() === 'q') setTransformMode('select');
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateObject(selectedId); }
-      if (event.key === 'Delete' && sceneData.objects.length > 1) deleteObject(selectedId);
+      const target=event.target;
+      if (
+        target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable)
+      ) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        duplicateObject(selectedId);
+        return;
+      }
+      if (event.key === 'Delete' && sceneData.objects.length > 1) {
+        deleteObject(selectedId);
+        return;
+      }
+
+      const action=resolveMeshModelingShortcut({
+        key:event.key,
+        workspaceMode,
+        ctrlKey:event.ctrlKey,
+        metaKey:event.metaKey,
+        altKey:event.altKey,
+      });
+      if (!action) return;
+
+      if (action.type === 'transform-mode') {
+        setTransformMode(action.mode);
+        return;
+      }
+      if (action.type === 'selection-mode') {
+        setMeshSelection({ mode: action.mode, vertexIds: [], edgeIds: [], faceIds: [] });
+        return;
+      }
+
+      event.preventDefault();
+      if (workspaceMode === 'edit') {
+        setWorkspaceMode('object');
+        return;
+      }
+      if (!selectedObj) return;
+      if (!selectedObj.mesh && selectedObj.type === 'cube') updateSelectedObject({ mesh: createCubeMesh() });
+      if (!selectedObj.mesh && selectedObj.type !== 'cube') return;
+      setWorkspaceMode('edit');
+      setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId]);
+  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, workspaceMode]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
@@ -787,12 +827,12 @@ export const Studio3DView: React.FC = () => {
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>{workspaceMode.toUpperCase()} MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span></div>
         <div className="absolute left-3 top-12 z-10 flex max-w-[calc(100%-1.5rem)] flex-row gap-1 overflow-x-auto rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono sm:flex-col sm:overflow-visible">{(['select', 'move', 'rotate', 'scale'] as const).map((mode) => <button key={mode} onClick={() => setTransformMode(mode)} className={`whitespace-nowrap rounded px-2 py-1 text-left text-[10px] uppercase ${transformMode === mode ? 'bg-cyan-500 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'select' ? 'Q Select' : mode === 'move' ? 'W Move' : mode === 'rotate' ? 'E Rotate' : 'R Scale'}</button>)}</div>
         <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono">
-          <button onClick={() => setWorkspaceMode('object')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'object' ? 'bg-cyan-500 text-black' : 'text-gray-300'}`}>OBJECT</button>
-          <button onClick={enterEditMode} disabled={!selectedObj || (!selectedObj.mesh && selectedObj.type !== 'cube')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'edit' ? 'bg-amber-400 text-black' : 'text-gray-300'} disabled:opacity-30`}>EDIT</button>
+          <button onClick={() => setWorkspaceMode('object')} title="Tab toggles Object/Edit Mode" className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'object' ? 'bg-cyan-500 text-black' : 'text-gray-300'}`}>OBJECT</button>
+          <button onClick={enterEditMode} title="Tab toggles Object/Edit Mode" disabled={!selectedObj || (!selectedObj.mesh && selectedObj.type !== 'cube')} className={`rounded px-2 py-1 text-[10px] ${workspaceMode === 'edit' ? 'bg-amber-400 text-black' : 'text-gray-300'} disabled:opacity-30`}>EDIT</button>
         </div>
         {workspaceMode === 'edit' && selectedObj?.mesh && <div className="absolute left-3 right-3 top-24 z-10 max-h-[42vh] overflow-y-auto rounded-lg border border-amber-500/30 bg-[#0d121d]/90 p-2 font-mono backdrop-blur-md sm:left-28 sm:top-12">
           <div className="flex flex-wrap items-center gap-1">
-            {(['vertex','edge','face'] as MioMeshSelectionMode[]).map((mode) => <button key={mode} onClick={() => setMeshSelectionMode(mode)} className={`rounded px-2 py-1 text-[10px] uppercase ${meshSelection.mode === mode ? 'bg-amber-400 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode}</button>)}
+            {(['vertex','edge','face'] as MioMeshSelectionMode[]).map((mode) => <button key={mode} onClick={() => setMeshSelectionMode(mode)} className={`rounded px-2 py-1 text-[10px] uppercase ${meshSelection.mode === mode ? 'bg-amber-400 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'vertex' ? '1 Vertex' : mode === 'edge' ? '2 Edge' : '3 Face'}</button>)}
             <button onClick={selectFirstMeshElement} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-cyan-300 hover:bg-gray-800">Select First</button>
             <span className="ml-auto px-2 text-[10px] text-gray-500">V {selectedObj.mesh.vertices.length} / F {selectedObj.mesh.faces.length}</span>
             {selectedMeshDiagnostics && <span className="px-2 text-[10px] text-sky-300" title="Boundary / Non-manifold / Isolated / Duplicate / Zero-area / Winding">B {selectedMeshDiagnostics.boundaryEdgeIds.length} · NM {selectedMeshDiagnostics.nonManifoldEdgeIds.length} · ISO {selectedMeshDiagnostics.isolatedVertexIds.length} · DUP {duplicateFaceCount} · ZERO {selectedMeshDiagnostics.zeroAreaFaceIds.length} · WIND {selectedMeshDiagnostics.inconsistentWindingEdgeIds.length}</span>}
