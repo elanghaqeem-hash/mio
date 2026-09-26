@@ -43,6 +43,7 @@ import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { bevelOpenEdgePath } from './modeling/MeshOpenBevel';
 import { segmentBevelFaces } from './modeling/MeshBevelSegments';
 import { MeshBevelPreviewSession, type MeshBevelPreviewResult } from './modeling/MeshBevelPreviewSession';
+import { beginBevelWidthDrag, bevelSegmentsFromWheel, bevelWidthFromPointer, type BevelDragState } from './modeling/MeshBevelInteraction';
 import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
 import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCatalog';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
@@ -100,6 +101,7 @@ export const Studio3DView: React.FC = () => {
   const bevelPreviewSessionRef = useRef<MeshBevelPreviewSession | null>(null);
   const bevelPreviewResultRef = useRef<MeshBevelPreviewResult | null>(null);
   const [bevelPreviewActive, setBevelPreviewActive] = useState(false);
+  const bevelDragRef = useRef<BevelDragState | null>(null);
   const [editToolGroup, setEditToolGroup] = useState<'transform' | 'build' | 'topology' | 'repair'>('build');
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
@@ -190,7 +192,7 @@ export const Studio3DView: React.FC = () => {
       currentRenderer.setSize(nextWidth, nextHeight);
     };
     window.addEventListener('resize', resize);
-    return () => {
+  return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', resize);
       meshMap.forEach((mesh) => {
@@ -544,6 +546,12 @@ export const Studio3DView: React.FC = () => {
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
+    if (bevelPreviewActive) {
+      bevelDragRef.current = beginBevelWidthDrag(event.clientX, bevelWidthRatio);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     const activeGizmoAxis = (transformControlsRef.current as unknown as { axis?: string | null } | null)?.axis;
     if (activeGizmoAxis) return;
     const renderer = rendererRef.current;
@@ -914,6 +922,24 @@ export const Studio3DView: React.FC = () => {
     </div>
   );
 
+  const handleViewportPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = bevelDragRef.current;
+    if (!bevelPreviewActive || !drag) return;
+    setBevelWidthRatio(bevelWidthFromPointer(drag, event.clientX));
+  };
+
+  const handleViewportPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!bevelDragRef.current) return;
+    bevelDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const handleViewportWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!bevelPreviewActive) return;
+    event.preventDefault();
+    setBevelSegments((current) => bevelSegmentsFromWheel(current, event.deltaY));
+  };
+
   return (
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
       <CreativeWorkspaceToolbar workspace={workspace} />
@@ -996,7 +1022,7 @@ export const Studio3DView: React.FC = () => {
           </div>
         </div>}
         
-        <div ref={containerRef} onPointerDown={handleViewportPointerDown} className={`w-full flex-1 ${workspaceMode === 'edit' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`} />
+        <div ref={containerRef} onPointerDown={handleViewportPointerDown} onPointerMove={handleViewportPointerMove} onPointerUp={handleViewportPointerUp} onPointerCancel={handleViewportPointerUp} onWheel={handleViewportWheel} title={bevelPreviewActive ? 'Drag horizontally to change bevel width; mouse wheel changes segments; Apply or Esc/Cancel to finish' : undefined} className={`w-full flex-1 ${bevelPreviewActive ? 'cursor-ew-resize' : workspaceMode === 'edit' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`} />
         <div className="h-10 bg-[#0d121d] border-t border-gray-800 flex items-center justify-between px-4">
           <div className="flex items-center gap-2"><span className="text-gray-400 font-mono">ADD:</span>
             <button onClick={() => addObject('cube')} className="px-2 py-1 bg-gray-800 hover:bg-cyan-900/60 text-cyan-300 rounded border border-gray-700 flex items-center gap-1 cursor-pointer"><Box size={12} /> Cube</button>
