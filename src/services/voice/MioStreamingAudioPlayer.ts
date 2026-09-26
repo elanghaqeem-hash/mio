@@ -1,6 +1,8 @@
 import type { MioSynthesisChunk } from './MioSynthesisProvider';
 import { mioAdaptiveBufferController } from './MioAdaptiveBufferController';
 import { classifyMioPlaybackCondition } from './MioPlaybackConditionClassifier';
+import { evaluateMioVoiceCalibration } from './MioVoiceCalibrationProfile';
+import { mioVoiceCalibrationSession } from './MioVoiceCalibrationSession';
 
 export type MioPlaybackMode = 'media-source' | 'blob-fallback';
 
@@ -194,6 +196,8 @@ export class MioStreamingAudioPlayer {
         nowMs: performance.now(),
       });
       this.completedAdaptiveSamples += 1;
+      // Record only completed MediaSource playback; aborted/barge-in turns never reach this boundary.
+      mioVoiceCalibrationSession.add(evaluateMioVoiceCalibration(this.lastTelemetry));
     } catch (error) {
       if (committed && !(error instanceof DOMException && error.name === 'AbortError')) {
         throw new MioMediaSourceCommittedError(error);
