@@ -1,4 +1,5 @@
 import { resolveMioVoiceSession, voiceSessionRequired, voiceSessionVerificationConfigured, type MioVoiceSessionEnv } from './_session';
+import { enforceMioVoiceRateLimit, mioVoiceRateLimitRequired, type MioVoiceRateLimitBinding } from './_rateLimit';
 
 interface Env extends MioVoiceSessionEnv {
   MIO_TTS_ENDPOINT?: string;
@@ -8,6 +9,8 @@ interface Env extends MioVoiceSessionEnv {
   MIO_TTS_PROVIDER?: string;
   MIO_VOICE_GATEWAY_TOKEN?: string;
   MIO_VOICE_ALLOWED_ORIGINS?: string;
+  MIO_VOICE_REQUIRE_RATE_LIMIT?: string;
+  MIO_VOICE_RATE_LIMIT?: MioVoiceRateLimitBinding;
 }
 
 interface PagesContext { request: Request; env: Env; }
@@ -195,6 +198,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   if (!authorized(context.request, context.env)) return json({ error: 'Synthesis gateway authorization failed.' }, 401);
   const session = await resolveMioVoiceSession(context.request, context.env);
   if (voiceSessionRequired(context.env) && !session) return json({ error: 'Authenticated Mio session is required for synthesis.' }, 401);
+  const rateLimit = await enforceMioVoiceRateLimit(context.env.MIO_VOICE_RATE_LIMIT, mioVoiceRateLimitRequired(context.env.MIO_VOICE_REQUIRE_RATE_LIMIT), session?.subject ?? 'anonymous');
+  if (rateLimit === 'limited') return json({ error: 'Mio Voice synthesis rate limit exceeded.' }, 429, { 'Retry-After': '60' });
+  if (rateLimit === 'unavailable') return json({ error: 'Mio Voice rate-limit enforcement is unavailable.' }, 503);
   const endpoint = safeProviderEndpoint(context.env);
   if (!configured(context.env) || !endpoint) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
   if ((context.request.headers.get('content-type') ?? '').split(';')[0].trim() !== 'application/json') return json({ error: 'Content-Type must be application/json' }, 415);
