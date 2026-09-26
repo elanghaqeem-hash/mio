@@ -41,6 +41,7 @@ import { dissolveValence2Vertex } from './modeling/MeshVertexDissolve';
 import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
 import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { bevelOpenEdgePath } from './modeling/MeshOpenBevel';
+import { segmentBevelFaces } from './modeling/MeshBevelSegments';
 import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
 import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCatalog';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
@@ -93,6 +94,8 @@ export const Studio3DView: React.FC = () => {
   const [loopCutRatio, setLoopCutRatio] = useState(0.5);
   const [edgeSlideRatio, setEdgeSlideRatio] = useState(0.5);
   const [bevelWidthRatio, setBevelWidthRatio] = useState(0.1);
+  const [bevelSegments, setBevelSegments] = useState(1);
+  const [bevelProfile, setBevelProfile] = useState(0.5);
   const [editToolGroup, setEditToolGroup] = useState<'transform' | 'build' | 'topology' | 'repair'>('build');
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
@@ -785,12 +788,13 @@ export const Studio3DView: React.FC = () => {
   const bevelSelectedClosedLoop = () => {
     if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3) return;
     try {
-      const result = bevelClosedEdgeLoop(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      const base = bevelClosedEdgeLoop(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      const result = segmentBevelFaces(base.mesh, base.bevelFaceIds, bevelSegments, bevelProfile);
       updateSelectedObject({ mesh: result.mesh });
       setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
       eventBus.emit('ACTIVITY_LOG', {
         timestamp: activityTimestamp(),
-        message: `Beveled closed edge loop with ${result.bevelFaceIds.length} chamfer face(s) at width ratio ${bevelWidthRatio.toFixed(2)}.`,
+        message: `Beveled closed edge loop with ${bevelSegments} segment(s), profile ${bevelProfile.toFixed(2)}, and ${result.bevelFaceIds.length} chamfer face(s).`,
         mode: '3D',
       });
     } catch (reason) {
@@ -805,12 +809,13 @@ export const Studio3DView: React.FC = () => {
   const bevelSelectedBoundaryOpenPath = () => {
     if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1) return;
     try {
-      const result = bevelOpenEdgePath(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      const base = bevelOpenEdgePath(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      const result = segmentBevelFaces(base.mesh, base.bevelFaceIds, bevelSegments, bevelProfile);
       updateSelectedObject({ mesh: result.mesh });
       setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
       eventBus.emit('ACTIVITY_LOG', {
         timestamp: activityTimestamp(),
-        message: `Beveled ${result.endpointKind}-open edge path with ${result.bevelFaceIds.length} chamfer face(s) at width ratio ${bevelWidthRatio.toFixed(2)}.`,
+        message: `Beveled ${base.endpointKind}-open edge path with ${bevelSegments} segment(s), profile ${bevelProfile.toFixed(2)}, and ${result.bevelFaceIds.length} chamfer face(s).`,
         mode: '3D',
       });
     } catch (reason) {
@@ -904,7 +909,7 @@ export const Studio3DView: React.FC = () => {
               <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSlideRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSlideRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge Slide ratio (0-1)" />
               <button onClick={bevelSelectedClosedLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3} className="rounded bg-pink-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Loop</button>
               <button onClick={bevelSelectedBoundaryOpenPath} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} title="Open edge path bevel; supports boundary endpoints and guarded interior valence-4 endpoint fans" className="rounded bg-rose-200 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Open</button>
-              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Shared bevel width ratio" />
+              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Shared bevel width ratio" /><input type="number" min="1" max="16" step="1" value={bevelSegments} onChange={(event) => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= 16) setBevelSegments(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel segments (1-16)" /><input type="number" min="0.05" max="0.95" step="0.05" value={bevelProfile} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setBevelProfile(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel profile distribution (0-1)" />
             </>}
             {editToolGroup === 'repair' && <>
               <button onClick={safeCleanupSelectedMesh} disabled={!canSafeCleanupMesh} className="rounded bg-sky-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Safe Cleanup</button>
