@@ -3,12 +3,16 @@ import { deriveMeshEdges } from './MeshTopology';
 import { resolveMeshEdgeRailSelection } from './MeshEdgeRail';
 import { bevelBoundaryOpenEdgePath, type MeshBoundaryOpenBevelResult } from './MeshBoundaryOpenBevel';
 import { bevelInteriorOpenEdgePath, type MeshInteriorOpenBevelResult } from './MeshInteriorOpenBevel';
+import { analyzeBevelSelectionTopology } from './MeshBevelJunction';
 
 export type MeshOpenBevelResult =
   | ({ endpointKind:'boundary' } & MeshBoundaryOpenBevelResult)
   | ({ endpointKind:'interior' } & MeshInteriorOpenBevelResult);
 
 export const bevelOpenEdgePath=(mesh:MioMeshData,edgeIds:string[],widthRatio:number):MeshOpenBevelResult=>{
+  const topology=analyzeBevelSelectionTopology(mesh,edgeIds);
+  if(!topology.supported)throw new Error(topology.reason??'Unsupported bevel selection topology.');
+  if(topology.kind!=='open-path')throw new Error('Open Bevel requires one open edge path.');
   const rail=resolveMeshEdgeRailSelection(mesh,edgeIds,false);
   if(rail.closed)throw new Error('Open Bevel requires an open edge path; use Bevel Loop for closed selections.');
   const endpoints=[...rail.selectedAdjacency.entries()].filter(([,neighbors])=>neighbors.size===1).map(([id])=>id);
