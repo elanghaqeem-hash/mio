@@ -57,11 +57,11 @@ export const segmentBevelFaces=(mesh:MioMeshData,bevelFaceIds:string[],segments:
     const key=sectionKey(aId,bId,index,segments);
     const existing=createdByKey.get(key);
     if(existing)return existing.id;
-    const a=vertexById.get(aId)!,b=vertexById.get(bId)!;
-    const orientedIndex=aId<b?index:segments-index;
+    const aVertex=vertexById.get(aId)!,bVertex=vertexById.get(bId)!;
+    const orientedIndex=aId<bId?index:segments-index;
     const t=bevelProfileParameter(orientedIndex/segments,profile);
     const id=uniqueId(`bevel_segment_${createdByKey.size+1}`,usedVertexIds);usedVertexIds.add(id);
-    const vertex={id,position:mixPosition(a.position,b.position,t)} satisfies MioMeshVertex;
+    const vertex={id,position:mixPosition(aVertex.position,bVertex.position,t)} satisfies MioMeshVertex;
     createdByKey.set(key,vertex);
     normalSums.set(key,[0,0,0]);
     return id;
