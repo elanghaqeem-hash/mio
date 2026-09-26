@@ -40,6 +40,7 @@ import { loopCutMesh } from './modeling/MeshLoopCut';
 import { dissolveValence2Vertex } from './modeling/MeshVertexDissolve';
 import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
 import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
+import { bevelBoundaryOpenEdgePath } from './modeling/MeshBoundaryOpenBevel';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
@@ -748,6 +749,26 @@ export const Studio3DView: React.FC = () => {
     }
   };
 
+  const bevelSelectedBoundaryOpenPath = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1) return;
+    try {
+      const result = bevelBoundaryOpenEdgePath(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      updateSelectedObject({ mesh: result.mesh });
+      setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Beveled boundary-open edge path with ${result.bevelFaceIds.length} chamfer face(s) and ${result.endpointCapEdgeIds.length} endpoint cap edge(s) at width ratio ${bevelWidthRatio.toFixed(2)}.`,
+        mode: '3D',
+      });
+    } catch (reason) {
+      eventBus.emit('ACTIVITY_LOG', {
+        timestamp: activityTimestamp(),
+        message: `Boundary-open bevel rejected: ${reason instanceof Error ? reason.message : String(reason)}`,
+        mode: '3D',
+      });
+    }
+  };
+
   const vectorEditor = (label: string, value: [number, number, number], field: 'position' | 'rotation' | 'scale') => (
     <div>
       <span className="text-gray-400 block text-[10px] mb-1">{label}</span>
@@ -811,7 +832,8 @@ export const Studio3DView: React.FC = () => {
               <button onClick={slideSelectedEdgeLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} className="rounded bg-blue-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Edge Slide</button>
               <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSlideRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSlideRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge Slide ratio (0-1)" />
               <button onClick={bevelSelectedClosedLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3} className="rounded bg-pink-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Loop</button>
-              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel width ratio" />
+              <button onClick={bevelSelectedBoundaryOpenPath} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} title="Boundary endpoints only; interior endpoint fans are rejected" className="rounded bg-rose-200 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Open</button>
+              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Shared bevel width ratio" />
             </>}
             {editToolGroup === 'repair' && <>
               <button onClick={safeCleanupSelectedMesh} disabled={!canSafeCleanupMesh} className="rounded bg-sky-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Safe Cleanup</button>
