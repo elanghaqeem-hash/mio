@@ -5,6 +5,7 @@ export type Mio3DTransformMode = 'select' | 'move' | 'rotate' | 'scale';
 
 export type MeshModelingShortcutAction =
   | { type: 'toggle-workspace' }
+  | { type: 'toggle-help' }
   | { type: 'selection-mode'; mode: MioMeshSelectionMode }
   | { type: 'transform-mode'; mode: Mio3DTransformMode };
 
@@ -20,6 +21,7 @@ export const resolveMeshModelingShortcut = (
   input: MeshModelingShortcutInput,
 ): MeshModelingShortcutAction | null => {
   if (input.ctrlKey || input.metaKey || input.altKey) return null;
+  if (input.key === '?') return { type: 'toggle-help' };
   if (input.key === 'Tab') return { type: 'toggle-workspace' };
 
   if (input.workspaceMode === 'edit') {
