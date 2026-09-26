@@ -42,6 +42,7 @@ import { slideMeshEdgeLoop } from './modeling/MeshEdgeSlide';
 import { bevelClosedEdgeLoop } from './modeling/MeshClosedLoopBevel';
 import { bevelOpenEdgePath } from './modeling/MeshOpenBevel';
 import { segmentBevelFaces } from './modeling/MeshBevelSegments';
+import { MeshBevelPreviewSession, type MeshBevelPreviewResult } from './modeling/MeshBevelPreviewSession';
 import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
 import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCatalog';
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
@@ -96,6 +97,9 @@ export const Studio3DView: React.FC = () => {
   const [bevelWidthRatio, setBevelWidthRatio] = useState(0.1);
   const [bevelSegments, setBevelSegments] = useState(1);
   const [bevelProfile, setBevelProfile] = useState(0.5);
+  const bevelPreviewSessionRef = useRef<MeshBevelPreviewSession | null>(null);
+  const bevelPreviewResultRef = useRef<MeshBevelPreviewResult | null>(null);
+  const [bevelPreviewActive, setBevelPreviewActive] = useState(false);
   const [editToolGroup, setEditToolGroup] = useState<'transform' | 'build' | 'topology' | 'repair'>('build');
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [meshSelection, setMeshSelection] = useState<MioMeshSelection>({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
@@ -468,6 +472,12 @@ export const Studio3DView: React.FC = () => {
         || (target instanceof HTMLElement && target.isContentEditable)
       ) return;
 
+      if (bevelPreviewActive && event.key === 'Escape') {
+        event.preventDefault();
+        cancelBevelPreview();
+        return;
+      }
+
       if (shortcutHelpOpen && event.key === 'Escape') {
         event.preventDefault();
         setShortcutHelpOpen(false);
@@ -520,7 +530,7 @@ export const Studio3DView: React.FC = () => {
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, shortcutHelpOpen, workspaceMode]);
+  }, [bevelPreviewActive, cancelBevelPreview, deleteObject, duplicateObject, sceneData.objects.length, selectedId, selectedObj, shortcutHelpOpen, workspaceMode]);
 
   const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (workspaceMode !== 'edit' || !selectedObj?.mesh) return;
@@ -785,6 +795,62 @@ export const Studio3DView: React.FC = () => {
     }
   };
 
+  const projectBevelPreviewMesh = (mesh: MioMeshData) => {
+    if (!selectedObj) return;
+    const sourceMesh = meshMapRef.current.get(selectedObj.id);
+    if (!sourceMesh) return;
+    const projection = projectMeshToBufferGeometry(mesh);
+    sourceMesh.geometry.dispose();
+    sourceMesh.geometry = projection.geometry;
+    meshProjectionMapRef.current.set(selectedObj.id, projection);
+  };
+
+  const startBevelPreview = () => {
+    if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || !meshSelection.edgeIds.length) return;
+    try {
+      const session = new MeshBevelPreviewSession(selectedObj.mesh, meshSelection.edgeIds);
+      const result = session.preview({ widthRatio: bevelWidthRatio, segments: bevelSegments, profile: bevelProfile });
+      bevelPreviewSessionRef.current = session;
+      bevelPreviewResultRef.current = result;
+      projectBevelPreviewMesh(result.mesh);
+      setBevelPreviewActive(true);
+    } catch (reason) {
+      eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Bevel preview rejected: ${reason instanceof Error ? reason.message : String(reason)}`, mode: '3D' });
+    }
+  };
+
+  const cancelBevelPreview = useCallback(() => {
+    const session = bevelPreviewSessionRef.current;
+    if (session) projectBevelPreviewMesh(session.cancel());
+    bevelPreviewSessionRef.current = null;
+    bevelPreviewResultRef.current = null;
+    setBevelPreviewActive(false);
+  }, [selectedObj?.id]);
+
+  const applyBevelPreview = () => {
+    const result = bevelPreviewResultRef.current;
+    if (!result) return;
+    updateSelectedObject({ mesh: result.mesh });
+    setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
+    eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Applied ${result.pathKind} bevel preview with ${result.parameters.segments} segment(s).`, mode: '3D' });
+    bevelPreviewSessionRef.current = null;
+    bevelPreviewResultRef.current = null;
+    setBevelPreviewActive(false);
+  };
+
+  useEffect(() => {
+    if (!bevelPreviewActive) return;
+    const session = bevelPreviewSessionRef.current;
+    if (!session) return;
+    try {
+      const result = session.preview({ widthRatio: bevelWidthRatio, segments: bevelSegments, profile: bevelProfile });
+      bevelPreviewResultRef.current = result;
+      projectBevelPreviewMesh(result.mesh);
+    } catch {
+      // Keep the last valid transient preview while parameters are temporarily invalid.
+    }
+  }, [bevelPreviewActive, bevelWidthRatio, bevelSegments, bevelProfile]);
+
   const bevelSelectedClosedLoop = () => {
     if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3) return;
     try {
@@ -909,7 +975,7 @@ export const Studio3DView: React.FC = () => {
               <input type="number" min="0.01" max="0.99" step="0.05" value={edgeSlideRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setEdgeSlideRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Edge Slide ratio (0-1)" />
               <button onClick={bevelSelectedClosedLoop} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 3} className="rounded bg-pink-300 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Loop</button>
               <button onClick={bevelSelectedBoundaryOpenPath} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} title="Open edge path bevel; supports boundary endpoints and guarded interior valence-4 endpoint fans" className="rounded bg-rose-200 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Bevel Open</button>
-              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Shared bevel width ratio" /><input type="number" min="1" max="16" step="1" value={bevelSegments} onChange={(event) => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= 16) setBevelSegments(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel segments (1-16)" /><input type="number" min="0.05" max="0.95" step="0.05" value={bevelProfile} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setBevelProfile(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel profile distribution (0-1)" />
+              <input type="number" min="0.01" max="0.49" step="0.05" value={bevelWidthRatio} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 0.5) setBevelWidthRatio(next); }} className="w-14 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Shared bevel width ratio" /><input type="number" min="1" max="16" step="1" value={bevelSegments} onChange={(event) => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= 16) setBevelSegments(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel segments (1-16)" /><input type="number" min="0.05" max="0.95" step="0.05" value={bevelProfile} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next > 0 && next < 1) setBevelProfile(next); }} className="w-12 rounded border border-gray-700 bg-[#141b2b] px-1 py-1 text-[10px] text-white" title="Bevel profile distribution (0-1)" />{!bevelPreviewActive ? <button onClick={startBevelPreview} disabled={meshSelection.mode !== 'edge' || meshSelection.edgeIds.length < 1} className="rounded border border-emerald-500/50 px-2 py-1 text-[10px] font-bold text-emerald-300 disabled:opacity-30" title="Preview bevel without committing document state">Preview</button> : <><button onClick={applyBevelPreview} className="rounded bg-emerald-400 px-2 py-1 text-[10px] font-bold text-black">Apply</button><button onClick={cancelBevelPreview} className="rounded border border-gray-600 px-2 py-1 text-[10px] text-gray-300">Cancel</button></>}
             </>}
             {editToolGroup === 'repair' && <>
               <button onClick={safeCleanupSelectedMesh} disabled={!canSafeCleanupMesh} className="rounded bg-sky-400 px-2 py-1 text-[10px] font-bold text-black disabled:opacity-30">Safe Cleanup</button>
