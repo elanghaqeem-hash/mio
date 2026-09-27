@@ -28,9 +28,13 @@ export const rewriteCoordinatedJunctionFaces=(mesh:MioMeshData,edgeIds:string[],
     const previous=face.vertexIds[(index-1+face.vertexIds.length)%face.vertexIds.length];
     const next=face.vertexIds[(index+1)%face.vertexIds.length];
     const previousCut=allocationFor(junctionId,previous),nextCut=allocationFor(junctionId,next);
-    if(!previousCut||!nextCut)throw new Error(`Face ${face.id} does not have two selected incident span edges at junction ${junctionId}.`);
+    if(!previousCut&&!nextCut)throw new Error(`Face ${face.id} has no selected incident span edge at junction ${junctionId}.`);
     const ids:string[]=[];
-    for(const id of face.vertexIds)id===junctionId?ids.push(previousCut,nextCut):ids.push(id);
+    for(const id of face.vertexIds){
+      if(id!==junctionId){ids.push(id);continue;}
+      if(previousCut)ids.push(previousCut);
+      if(nextCut)ids.push(nextCut);
+    }
     return{...structuredClone(face),vertexIds:ids};
   });
 
