@@ -858,7 +858,7 @@ export const Studio3DView: React.FC = () => {
     if (!result) return;
     updateSelectedObject({ mesh: result.mesh });
     setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
-    eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Applied ${result.pathKind} bevel preview with ${result.parameters.segments} segment(s).`, mode: '3D' });
+    eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Applied ${result.strategy} bevel preview with ${result.parameters.segments} segment(s).`, mode: '3D' });
     bevelPreviewSessionRef.current = null;
     bevelPreviewResultRef.current = null;
     setBevelPreviewActive(false);
@@ -914,7 +914,7 @@ export const Studio3DView: React.FC = () => {
     try {
       const result = executeUnifiedBevel(selectedObj.mesh, meshSelection.edgeIds, { widthRatio: bevelWidthRatio, segments: bevelSegments, profile: bevelProfile, curvature: bevelCurvature });
       updateSelectedObject({ mesh: result.mesh });
-      setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.createdFaceIds });
+      setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.bevelFaceIds });
       eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Atomic Bevel applied via ${result.strategy}: ${result.bevelFaceIds.length} generated face(s).`, mode: '3D' });
     } catch (reason) {
       eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Atomic Bevel rejected: ${reason instanceof Error ? reason.message : String(reason)}`, mode: '3D' });
