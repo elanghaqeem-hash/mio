@@ -2,7 +2,7 @@ import type { MioMeshData } from '../../../types/creative';
 import { validateMeshTopology } from './MeshTopology';
 import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
 import { constructCoordinatedBevelStripPlan, type MeshCoordinatedBevelStripPlan } from './MeshCoordinatedBevelStrips';
-import { bevelInteriorOpenEdgePath } from './MeshInteriorOpenBevel';
+import { bevelCapTerminatedCorridor } from './MeshCapTerminatedCorridorBevel';
 
 export interface MeshCoordinatedCorridorReplacementResult {
   mesh:MioMeshData;
@@ -27,10 +27,10 @@ export const replaceCoordinatedCorridorEdges=(mesh:MioMeshData,edgeIds:string[],
 
   for(const corridor of plan.corridors){
     try{
-      const result=bevelInteriorOpenEdgePath(candidate,corridor.rewrittenEdgeIds,widthRatio);
+      const result=bevelCapTerminatedCorridor(candidate,corridor.rewrittenEdgeIds,widthRatio);
       candidate=result.mesh;
       bevelFaceIds.push(...result.bevelFaceIds);
-      terminationFaceIds.push(...result.terminationFaceIds);
+
       createdVertexIds.push(...result.createdVertexIds);
       removedVertexIds.push(...result.removedVertexIds);
       replacedSpanIds.push(corridor.spanId);
