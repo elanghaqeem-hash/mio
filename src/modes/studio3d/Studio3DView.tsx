@@ -44,12 +44,12 @@ import { bevelOpenEdgePath } from './modeling/MeshOpenBevel';
 import { bevelTriCornerJunction } from './modeling/MeshTriCornerMiter';
 import { bevelMultiPoleJunction } from './modeling/MeshMultiPoleMiter';
 import { planBevelNetwork } from './modeling/MeshBevelNetworkPlanner';
-import { executeAtomicBevelNetwork } from './modeling/MeshAtomicBevelNetwork';
+import { executeUnifiedBevel } from './modeling/MeshUnifiedBevel';
 import { compileCoordinatedBevelTransaction } from './modeling/MeshCoordinatedBevelTransaction';
 import { allocateCoordinatedSpanEndpoints } from './modeling/MeshCoordinatedSpanEndpoints';
 import { rewriteCoordinatedJunctionFaces } from './modeling/MeshCoordinatedFaceRewrite';
 import { segmentBevelFaces } from './modeling/MeshBevelSegments';
-import { MeshBevelPreviewSession, type MeshBevelPreviewResult } from './modeling/MeshBevelPreviewSession';
+import { MeshUnifiedBevelPreviewSession, type MeshUnifiedBevelResult } from './modeling/MeshUnifiedBevel';
 import { beginBevelWidthDrag, bevelSegmentsFromWheel, bevelWidthFromPointer, type BevelDragState } from './modeling/MeshBevelInteraction';
 import { resolveMeshModelingShortcut } from './modeling/MeshModelingShortcuts';
 import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCatalog';
@@ -106,8 +106,8 @@ export const Studio3DView: React.FC = () => {
   const [bevelSegments, setBevelSegments] = useState(1);
   const [bevelProfile, setBevelProfile] = useState(0.5);
   const [bevelCurvature, setBevelCurvature] = useState(0);
-  const bevelPreviewSessionRef = useRef<MeshBevelPreviewSession | null>(null);
-  const bevelPreviewResultRef = useRef<MeshBevelPreviewResult | null>(null);
+  const bevelPreviewSessionRef = useRef<MeshUnifiedBevelPreviewSession | null>(null);
+  const bevelPreviewResultRef = useRef<MeshUnifiedBevelResult | null>(null);
   const [bevelPreviewActive, setBevelPreviewActive] = useState(false);
   const bevelDragRef = useRef<BevelDragState | null>(null);
   const [editToolGroup, setEditToolGroup] = useState<'transform' | 'build' | 'topology' | 'repair'>('build');
@@ -834,7 +834,7 @@ export const Studio3DView: React.FC = () => {
   const startBevelPreview = () => {
     if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || !meshSelection.edgeIds.length) return;
     try {
-      const session = new MeshBevelPreviewSession(selectedObj.mesh, meshSelection.edgeIds);
+      const session = new MeshUnifiedBevelPreviewSession(selectedObj.mesh, meshSelection.edgeIds);
       const result = session.preview({ widthRatio: bevelWidthRatio, segments: bevelSegments, profile: bevelProfile, curvature: bevelCurvature });
       bevelPreviewSessionRef.current = session;
       bevelPreviewResultRef.current = result;
@@ -912,10 +912,10 @@ export const Studio3DView: React.FC = () => {
   const executeSelectedBevelNetwork = () => {
     if (!selectedObj?.mesh || meshSelection.mode !== 'edge' || !meshSelection.edgeIds.length) return;
     try {
-      const result = executeAtomicBevelNetwork(selectedObj.mesh, meshSelection.edgeIds, bevelWidthRatio);
+      const result = executeUnifiedBevel(selectedObj.mesh, meshSelection.edgeIds, { widthRatio: bevelWidthRatio, segments: bevelSegments, profile: bevelProfile, curvature: bevelCurvature });
       updateSelectedObject({ mesh: result.mesh });
       setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: result.createdFaceIds });
-      eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Atomic Bevel applied via ${result.strategy}: ${result.createdFaceIds.length} generated face(s).`, mode: '3D' });
+      eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Atomic Bevel applied via ${result.strategy}: ${result.bevelFaceIds.length} generated face(s).`, mode: '3D' });
     } catch (reason) {
       eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Atomic Bevel rejected: ${reason instanceof Error ? reason.message : String(reason)}`, mode: '3D' });
     }
