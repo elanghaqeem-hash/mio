@@ -1,0 +1,26 @@
+import type { MioMeshData,MioMeshFace,MioMeshVertex } from '../../../types/creative';
+import { canonicalMeshEdgeId,deriveMeshEdges,validateMeshTopology } from './MeshTopology';
+import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
+import { resolveMeshEdgeRailSelection } from './MeshEdgeRail';
+const uid=(b:string,u:Set<string>)=>{if(!u.has(b))return b;let i=2;while(u.has(`${b}_${i}`))i++;return `${b}_${i}`};
+const mix=(a:MioMeshVertex,b:MioMeshVertex,t:number):[number,number,number]=>[a.position[0]+(b.position[0]-a.position[0])*t,a.position[1]+(b.position[1]-a.position[1])*t,a.position[2]+(b.position[2]-a.position[2])*t];
+const sign=(f:MioMeshFace,a:string,b:string)=>{for(let i=0;i<f.vertexIds.length;i++){const x=f.vertexIds[i],y=f.vertexIds[(i+1)%f.vertexIds.length];if(x===a&&y===b)return 1;if(x===b&&y===a)return-1}return 0};
+export interface MeshCapTerminatedCorridorBevelResult{mesh:MioMeshData;bevelFaceIds:string[];createdVertexIds:string[];removedVertexIds:string[]}
+export const bevelCapTerminatedCorridor=(mesh:MioMeshData,edgeIds:string[],widthRatio:number):MeshCapTerminatedCorridorBevelResult=>{
+ const v=validateMeshTopology(mesh);if(!v.valid)throw new Error(v.errors.join(' '));if(widthRatio<=0||widthRatio>=0.5)throw new Error('Corridor width must be > 0 and < 0.5.');
+ const rail=resolveMeshEdgeRailSelection(mesh,edgeIds,false);if(rail.closed)throw new Error('Corridor must be open.');
+ const endpoints=[...rail.selectedAdjacency].filter(([,n])=>n.size===1).map(([id])=>id);if(endpoints.length!==2)throw new Error('Corridor requires two endpoints.');
+ const edgeById=new Map(deriveMeshEdges(mesh).map(e=>[e.id,e])),faceById=new Map(mesh.faces.map(f=>[f.id,f])),vertexById=new Map(mesh.vertices.map(v=>[v.id,v]));
+ const selectedEdgeSet=new Set(rail.selectedEdgeIds),usedV=new Set(mesh.vertices.map(v=>v.id)),usedF=new Set(mesh.faces.map(f=>f.id));
+ const pair=new Map<string,[string,string]>(),created:MioMeshVertex[]=[];
+ for(const id of rail.selectedVertexIds){const x=vertexById.get(id)!,rs=rail.railByVertex.get(id)!,a=vertexById.get(rs[0])!,b=vertexById.get(rs[1])!;const x0=uid(`${id}_network_bevel_0`,usedV);usedV.add(x0);const x1=uid(`${id}_network_bevel_1`,usedV);usedV.add(x1);pair.set(id,[x0,x1]);created.push({id:x0,position:mix(x,a,widthRatio)},{id:x1,position:mix(x,b,widthRatio)})}
+ const selectedFaceEdge=new Map<string,string>();for(const eid of rail.selectedEdgeIds){const e=edgeById.get(eid)!;for(const fid of e.faceIds){if(selectedFaceEdge.has(fid))throw new Error(`Face ${fid} touches multiple corridor edges.`);selectedFaceEdge.set(fid,eid)}}
+ const endpointCaps=new Map<string,string>();
+ for(const id of endpoints){const rs=rail.railByVertex.get(id)!;const candidates=mesh.faces.filter(f=>f.vertexIds.includes(id)&&!selectedFaceEdge.has(f.id)&&rs.every(r=>f.vertexIds.includes(r)));if(candidates.length!==1)throw new Error(`Corridor endpoint ${id} requires one miter cap; found ${candidates.length}.`);endpointCaps.set(id,candidates[0].id)}
+ const rewired=new Map<string,MioMeshFace>();
+ for(const f of mesh.faces){const eid=selectedFaceEdge.get(f.id);if(eid){const side=rail.faceSideByEdge.get(eid)?.get(f.id);if(side===undefined)throw new Error('Missing corridor face side.');rewired.set(f.id,{...structuredClone(f),vertexIds:f.vertexIds.map(id=>pair.get(id)?.[side]??id)});continue}const endpoint=endpoints.find(id=>endpointCaps.get(id)===f.id);if(endpoint){const ps=pair.get(endpoint)!,idx=f.vertexIds.indexOf(endpoint),prev=f.vertexIds[(idx-1+f.vertexIds.length)%f.vertexIds.length],next=f.vertexIds[(idx+1)%f.vertexIds.length],rs=rail.railByVertex.get(endpoint)!;const ordered=prev===rs[0]&&next===rs[1]?[ps[0],ps[1]]:prev===rs[1]&&next===rs[0]?[ps[1],ps[0]]:null;if(!ordered)throw new Error(`Miter cap ordering does not match rails at ${endpoint}.`);const ids=[...f.vertexIds];ids.splice(idx,1,...ordered);rewired.set(f.id,{...structuredClone(f),vertexIds:ids})}else rewired.set(f.id,structuredClone(f))}
+ const bevel:MioMeshFace[]=[];for(const eid of rail.selectedEdgeIds){const e=edgeById.get(eid)!,sm=rail.faceSideByEdge.get(eid)!,f0=faceById.get([...sm].find(([,s])=>s===0)![0])!,f1=faceById.get([...sm].find(([,s])=>s===1)![0])!;let[a,b]=e.vertexIds;if(sign(f0,a,b)<0)[a,b]=[b,a];if(sign(f1,a,b)!==-1)throw new Error(`Inconsistent winding at ${eid}.`);const ap=pair.get(a)!,bp=pair.get(b)!,id=uid(`${eid}_network_bevel_face`,usedF);usedF.add(id);bevel.push({id,vertexIds:[bp[0],ap[0],ap[1],bp[1]],...(f0.materialSlot===undefined?{}:{materialSlot:f0.materialSlot})})}
+ const removed=new Set(rail.selectedVertexIds),result:MioMeshData={vertices:[...mesh.vertices.filter(v=>!removed.has(v.id)).map(v=>structuredClone(v)),...created],faces:[...rewired.values(),...bevel]};
+ const val=validateMeshTopology(result),d=diagnoseMeshTopology(result);if(!val.valid||d.boundaryEdgeIds.length||d.nonManifoldEdgeIds.length||d.inconsistentWindingEdgeIds.length||d.zeroAreaFaceIds.length)throw new Error(`Cap-terminated corridor produced invalid topology: ${val.errors.join(' ')} boundary=${d.boundaryEdgeIds.length} nonmanifold=${d.nonManifoldEdgeIds.length} winding=${d.inconsistentWindingEdgeIds.length} zero=${d.zeroAreaFaceIds.length}`);
+ return{mesh:result,bevelFaceIds:bevel.map(f=>f.id),createdVertexIds:created.map(v=>v.id),removedVertexIds:[...removed]};
+};

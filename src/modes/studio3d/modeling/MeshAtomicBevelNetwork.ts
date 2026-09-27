@@ -6,7 +6,7 @@ import { bevelOpenEdgePath } from './MeshOpenBevel';
 import { bevelClosedEdgeLoop } from './MeshClosedLoopBevel';
 import { bevelTriCornerJunction } from './MeshTriCornerMiter';
 import { bevelMultiPoleJunction } from './MeshMultiPoleMiter';
-import { constructCoordinatedBevelStripPlan } from './MeshCoordinatedBevelStrips';
+import { replaceCoordinatedCorridorEdges } from './MeshCoordinatedCorridorReplacement';
 
 export type MeshAtomicBevelStrategy='open-path'|'closed-loop'|'tri-corner'|'multi-pole'|'coordinated-network';
 export interface MeshAtomicBevelNetworkResult {
@@ -50,8 +50,8 @@ export const executeAtomicBevelNetwork=(mesh:MioMeshData,edgeIds:string[],widthR
       result={mesh:solved.mesh,plan,strategy:'multi-pole',createdFaceIds:solved.miterFaceIds,widthRatio};
     }
   }else if(junctions.length>=2){
-    const coordinated=constructCoordinatedBevelStripPlan(source,plan.selectedEdgeIds,widthRatio);
-    result={mesh:coordinated.rewrite.mesh,plan,strategy:'coordinated-network',createdFaceIds:coordinated.rewrite.miterFaceIds,widthRatio};
+    const coordinated=replaceCoordinatedCorridorEdges(source,plan.selectedEdgeIds,widthRatio);
+    result={mesh:coordinated.mesh,plan,strategy:'coordinated-network',createdFaceIds:[...coordinated.plan.rewrite.miterFaceIds,...coordinated.bevelFaceIds,...coordinated.terminationFaceIds],widthRatio};
   }else{
     throw new Error(`Atomic network execution does not yet support ${junctions.length} junction(s) across ${plan.spans.length} span(s); no geometry was committed.`);
   }
