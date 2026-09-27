@@ -16,3 +16,6 @@ V4.6 supports coordinated junctions separated by at least one intermediate span 
 
 ## Next
 V4.7 coordinated bevel strip construction: replace the remaining selected span edges with explicit bevel strips between the allocated junction endpoints, then integrate the operation into the Atomic Bevel gateway.
+
+
+CI validation refreshed before merge.
