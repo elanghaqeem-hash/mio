@@ -1,7 +1,7 @@
 import type { MioMeshData,MioMeshFace,MioMeshVertex } from '../../../types/creative';
 import { canonicalMeshEdgeId,deriveMeshEdges,validateMeshTopology } from './MeshTopology';
 import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
-import { isVertexOnRailSegment,railParameter,resolveMeshEdgeRailSelection } from './MeshEdgeRail';
+import { resolveMeshEdgeRailSelection } from './MeshEdgeRail';
 const uid=(b:string,u:Set<string>)=>{if(!u.has(b))return b;let i=2;while(u.has(`${b}_${i}`))i++;return `${b}_${i}`};
 const mix=(a:MioMeshVertex,b:MioMeshVertex,t:number):[number,number,number]=>[a.position[0]+(b.position[0]-a.position[0])*t,a.position[1]+(b.position[1]-a.position[1])*t,a.position[2]+(b.position[2]-a.position[2])*t];
 const sign=(f:MioMeshFace,a:string,b:string)=>{for(let i=0;i<f.vertexIds.length;i++){const x=f.vertexIds[i],y=f.vertexIds[(i+1)%f.vertexIds.length];if(x===a&&y===b)return 1;if(x===b&&y===a)return-1}return 0};
@@ -13,7 +13,7 @@ export const bevelCapTerminatedCorridor=(mesh:MioMeshData,edgeIds:string[],width
  const edgeById=new Map(deriveMeshEdges(mesh).map(e=>[e.id,e])),faceById=new Map(mesh.faces.map(f=>[f.id,f])),vertexById=new Map(mesh.vertices.map(v=>[v.id,v]));
  const selectedEdgeSet=new Set(rail.selectedEdgeIds),usedV=new Set(mesh.vertices.map(v=>v.id)),usedF=new Set(mesh.faces.map(f=>f.id));
  const pair=new Map<string,[string,string]>(),created:MioMeshVertex[]=[];
- for(const id of rail.selectedVertexIds){const x=vertexById.get(id)!,rs=rail.railByVertex.get(id)!,a=vertexById.get(rs[0])!,b=vertexById.get(rs[1])!;if(!isVertexOnRailSegment(x,a,b))throw new Error(`Corridor vertex ${id} is not on side rail.`);const t=railParameter(x,a,b);if(t-widthRatio<=1e-6||t+widthRatio>=1-1e-6)throw new Error(`Corridor width exceeds rail space at ${id}.`);const x0=uid(`${id}_network_bevel_0`,usedV);usedV.add(x0);const x1=uid(`${id}_network_bevel_1`,usedV);usedV.add(x1);pair.set(id,[x0,x1]);created.push({id:x0,position:mix(a,b,t-widthRatio)},{id:x1,position:mix(a,b,t+widthRatio)})}
+ for(const id of rail.selectedVertexIds){const x=vertexById.get(id)!,rs=rail.railByVertex.get(id)!,a=vertexById.get(rs[0])!,b=vertexById.get(rs[1])!;const x0=uid(`${id}_network_bevel_0`,usedV);usedV.add(x0);const x1=uid(`${id}_network_bevel_1`,usedV);usedV.add(x1);pair.set(id,[x0,x1]);created.push({id:x0,position:mix(x,a,widthRatio)},{id:x1,position:mix(x,b,widthRatio)})}
  const selectedFaceEdge=new Map<string,string>();for(const eid of rail.selectedEdgeIds){const e=edgeById.get(eid)!;for(const fid of e.faceIds){if(selectedFaceEdge.has(fid))throw new Error(`Face ${fid} touches multiple corridor edges.`);selectedFaceEdge.set(fid,eid)}}
  const endpointCaps=new Map<string,string>();
  for(const id of endpoints){const rs=rail.railByVertex.get(id)!;const candidates=mesh.faces.filter(f=>f.vertexIds.includes(id)&&!selectedFaceEdge.has(f.id)&&rs.every(r=>f.vertexIds.includes(r)));if(candidates.length!==1)throw new Error(`Corridor endpoint ${id} requires one miter cap; found ${candidates.length}.`);endpointCaps.set(id,candidates[0].id)}
