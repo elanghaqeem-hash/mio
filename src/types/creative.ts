@@ -5,7 +5,14 @@ export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:numb
 export interface MioMeshEdge { id:string; vertexIds:[string,string]; faceIds:string[]; }
 export interface MioMeshData { vertices:MioMeshVertex[]; faces:MioMeshFace[]; }
 export interface MioMeshSelection { mode:MioMeshSelectionMode; vertexIds:string[]; edgeIds:string[]; faceIds:string[]; }
-export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; proceduralParams?:Record<string,number|string>; }
+export type MioMeshModifierAxis='x'|'y'|'z';
+export interface MioMirrorModifier { id:string; type:'mirror'; enabled:boolean; axis:MioMeshModifierAxis; merge:boolean; mergeDistance:number; }
+export interface MioSubdivisionModifier { id:string; type:'subdivision'; enabled:boolean; levels:number; }
+export interface MioSolidifyModifier { id:string; type:'solidify'; enabled:boolean; thickness:number; }
+export interface MioArrayModifier { id:string; type:'array'; enabled:boolean; count:number; offset:[number,number,number]; }
+export interface MioBevelModifier { id:string; type:'bevel'; enabled:boolean; widthRatio:number; segments:number; profile:number; curvature:number; edgeIds:string[]; }
+export type MioMeshModifier=MioMirrorModifier|MioSubdivisionModifier|MioSolidifyModifier|MioArrayModifier|MioBevelModifier;
+export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; modifiers?:MioMeshModifier[]; proceduralParams?:Record<string,number|string>; }
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
