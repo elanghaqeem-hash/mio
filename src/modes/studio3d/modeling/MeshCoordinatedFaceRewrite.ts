@@ -11,6 +11,9 @@ export interface MeshCoordinatedFaceRewriteResult {
   widthRatio:number;
 }
 const unique=(base:string,used:Set<string>):string=>{if(!used.has(base))return base;let i=2;while(used.has(`${base}_${i}`))i++;return `${base}_${i}`};
+const directedEdgeSign=(face:MioMeshFace,a:string,b:string):number=>{
+  for(let i=0;i<face.vertexIds.length;i++){const x=face.vertexIds[i],y=face.vertexIds[(i+1)%face.vertexIds.length];if(x===a&&y===b)return 1;if(x===b&&y===a)return -1;}return 0;
+};
 
 export const rewriteCoordinatedJunctionFaces=(mesh:MioMeshData,edgeIds:string[],widthRatio:number):MeshCoordinatedFaceRewriteResult=>{
   const plan=allocateCoordinatedSpanEndpoints(mesh,edgeIds,widthRatio);
@@ -69,16 +72,18 @@ export const rewriteCoordinatedJunctionFaces=(mesh:MioMeshData,edgeIds:string[],
     if(new Set(incident.map(f=>f.materialSlot??0)).size!==1)throw new Error(`Junction ${junction.vertexId} crosses a material boundary.`);
     const id=unique(`${junction.vertexId}_network_miter`,usedFaceIds);usedFaceIds.add(id);
     const slot=incident[0]?.materialSlot;
-    miterFaces.push({id,vertexIds:ordered,...(slot===undefined?{}:{materialSlot:slot})});
+    let oriented=ordered;
+    const sameDirection=ordered.some((a,index)=>{
+      const b=ordered[(index+1)%ordered.length];
+      const adjacent=rewrittenFaces.find(face=>directedEdgeSign(face,a,b)!==0);
+      return adjacent?directedEdgeSign(adjacent,a,b)===1:false;
+    });
+    if(sameDirection)oriented=[...ordered].reverse();
+    miterFaces.push({id,vertexIds:oriented,...(slot===undefined?{}:{materialSlot:slot})});
   }
 
-  let result:MioMeshData={vertices,faces:[...rewrittenFaces,...miterFaces]};
-  let diagnostics=diagnoseMeshTopology(result);
-  if(diagnostics.inconsistentWindingEdgeIds.length){
-    const miterIds=new Set(miterFaces.map(f=>f.id));
-    result={...result,faces:result.faces.map(face=>miterIds.has(face.id)?{...face,vertexIds:[...face.vertexIds].reverse()}:face)};
-    diagnostics=diagnoseMeshTopology(result);
-  }
+  const result:MioMeshData={vertices,faces:[...rewrittenFaces,...miterFaces]};
+  const diagnostics=diagnoseMeshTopology(result);
   const validation=validateMeshTopology(result);
   if(!validation.valid)throw new Error(`Coordinated face rewrite produced invalid topology: ${validation.errors.join(' ')}`);
   if(diagnostics.boundaryEdgeIds.length)throw new Error(`Coordinated face rewrite produced ${diagnostics.boundaryEdgeIds.length} open boundary edge(s).`);
