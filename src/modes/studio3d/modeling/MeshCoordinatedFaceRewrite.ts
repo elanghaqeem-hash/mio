@@ -17,6 +17,11 @@ export const rewriteCoordinatedJunctionFaces=(mesh:MioMeshData,edgeIds:string[],
   if(plan.transaction.junctions.length<2)throw new Error('Coordinated face rewrite requires at least two junctions.');
   const usedFaceIds=new Set(mesh.faces.map(f=>f.id));
   const junctionIds=new Set(plan.transaction.junctions.map(j=>j.vertexId));
+  const sourceEdges=deriveMeshEdges(mesh);
+  for(const junction of plan.transaction.junctions){
+    const sourceValence=sourceEdges.filter(edge=>edge.vertexIds.includes(junction.vertexId)).length;
+    if(sourceValence!==junction.selectedDegree)throw new Error(`Coordinated V4.6 requires full-valence junction selection at ${junction.vertexId}; source valence is ${sourceValence}, selected degree is ${junction.selectedDegree}.`);
+  }
   const allocationFor=(junctionId:string,neighborId:string):string|undefined=>
     plan.allocationByJunctionEdge[`${junctionId}|${canonicalMeshEdgeId(junctionId,neighborId)}`];
 
