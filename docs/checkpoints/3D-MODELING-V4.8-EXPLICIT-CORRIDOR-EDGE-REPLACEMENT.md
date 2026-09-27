@@ -2,8 +2,8 @@
 
 ## Delivered
 - Consumes the V4.7 deterministic corridor contract.
-- Replaces each coordinated corridor using the proven interior-open bevel rail solver.
-- Generates paired replacement rails, bevel strip faces, and endpoint termination faces instead of leaving the original corridor as the final surface.
+- Replaces each coordinated corridor using a dedicated cap-terminated rail solver derived from the proven edge-rail mapping contract.
+- Generates paired replacement rails and bevel strip faces while rewiring each endpoint directly into its existing junction miter cap.
 - Executes corridor replacements against one candidate mesh in deterministic span order.
 - Any corridor failure aborts the operation; authoritative source MioMeshData is never mutated.
 - Runs whole-candidate validation after every corridor sequence: valid topology, watertight, manifold, consistent winding, non-zero area, no duplicate faces.
