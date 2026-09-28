@@ -2,6 +2,8 @@ import { ResultValidator } from '../security/ResultValidator';
 import { PermissionEngine } from '../security/PermissionEngine';
 import { eventBus } from '../core/EventBus';
 import type { MioSystemMode } from '../types/core';
+import type { Mio3DScene } from '../types/creative';
+import { analyzeMioSceneExchange, exportMioSceneToGlb, exportMioSceneToGltf, serializeMioSceneAsObj } from '../modes/studio3d/modeling/MeshGltfExchange';
 
 export class ExportManager {
   /**
@@ -19,66 +21,87 @@ export class ExportManager {
   }
 
   /**
-   * Validated 3D OBJ export
+   * Authoritative 3D Wavefront OBJ export.
+   * V5.9 deliberately refuses placeholder geometry when MioMeshData is absent.
    */
-  public static async export3DAsObj(sceneData: any, filename: string = 'model.obj'): Promise<boolean> {
+  public static async export3DAsObj(sceneData: Mio3DScene, filename: string = 'model.obj'): Promise<boolean> {
     const validation = ResultValidator.validate3D(sceneData);
-    if (!validation.valid) {
-      alert(`Export Blocked: 3D Scene integrity check failed: ${validation.errors.join(', ')}`);
+    const exchange = analyzeMioSceneExchange(sceneData);
+    if (!validation.valid || !exchange.valid) {
+      alert(`Export Blocked: 3D Scene integrity check failed: ${[...validation.errors, ...exchange.errors].join(', ')}`);
       return false;
     }
-
     const authorized = await PermissionEngine.requestPermission({
       action: 'EXPORT_3D_ASSET',
       target: filename,
       level: 'L4_EXECUTE',
-      changes: ['Serialize 3D scene objects to Wavefront OBJ format', 'Trigger client file download'],
-      risks: ['Export will generate and download local geometry file'],
-      expectedResult: `Download ${filename} with ${sceneData.objects.length} meshes`,
+      changes: ['Bake non-destructive Mio mesh modifiers', 'Serialize authoritative MioMeshData to Wavefront OBJ', 'Trigger client file download'],
+      risks: ['Modifier stacks are baked into exported geometry; source scene remains unchanged'],
+      expectedResult: `Download ${filename} with ${sceneData.objects.length} authoritative meshes`,
     });
-
     if (!authorized) return false;
+    try {
+      const result = serializeMioSceneAsObj(sceneData);
+      this.triggerDownload(new Blob([result.data], { type: 'text/plain;charset=utf-8' }), filename);
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Exported authoritative 3D scene as ${filename}`, mode: '3D' });
+      return true;
+    } catch (error) {
+      alert(`Export Blocked: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
 
-    // Generate OBJ file representation
-    let objContent = '# Mio V2 Wavefront OBJ Exporter\n';
-    let vertexOffset = 1;
-
-    sceneData.objects.forEach((obj: any) => {
-      objContent += `o ${obj.name || 'Object'}\n`;
-      const [px, py, pz] = obj.position || [0, 0, 0];
-      const [sx, sy, sz] = obj.scale || [1, 1, 1];
-
-      // Standard unit cube mesh coordinates scaled & translated
-      const cubeVertices = [
-        [-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, -0.5],
-        [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]
-      ];
-
-      cubeVertices.forEach(([vx, vy, vz]) => {
-        objContent += `v ${(vx * sx + px).toFixed(4)} ${(vy * sy + py).toFixed(4)} ${(vz * sz + pz).toFixed(4)}\n`;
-      });
-
-      const faces = [
-        [1, 2, 3, 4], [5, 8, 7, 6], [1, 5, 6, 2],
-        [2, 6, 7, 3], [3, 7, 8, 4], [5, 1, 4, 8]
-      ];
-
-      faces.forEach((f) => {
-        objContent += `f ${f.map((idx) => idx + vertexOffset - 1).join(' ')}\n`;
-      });
-
-      vertexOffset += 8;
+  public static async export3DAsGltf(sceneData: Mio3DScene, filename: string = 'model.gltf'): Promise<boolean> {
+    const exchange = analyzeMioSceneExchange(sceneData);
+    if (!exchange.valid) {
+      alert(`Export Blocked: ${exchange.errors.join(', ')}`);
+      return false;
+    }
+    const authorized = await PermissionEngine.requestPermission({
+      action: 'EXPORT_3D_ASSET',
+      target: filename,
+      level: 'L4_EXECUTE',
+      changes: ['Bake non-destructive Mio mesh modifiers', 'Serialize MIO-3D-V5.9 glTF 2.0 exchange profile', 'Embed binary mesh buffer and MIO round-trip metadata', 'Trigger client file download'],
+      risks: exchange.warnings,
+      expectedResult: `Download ${filename} with validated geometry/material/UV metadata`,
     });
+    if (!authorized) return false;
+    try {
+      const result = exportMioSceneToGltf(sceneData);
+      this.triggerDownload(new Blob([result.data], { type: 'model/gltf+json;charset=utf-8' }), filename);
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Exported 3D scene as ${filename}`, mode: '3D' });
+      return true;
+    } catch (error) {
+      alert(`Export Blocked: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
 
-    const blob = new Blob([objContent], { type: 'text/plain' });
-    this.triggerDownload(blob, filename);
-
-    eventBus.emit('ACTIVITY_LOG', {
-      timestamp: Date.now(),
-      message: `Exported 3D scene as ${filename}`,
-      mode: '3D',
+  public static async export3DAsGlb(sceneData: Mio3DScene, filename: string = 'model.glb'): Promise<boolean> {
+    const exchange = analyzeMioSceneExchange(sceneData);
+    if (!exchange.valid) {
+      alert(`Export Blocked: ${exchange.errors.join(', ')}`);
+      return false;
+    }
+    const authorized = await PermissionEngine.requestPermission({
+      action: 'EXPORT_3D_ASSET',
+      target: filename,
+      level: 'L4_EXECUTE',
+      changes: ['Bake non-destructive Mio mesh modifiers', 'Serialize MIO-3D-V5.9 binary glTF', 'Preserve exact MIO scene metadata for round-trip', 'Trigger client file download'],
+      risks: exchange.warnings,
+      expectedResult: `Download ${filename} with validated geometry/material/UV metadata`,
     });
-    return true;
+    if (!authorized) return false;
+    try {
+      const result = exportMioSceneToGlb(sceneData);
+      const buffer = result.data.buffer.slice(result.data.byteOffset, result.data.byteOffset + result.data.byteLength) as ArrayBuffer;
+      this.triggerDownload(new Blob([buffer], { type: 'model/gltf-binary' }), filename);
+      eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Exported 3D scene as ${filename}`, mode: '3D' });
+      return true;
+    } catch (error) {
+      alert(`Export Blocked: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   /**
