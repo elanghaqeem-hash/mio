@@ -10,6 +10,9 @@ import {
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  DoubleSide,
+  SRGBColorSpace,
+  TextureLoader,
   Object3D,
   PerspectiveCamera,
   Points,
@@ -57,6 +60,7 @@ import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
 import { evaluateSceneObjectMesh } from './modeling/MeshBooleanSceneBinding';
+import { resolveObjectMaterialSlots } from './modeling/MeshMaterialPipeline';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
 import { pickMeshEdgeScreenSpace, pickMeshVertexScreenSpace } from './modeling/MeshComponentPicking';
@@ -206,7 +210,8 @@ export const Studio3DView: React.FC = () => {
       window.removeEventListener('resize', resize);
       meshMap.forEach((mesh) => {
         mesh.geometry.dispose();
-        if (mesh.material instanceof MeshStandardMaterial) mesh.material.dispose();
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => { if (material instanceof MeshStandardMaterial) { material.map?.dispose(); material.normalMap?.dispose(); material.roughnessMap?.dispose(); material.metalnessMap?.dispose(); material.emissiveMap?.dispose(); } material.dispose(); });
       });
       meshMap.clear();
       controls.dispose();
@@ -228,7 +233,8 @@ export const Studio3DView: React.FC = () => {
     meshMapRef.current.forEach((mesh) => {
       scene.remove(mesh);
       mesh.geometry.dispose();
-      if (mesh.material instanceof MeshStandardMaterial) mesh.material.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => { if (material instanceof MeshStandardMaterial) { material.map?.dispose(); material.normalMap?.dispose(); material.roughnessMap?.dispose(); material.metalnessMap?.dispose(); material.emissiveMap?.dispose(); } material.dispose(); });
     });
     meshMapRef.current.clear();
     meshProjectionMapRef.current.clear();
@@ -245,7 +251,28 @@ export const Studio3DView: React.FC = () => {
       else if (object.type === 'cylinder') geometry = new CylinderGeometry(0.5, 0.5, 1.2, 24);
       else if (object.type === 'torus') geometry = new TorusGeometry(0.7, 0.2, 16, 32);
       else geometry = new BoxGeometry(1, 1, 1);
-      const material = new MeshStandardMaterial({ color: new Color(object.color), metalness: object.metalness, roughness: object.roughness, wireframe: object.wireframe });
+      const textureLoader = new TextureLoader();
+      const materialDescriptors = resolveObjectMaterialSlots(sceneData, object);
+      const resolvedMaterials = materialDescriptors.map((descriptor) => {
+        const material = new MeshStandardMaterial({
+          color: new Color(descriptor.baseColor),
+          metalness: descriptor.metalness,
+          roughness: descriptor.roughness,
+          emissive: new Color(descriptor.emissive),
+          emissiveIntensity: descriptor.emissiveIntensity,
+          opacity: descriptor.opacity,
+          transparent: descriptor.opacity < 1,
+          side: descriptor.doubleSided ? DoubleSide : undefined,
+          wireframe: object.wireframe,
+        });
+        if (descriptor.baseColorTextureDataUrl) { const texture = textureLoader.load(descriptor.baseColorTextureDataUrl); texture.colorSpace = SRGBColorSpace; material.map = texture; }
+        if (descriptor.normalTextureDataUrl) material.normalMap = textureLoader.load(descriptor.normalTextureDataUrl);
+        if (descriptor.roughnessTextureDataUrl) material.roughnessMap = textureLoader.load(descriptor.roughnessTextureDataUrl);
+        if (descriptor.metalnessTextureDataUrl) material.metalnessMap = textureLoader.load(descriptor.metalnessTextureDataUrl);
+        if (descriptor.emissiveTextureDataUrl) { const texture = textureLoader.load(descriptor.emissiveTextureDataUrl); texture.colorSpace = SRGBColorSpace; material.emissiveMap = texture; }
+        return material;
+      });
+      const material = resolvedMaterials.length === 1 ? resolvedMaterials[0] : resolvedMaterials;
       const mesh = new Mesh(geometry, material);
       mesh.position.set(...object.position);
       mesh.rotation.set(...object.rotation);
@@ -254,7 +281,7 @@ export const Studio3DView: React.FC = () => {
       scene.add(mesh);
       meshMapRef.current.set(object.id, mesh);
     }
-  }, [sceneData.objects]);
+  }, [sceneData.objects, sceneData.materials, sceneData.textures]);
 
   useEffect(() => {
     const scene = sceneRef.current;
