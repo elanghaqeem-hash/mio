@@ -47,13 +47,23 @@ export const validateSceneMaterials=(scene:Mio3DScene):MaterialValidationResult=
     for(const textureId of [material.baseColorTextureId,material.normalTextureId,material.roughnessTextureId,material.metalnessTextureId,material.emissiveTextureId]){
       if(textureId&&!texturesById.has(textureId))errors.push(`Material ${material.id} references missing texture ${textureId}.`);
     }
+    for(const [textureId,expected,label] of [
+      [material.baseColorTextureId,'srgb','base color'],
+      [material.emissiveTextureId,'srgb','emissive'],
+      [material.normalTextureId,'linear','normal'],
+      [material.roughnessTextureId,'linear','roughness'],
+      [material.metalnessTextureId,'linear','metalness'],
+    ] as const){
+      if(textureId&&texturesById.get(textureId)?.colorSpace!==expected)errors.push(`Material ${material.id} ${label} texture must use ${expected} color space.`);
+    }
   }
   for(const object of scene.objects){
     for(const materialId of object.materialSlots??[])if(!materialsById.has(materialId))errors.push(`Object ${object.id} references missing material ${materialId}.`);
-    if(object.mesh&&object.materialSlots?.length){
+    if(object.mesh){
       for(const face of object.mesh.faces){
         const slot=face.materialSlot??0;
-        if(!Number.isInteger(slot)||slot<0||slot>=object.materialSlots.length)errors.push(`Face ${face.id} on object ${object.id} references invalid material slot ${slot}.`);
+        if(!object.materialSlots?.length&&slot!==0)errors.push(`Face ${face.id} on object ${object.id} uses material slot ${slot} but the object has no materialSlots.`);
+        if(object.materialSlots?.length&&(!Number.isInteger(slot)||slot<0||slot>=object.materialSlots.length))errors.push(`Face ${face.id} on object ${object.id} references invalid material slot ${slot}.`);
       }
     }
   }
