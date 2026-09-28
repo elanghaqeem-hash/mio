@@ -2,6 +2,7 @@ import type { MioMeshData,MioMeshModifier,MioMirrorModifier } from '../../../typ
 import { validateMeshTopology } from './MeshTopology';
 import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
 import { subdivideCatmullClark } from './MeshCatmullClark';
+import { solidifyMesh } from './MeshSolidify';
 
 export interface MioModifierEvaluationStep{modifierId:string;type:MioMeshModifier['type'];inputVertexCount:number;outputVertexCount:number;inputFaceCount:number;outputFaceCount:number}
 export interface MioModifierEvaluationResult{mesh:MioMeshData;steps:MioModifierEvaluationStep[]}
@@ -32,7 +33,8 @@ export const evaluateMeshModifierStack=(mesh:MioMeshData,modifiers:MioMeshModifi
    switch(modifier.type){
      case'mirror':current=applyMirror(before,modifier);break;
      case'subdivision':current=subdivideCatmullClark(before,modifier.levels);break;
-     default:throw new Error(`Modifier ${modifier.type} is defined but not implemented in V5.1.`);
+     case'solidify':current=solidifyMesh(before,modifier.thickness);break;
+     default:throw new Error(`Modifier ${modifier.type} is defined but not implemented in V5.2.`);
    }
    steps.push({modifierId:modifier.id,type:modifier.type,inputVertexCount:before.vertices.length,outputVertexCount:current.vertices.length,inputFaceCount:before.faces.length,outputFaceCount:current.faces.length});
  }
