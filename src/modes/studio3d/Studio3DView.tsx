@@ -29,6 +29,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Mio3DObject, Mio3DScene, MioMeshData, MioMeshFace, MioMeshSelection, MioMeshSelectionMode } from '../../types/creative';
 import { createCubeMesh, deriveMeshEdges } from './modeling/MeshTopology';
+import { createPrimitiveMesh } from './modeling/MeshPrimitives';
 import { extrudeMeshFace, normalizeMeshSelection, translateMeshSelection } from './modeling/MeshOperations';
 import { extrudeMeshRegion } from './modeling/MeshRegionExtrude';
 import { insetMeshFace } from './modeling/MeshFaceInset';
@@ -59,7 +60,7 @@ import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCa
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
-import { evaluateSceneObjectMesh } from './modeling/MeshBooleanSceneBinding';
+import { SceneMeshEvaluationCache } from './modeling/MeshEvaluationRuntime';
 import { resolveObjectMaterialSlots } from './modeling/MeshMaterialPipeline';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
@@ -73,9 +74,9 @@ import { CreativeWorkspaceToolbar } from '../../components/creative/CreativeWork
 
 const INITIAL_SCENE: Mio3DScene = {
   objects: [
-    { id: 'obj_core_1', name: 'Vanguard_Mech_Hull', type: 'mech_core', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.85, roughness: 0.2, wireframe: false },
-    { id: 'obj_wing_l', name: 'Thruster_Pod_L', type: 'cylinder', position: [-1.4, 0.2, -0.4], rotation: [0, 0, Math.PI / 4], scale: [0.35, 1.2, 0.35], color: '#38bdf8', metalness: 0.7, roughness: 0.3, wireframe: false },
-    { id: 'obj_wing_r', name: 'Thruster_Pod_R', type: 'cylinder', position: [1.4, 0.2, -0.4], rotation: [0, 0, -Math.PI / 4], scale: [0.35, 1.2, 0.35], color: '#38bdf8', metalness: 0.7, roughness: 0.3, wireframe: false },
+    { id: 'obj_core_1', name: 'Vanguard_Mech_Hull', type: 'mech_core', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.85, roughness: 0.2, wireframe: false, mesh: createPrimitiveMesh('mech_core')! },
+    { id: 'obj_wing_l', name: 'Thruster_Pod_L', type: 'cylinder', position: [-1.4, 0.2, -0.4], rotation: [0, 0, Math.PI / 4], scale: [0.35, 1.2, 0.35], color: '#38bdf8', metalness: 0.7, roughness: 0.3, wireframe: false, mesh: createPrimitiveMesh('cylinder')! },
+    { id: 'obj_wing_r', name: 'Thruster_Pod_R', type: 'cylinder', position: [1.4, 0.2, -0.4], rotation: [0, 0, -Math.PI / 4], scale: [0.35, 1.2, 0.35], color: '#38bdf8', metalness: 0.7, roughness: 0.3, wireframe: false, mesh: createPrimitiveMesh('cylinder')! },
   ],
   camera: { position: [0, 2.5, 4.5], fov: 50 },
   lights: { ambientColor: '#070b14', ambientIntensity: 0.8, directionalColor: '#00f0ff', directionalIntensity: 1.6 },
@@ -93,6 +94,7 @@ export const Studio3DView: React.FC = () => {
   const transformHelperRef = useRef<ReturnType<TransformControls['getHelper']> | null>(null);
   const meshMapRef = useRef<Map<string, Mesh>>(new Map());
   const meshProjectionMapRef = useRef<Map<string, MeshGeometryProjection>>(new Map());
+  const meshEvaluationCacheRef = useRef(new SceneMeshEvaluationCache(96));
   const editOverlayRef = useRef<Array<Points | LineSegments | Mesh>>([]);
   const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
   const { state: sceneData, setState: setSceneData } = workspace;
@@ -242,7 +244,7 @@ export const Studio3DView: React.FC = () => {
     for (const object of sceneData.objects) {
       let geometry: BufferGeometry;
       if (object.mesh) {
-        const evaluatedMesh = evaluateSceneObjectMesh(sceneData, object.id).mesh;
+        const evaluatedMesh = meshEvaluationCacheRef.current.evaluate(sceneData, object.id).mesh;
         const projection = projectMeshToBufferGeometry(evaluatedMesh);
         geometry = projection.geometry;
         meshProjectionMapRef.current.set(object.id, projection);
@@ -462,7 +464,7 @@ export const Studio3DView: React.FC = () => {
 
   const addObject = (type: Mio3DObject['type']) => {
     const sequence = sceneData.objects.length + 1;
-    const object: Mio3DObject = { id: `obj_${type}_${sequence}`, name: `New_${type}_${sequence}`, type, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.8, roughness: 0.2, wireframe: false, mesh: type === 'cube' ? createCubeMesh() : undefined };
+    const object: Mio3DObject = { id: `obj_${type}_${sequence}`, name: `New_${type}_${sequence}`, type, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], color: '#00f0ff', metalness: 0.8, roughness: 0.2, wireframe: false, mesh: createPrimitiveMesh(type) ?? undefined };
     setSceneData((previous) => ({ ...previous, objects: [...previous.objects, object] }));
     setSelectedId(object.id);
     eventBus.emit('ACTIVITY_LOG', { timestamp: activityTimestamp(), message: `Created local 3D ${type} primitive: ${object.name}`, mode: '3D' });
@@ -638,8 +640,11 @@ export const Studio3DView: React.FC = () => {
 
   const enterEditMode = () => {
     if (!selectedObj) return;
-    if (!selectedObj.mesh && selectedObj.type === 'cube') updateSelectedObject({ mesh: createCubeMesh() });
-    if (!selectedObj.mesh && selectedObj.type !== 'cube') return;
+    if (!selectedObj.mesh) {
+      const materialized = createPrimitiveMesh(selectedObj.type);
+      if (!materialized) return;
+      updateSelectedObject({ mesh: materialized });
+    }
     setWorkspaceMode('edit');
     setMeshSelection({ mode: 'face', vertexIds: [], edgeIds: [], faceIds: [] });
   };
