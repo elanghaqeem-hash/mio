@@ -13,13 +13,13 @@ Authoritative branch: `main`
 | V5.2 | Solidify Modifier | Merged | PR #492 |
 | V5.3 | Array Modifier | Merged | PR #493 |
 | V5.4 | Non-Destructive Bevel Modifier | Merged | PR #494 / main `95098b0f` |
-| V5.5 | Native Boolean Engine Foundation | PR open / validation pending | PR #495 / branch `creative/3d-modeling-v5.5-boolean-engine` |
+| V5.5 | Native Boolean Engine Foundation | Merged | PR #495 / main `87a1c27b` |
 
 ## Fixed next-stage roadmap
 | Version | Scope | Acceptance gate | Status |
 |---|---|---|---|
-| V5.5 | Boolean Engine | union/difference/intersection contract; deterministic output; immutable inputs; explicit robustness boundaries; topology-safe regression suite | PR #495 open / validation pending |
-| V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | Planned |
+| V5.5 | Boolean Engine | union/difference/intersection contract; deterministic output; immutable inputs; explicit robustness boundaries; topology-safe regression suite | Merged |
+| V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | In development |
 | V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | Planned |
 | V5.8 | Material & Texture Pipeline | material slots; texture references; PBR parameters; UV-backed viewport projection; save/load fidelity | Planned |
 | V5.9 | Import/Export Hardening | GLB/glTF round-trip; mesh/material/transform validation; unsupported-feature reporting; deterministic export | Planned |
@@ -38,4 +38,5 @@ Authoritative branch: `main`
 - Verified `main` at V5.4 Non-Destructive Bevel Modifier.
 - Created V5.5 branch.
 - Implemented Native Boolean Engine Foundation with exact axis-aligned box CSG subset and safety validation.
-- Opened PR #495; GitHub validation gates are pending.
+- PR #495 passed all three GitHub gates and was squash-merged to `main` as `87a1c27b`.
+- Started V5.6 Boolean Modifier & Scene Operand Binding on `creative/3d-modeling-v5.6-boolean-modifier`.
