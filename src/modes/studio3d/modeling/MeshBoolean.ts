@@ -1,8 +1,8 @@
-import type { MioMeshData } from '../../../types/creative';
+import type { MioBooleanOperation, MioMeshData } from '../../../types/creative';
 import { validateMeshTopology } from './MeshTopology';
 import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
 
-export type MeshBooleanOperation='union'|'difference'|'intersection';
+export type MeshBooleanOperation=MioBooleanOperation;
 
 interface AxisAlignedBox {
   min:[number,number,number];
