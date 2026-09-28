@@ -15,8 +15,11 @@ export interface MioBevelModifier { id:string; type:'bevel'; enabled:boolean; wi
 export type MioBooleanOperation='union'|'difference'|'intersection';
 export interface MioBooleanModifier { id:string; type:'boolean'; enabled:boolean; operation:MioBooleanOperation; operandObjectId:string; }
 export type MioMeshModifier=MioMirrorModifier|MioSubdivisionModifier|MioSolidifyModifier|MioArrayModifier|MioBevelModifier|MioBooleanModifier;
-export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; modifiers?:MioMeshModifier[]; proceduralParams?:Record<string,number|string>; }
-export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
+export type MioTextureColorSpace='srgb'|'linear';
+export interface MioTextureReference { id:string; name:string; dataUrl:string; colorSpace:MioTextureColorSpace; }
+export interface MioPBRMaterial { id:string; name:string; baseColor:string; metalness:number; roughness:number; emissive:string; emissiveIntensity:number; opacity:number; doubleSided:boolean; baseColorTextureId?:string; normalTextureId?:string; roughnessTextureId?:string; metalnessTextureId?:string; emissiveTextureId?:string; }
+export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; modifiers?:MioMeshModifier[]; materialSlots?:string[]; proceduralParams?:Record<string,number|string>; }
+export interface Mio3DScene { objects:Mio3DObject[]; materials?:MioPBRMaterial[]; textures?:MioTextureReference[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
 // 3D Animation Specification (.mioanim)
 export type AnimationInterpolation = 'linear'|'easeIn'|'easeOut'|'easeInOut'|'step'|'bezier';
