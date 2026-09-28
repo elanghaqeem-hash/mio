@@ -15,17 +15,17 @@ const fnv1a=(value:string):string=>{
 export const sceneGeometryFingerprint=(scene:Mio3DScene):string=>fnv1a(JSON.stringify(scene.objects));
 
 export class SceneMeshEvaluationCache{
-  private readonly entries=new Map<string,MioModifierEvaluationResult>();
+  private readonly entries=new Map<string,{snapshot:string;result:MioModifierEvaluationResult}>();
   private hits=0;
   private misses=0;
   private evictions=0;
   public constructor(private readonly maxEntries=64){if(!Number.isInteger(maxEntries)||maxEntries<1)throw new Error('Mesh evaluation cache size must be a positive integer.');}
   public evaluate(scene:Mio3DScene,objectId:string):MioModifierEvaluationResult{
-    const key=`${sceneGeometryFingerprint(scene)}:${objectId}`,cached=this.entries.get(key);
-    if(cached){this.hits+=1;this.entries.delete(key);this.entries.set(key,cached);return cloneResult(cached);}
+    const snapshot=JSON.stringify(scene.objects),key=`${fnv1a(snapshot)}:${objectId}`,cached=this.entries.get(key);
+    if(cached&&cached.snapshot===snapshot){this.hits+=1;this.entries.delete(key);this.entries.set(key,cached);return cloneResult(cached.result);}
     this.misses+=1;
     const result=evaluateSceneObjectMesh(scene,objectId);
-    this.entries.set(key,cloneResult(result));
+    this.entries.set(key,{snapshot,result:cloneResult(result)});
     while(this.entries.size>this.maxEntries){const oldest=this.entries.keys().next().value as string|undefined;if(oldest===undefined)break;this.entries.delete(oldest);this.evictions+=1;}
     return cloneResult(result);
   }
