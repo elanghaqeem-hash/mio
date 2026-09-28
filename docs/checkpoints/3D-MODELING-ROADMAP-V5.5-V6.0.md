@@ -14,14 +14,16 @@ Authoritative branch: `main`
 | V5.3 | Array Modifier | Merged | PR #493 |
 | V5.4 | Non-Destructive Bevel Modifier | Merged | PR #494 / main `95098b0f` |
 | V5.5 | Native Boolean Engine Foundation | Merged | PR #495 / main `87a1c27b` |
+| V5.6 | Boolean Modifier + Scene Operand Binding | Merged | PR #496 / main `5bbb9073` |
+| V5.7 | UV Core | Merged | PR #497 / main `5e8aca9f` |
 
 ## Fixed next-stage roadmap
 | Version | Scope | Acceptance gate | Status |
 |---|---|---|---|
 | V5.5 | Boolean Engine | union/difference/intersection contract; deterministic output; immutable inputs; explicit robustness boundaries; topology-safe regression suite | Merged |
 | V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | Merged |
-| V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | In development |
-| V5.8 | Material & Texture Pipeline | material slots; texture references; PBR parameters; UV-backed viewport projection; save/load fidelity | Planned |
+| V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | Merged |
+| V5.8 | Material & Texture Pipeline | material slots; texture references; PBR parameters; UV-backed viewport projection; save/load fidelity | In development |
 | V5.9 | Import/Export Hardening | GLB/glTF round-trip; mesh/material/transform validation; unsupported-feature reporting; deterministic export | Planned |
 | V6.0 | Production Integration & Performance | Studio UI wiring; undo/redo transactions; worker-safe heavy evaluation; caching; stress/performance gates; end-to-end model→save→export validation | Planned |
 
@@ -40,4 +42,5 @@ Authoritative branch: `main`
 - Implemented Native Boolean Engine Foundation with exact axis-aligned box CSG subset and safety validation.
 - PR #495 passed all three GitHub gates and was squash-merged to `main` as `87a1c27b`.
 - V5.6 passed all three GitHub gates and was squash-merged to `main` as `5bbb9073`.
-- Started V5.7 UV Core on `creative/3d-modeling-v5.7-uv-core`.
+- V5.7 passed all three GitHub gates and was squash-merged to `main` as `5e8aca9f`.
+- Started V5.8 Material & Texture Pipeline on `creative/3d-modeling-v5.8-material-texture`.
