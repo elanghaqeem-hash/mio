@@ -103,7 +103,7 @@ export const executeMeshBoolean=(sourceA:MioMeshData,sourceB:MioMeshData,operati
     {name:'py',delta:[0,1,0] as const},
     {name:'nz',delta:[0,0,-1] as const},
     {name:'pz',delta:[0,0,1] as const},
-  ];
+  ] as const;
 
   for(let x=0;x<xs.length-1;x+=1)for(let y=0;y<ys.length-1;y+=1)for(let z=0;z<zs.length-1;z+=1){
     if(!selected.has(cellKey(x,y,z)))continue;
