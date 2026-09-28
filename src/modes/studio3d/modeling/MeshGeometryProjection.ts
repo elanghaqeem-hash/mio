@@ -8,12 +8,14 @@ import { validateMeshTopology } from './MeshTopology';
 export interface MeshTriangle {
   faceId: string;
   vertexIds: [string, string, string];
+  materialSlot: number;
 }
 
 export interface MeshGeometryProjection {
   geometry: BufferGeometry;
   triangles: MeshTriangle[];
   triangleFaceIds: string[];
+  triangleMaterialSlots: number[];
 }
 
 export const triangulateMeshFaces = (mesh: MioMeshData): MeshTriangle[] => {
@@ -25,6 +27,7 @@ export const triangulateMeshFaces = (mesh: MioMeshData): MeshTriangle[] => {
       triangles.push({
         faceId: face.id,
         vertexIds: [face.vertexIds[0], face.vertexIds[index], face.vertexIds[index + 1]],
+        materialSlot: face.materialSlot ?? 0,
       });
     }
   }
@@ -55,6 +58,18 @@ export const projectMeshToBufferGeometry = (mesh: MioMeshData): MeshGeometryProj
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   if (hasCompleteUVs) geometry.setAttribute('uv', new Float32BufferAttribute(textureCoordinates, 2));
+  if (triangles.length) {
+    let groupStart = 0;
+    let currentSlot = triangles[0].materialSlot;
+    for (let index = 1; index <= triangles.length; index += 1) {
+      const nextSlot = index < triangles.length ? triangles[index].materialSlot : null;
+      if (nextSlot !== currentSlot) {
+        geometry.addGroup(groupStart * 3, (index - groupStart) * 3, currentSlot);
+        groupStart = index;
+        if (nextSlot !== null) currentSlot = nextSlot;
+      }
+    }
+  }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -62,6 +77,7 @@ export const projectMeshToBufferGeometry = (mesh: MioMeshData): MeshGeometryProj
     geometry,
     triangles,
     triangleFaceIds: triangles.map((triangle) => triangle.faceId),
+    triangleMaterialSlots: triangles.map((triangle) => triangle.materialSlot),
   };
 };
 
