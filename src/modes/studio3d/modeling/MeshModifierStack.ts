@@ -1,4 +1,4 @@
-import type { MioMeshData,MioMeshModifier,MioMirrorModifier } from '../../../types/creative';
+import type { MioBooleanModifier,MioMeshData,MioMeshModifier,MioMirrorModifier } from '../../../types/creative';
 import { validateMeshTopology } from './MeshTopology';
 import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
 import { subdivideCatmullClark } from './MeshCatmullClark';
@@ -6,9 +6,11 @@ import { solidifyMesh } from './MeshSolidify';
 import { arrayMesh } from './MeshArray';
 import { executeUnifiedBevel } from './MeshUnifiedBevel';
 import { deriveMeshEdges } from './MeshTopology';
+import { executeMeshBoolean } from './MeshBoolean';
 
 export interface MioModifierEvaluationStep{modifierId:string;type:MioMeshModifier['type'];inputVertexCount:number;outputVertexCount:number;inputFaceCount:number;outputFaceCount:number}
 export interface MioModifierEvaluationResult{mesh:MioMeshData;steps:MioModifierEvaluationStep[]}
+export interface MioModifierEvaluationContext{resolveBooleanOperand?:(modifier:MioBooleanModifier,inputMesh:MioMeshData)=>MioMeshData}
 
 const mirrorPosition=(p:[number,number,number],axis:'x'|'y'|'z'):[number,number,number]=>{const q:[number,number,number]=[...p];q[axis==='x'?0:axis==='y'?1:2]*=-1;return q};
 const applyMirror=(mesh:MioMeshData,m:MioMirrorModifier):MioMeshData=>{
@@ -27,7 +29,7 @@ const applyMirror=(mesh:MioMeshData,m:MioMirrorModifier):MioMeshData=>{
  const d=diagnoseMeshTopology(result);if(d.nonManifoldEdgeIds.length||d.inconsistentWindingEdgeIds.length||d.zeroAreaFaceIds.length)throw new Error('Mirror modifier produced unsafe topology.');
  return result;
 };
-export const evaluateMeshModifierStack=(mesh:MioMeshData,modifiers:MioMeshModifier[]=[]):MioModifierEvaluationResult=>{
+export const evaluateMeshModifierStack=(mesh:MioMeshData,modifiers:MioMeshModifier[]=[],context:MioModifierEvaluationContext={}):MioModifierEvaluationResult=>{
  const source=structuredClone(mesh);const initial=validateMeshTopology(source);if(!initial.valid)throw new Error(`Cannot evaluate modifiers on invalid mesh: ${initial.errors.join(' ')}`);
  let current=source;const steps:MioModifierEvaluationStep[]=[];
  for(const modifier of modifiers){
@@ -39,6 +41,7 @@ export const evaluateMeshModifierStack=(mesh:MioMeshData,modifiers:MioMeshModifi
      case'solidify':current=solidifyMesh(before,modifier.thickness);break;
      case'array':current=arrayMesh(before,modifier.count,modifier.offset);break;
      case'bevel':{const available=new Set(deriveMeshEdges(before).map(e=>e.id));const selected=[...new Set(modifier.edgeIds)];if(!selected.length)throw new Error('Bevel modifier requires at least one edge ID.');const missing=selected.filter(id=>!available.has(id));if(missing.length)throw new Error(`Bevel modifier references edges unavailable at this stack position: ${missing.join(', ')}`);current=executeUnifiedBevel(before,selected,{widthRatio:modifier.widthRatio,segments:modifier.segments,profile:modifier.profile,curvature:modifier.curvature}).mesh;break;}
+     case'boolean':{if(!modifier.operandObjectId.trim())throw new Error('Boolean modifier requires an operand object ID.');if(!context.resolveBooleanOperand)throw new Error('Boolean modifier requires a scene operand resolver.');const operand=context.resolveBooleanOperand(modifier,before);current=executeMeshBoolean(before,operand,modifier.operation);break;}
      default:{const exhaustive:never=modifier;throw new Error(`Unsupported modifier: ${String(exhaustive)}`);}
    }
    steps.push({modifierId:modifier.id,type:modifier.type,inputVertexCount:before.vertices.length,outputVertexCount:current.vertices.length,inputFaceCount:before.faces.length,outputFaceCount:current.faces.length});

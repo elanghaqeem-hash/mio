@@ -56,7 +56,7 @@ import { MESH_MODELING_SHORTCUT_GROUPS } from './modeling/MeshModelingShortcutCa
 import { meshSelectionPivot } from './modeling/MeshTransformTransaction';
 import { applyComponentGizmoPreview, identityComponentGizmoPose } from './modeling/MeshComponentTransformPreview';
 import { faceIdFromTriangleIndex, projectMeshToBufferGeometry, type MeshGeometryProjection } from './modeling/MeshGeometryProjection';
-import { evaluateMeshModifierStack } from './modeling/MeshModifierStack';
+import { evaluateSceneObjectMesh } from './modeling/MeshBooleanSceneBinding';
 import { clearMeshSelection, toggleFaceSelection } from './modeling/MeshSelection';
 import { buildEdgeOverlayPositions, buildSelectedFaceOverlayGeometry, buildVertexOverlayPositions } from './modeling/MeshSelectionOverlay';
 import { pickMeshEdgeScreenSpace, pickMeshVertexScreenSpace } from './modeling/MeshComponentPicking';
@@ -236,7 +236,7 @@ export const Studio3DView: React.FC = () => {
     for (const object of sceneData.objects) {
       let geometry: BufferGeometry;
       if (object.mesh) {
-        const evaluatedMesh = evaluateMeshModifierStack(object.mesh, object.modifiers).mesh;
+        const evaluatedMesh = evaluateSceneObjectMesh(sceneData, object.id).mesh;
         const projection = projectMeshToBufferGeometry(evaluatedMesh);
         geometry = projection.geometry;
         meshProjectionMapRef.current.set(object.id, projection);
