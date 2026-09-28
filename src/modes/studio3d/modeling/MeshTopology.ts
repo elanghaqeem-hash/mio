@@ -49,6 +49,10 @@ export const validateMeshTopology = (mesh: MioMeshData): MeshTopologyValidation 
     faceIds.add(face.id);
     if (face.vertexIds.length < 3) errors.push(`Face ${face.id} must contain at least three vertices.`);
     if (new Set(face.vertexIds).size !== face.vertexIds.length) errors.push(`Face ${face.id} contains repeated vertices.`);
+    if (face.uvs) {
+      if (face.uvs.length !== face.vertexIds.length) errors.push(`Face ${face.id} UV count must match its vertex count.`);
+      for (const uv of face.uvs) if (uv.length !== 2 || uv.some((component) => !Number.isFinite(component))) errors.push(`Face ${face.id} contains a non-finite UV coordinate.`);
+    }
     for (const vertexId of face.vertexIds) {
       if (!vertexIds.has(vertexId)) errors.push(`Face ${face.id} references missing vertex ${vertexId}.`);
     }

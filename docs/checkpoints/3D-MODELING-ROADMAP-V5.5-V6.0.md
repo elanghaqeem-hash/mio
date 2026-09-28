@@ -19,8 +19,8 @@ Authoritative branch: `main`
 | Version | Scope | Acceptance gate | Status |
 |---|---|---|---|
 | V5.5 | Boolean Engine | union/difference/intersection contract; deterministic output; immutable inputs; explicit robustness boundaries; topology-safe regression suite | Merged |
-| V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | In development |
-| V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | Planned |
+| V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | Merged |
+| V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | In development |
 | V5.8 | Material & Texture Pipeline | material slots; texture references; PBR parameters; UV-backed viewport projection; save/load fidelity | Planned |
 | V5.9 | Import/Export Hardening | GLB/glTF round-trip; mesh/material/transform validation; unsupported-feature reporting; deterministic export | Planned |
 | V6.0 | Production Integration & Performance | Studio UI wiring; undo/redo transactions; worker-safe heavy evaluation; caching; stress/performance gates; end-to-end model→save→export validation | Planned |
@@ -39,4 +39,5 @@ Authoritative branch: `main`
 - Created V5.5 branch.
 - Implemented Native Boolean Engine Foundation with exact axis-aligned box CSG subset and safety validation.
 - PR #495 passed all three GitHub gates and was squash-merged to `main` as `87a1c27b`.
-- Started V5.6 Boolean Modifier & Scene Operand Binding on `creative/3d-modeling-v5.6-boolean-modifier`.
+- V5.6 passed all three GitHub gates and was squash-merged to `main` as `5bbb9073`.
+- Started V5.7 UV Core on `creative/3d-modeling-v5.7-uv-core`.

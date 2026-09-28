@@ -1,7 +1,8 @@
 // 3D Scene Specification (.mio3d)
 export type MioMeshSelectionMode='vertex'|'edge'|'face';
 export interface MioMeshVertex { id:string; position:[number,number,number]; }
-export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:number; }
+export type MioUVCoordinate=[number,number];
+export interface MioMeshFace { id:string; vertexIds:string[]; materialSlot?:number; uvs?:MioUVCoordinate[]; }
 export interface MioMeshEdge { id:string; vertexIds:[string,string]; faceIds:string[]; }
 export interface MioMeshData { vertices:MioMeshVertex[]; faces:MioMeshFace[]; }
 export interface MioMeshSelection { mode:MioMeshSelectionMode; vertexIds:string[]; edgeIds:string[]; faceIds:string[]; }
