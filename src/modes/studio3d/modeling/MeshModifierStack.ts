@@ -4,6 +4,8 @@ import { diagnoseMeshTopology } from './MeshTopologyDiagnostics';
 import { subdivideCatmullClark } from './MeshCatmullClark';
 import { solidifyMesh } from './MeshSolidify';
 import { arrayMesh } from './MeshArray';
+import { executeUnifiedBevel } from './MeshUnifiedBevel';
+import { deriveMeshEdges } from './MeshTopology';
 
 export interface MioModifierEvaluationStep{modifierId:string;type:MioMeshModifier['type'];inputVertexCount:number;outputVertexCount:number;inputFaceCount:number;outputFaceCount:number}
 export interface MioModifierEvaluationResult{mesh:MioMeshData;steps:MioModifierEvaluationStep[]}
@@ -36,7 +38,8 @@ export const evaluateMeshModifierStack=(mesh:MioMeshData,modifiers:MioMeshModifi
      case'subdivision':current=subdivideCatmullClark(before,modifier.levels);break;
      case'solidify':current=solidifyMesh(before,modifier.thickness);break;
      case'array':current=arrayMesh(before,modifier.count,modifier.offset);break;
-     default:throw new Error(`Modifier ${modifier.type} is defined but not implemented in V5.3.`);
+     case'bevel':{const available=new Set(deriveMeshEdges(before).map(e=>e.id));const selected=[...new Set(modifier.edgeIds)];if(!selected.length)throw new Error('Bevel modifier requires at least one edge ID.');const missing=selected.filter(id=>!available.has(id));if(missing.length)throw new Error(`Bevel modifier references edges unavailable at this stack position: ${missing.join(', ')}`);current=executeUnifiedBevel(before,selected,{widthRatio:modifier.widthRatio,segments:modifier.segments,profile:modifier.profile,curvature:modifier.curvature}).mesh;break;}
+     default:{const exhaustive:never=modifier;throw new Error(`Unsupported modifier: ${String(exhaustive)}`);}
    }
    steps.push({modifierId:modifier.id,type:modifier.type,inputVertexCount:before.vertices.length,outputVertexCount:current.vertices.length,inputFaceCount:before.faces.length,outputFaceCount:current.faces.length});
  }
