@@ -11,7 +11,9 @@ export interface MioSubdivisionModifier { id:string; type:'subdivision'; enabled
 export interface MioSolidifyModifier { id:string; type:'solidify'; enabled:boolean; thickness:number; }
 export interface MioArrayModifier { id:string; type:'array'; enabled:boolean; count:number; offset:[number,number,number]; }
 export interface MioBevelModifier { id:string; type:'bevel'; enabled:boolean; widthRatio:number; segments:number; profile:number; curvature:number; edgeIds:string[]; }
-export type MioMeshModifier=MioMirrorModifier|MioSubdivisionModifier|MioSolidifyModifier|MioArrayModifier|MioBevelModifier;
+export type MioBooleanOperation='union'|'difference'|'intersection';
+export interface MioBooleanModifier { id:string; type:'boolean'; enabled:boolean; operation:MioBooleanOperation; operandObjectId:string; }
+export type MioMeshModifier=MioMirrorModifier|MioSubdivisionModifier|MioSolidifyModifier|MioArrayModifier|MioBevelModifier|MioBooleanModifier;
 export interface Mio3DObject { id:string; name:string; type:'cube'|'sphere'|'cylinder'|'torus'|'plane'|'mech_core'|'drone_hull'|'custom'; position:[number,number,number]; rotation:[number,number,number]; scale:[number,number,number]; color:string; metalness:number; roughness:number; wireframe:boolean; visible?:boolean; mesh?:MioMeshData; modifiers?:MioMeshModifier[]; proceduralParams?:Record<string,number|string>; }
 export interface Mio3DScene { objects:Mio3DObject[]; camera:{position:[number,number,number];fov:number}; lights:{ambientColor:string;ambientIntensity:number;directionalColor:string;directionalIntensity:number}; }
 
