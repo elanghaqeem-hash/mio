@@ -38,6 +38,7 @@ export const analyzeMioSceneExchange=(scene:Mio3DScene):MioSceneExchangeAnalysis
     if(objectIds.has(object.id))errors.push(`Duplicate 3D object ID: ${object.id}.`);
     objectIds.add(object.id);
     if(!object.mesh)errors.push(`Object ${object.id} has no authoritative MioMeshData; V5.9 refuses placeholder geometry export.`);
+    if(object.mesh&&(!object.mesh.vertices.length||!object.mesh.faces.length))errors.push(`Object ${object.id} has empty authoritative mesh geometry.`);
     if(!finiteVector(object.position)||!finiteVector(object.rotation)||!finiteVector(object.scale)||object.scale.some(value=>value<=0))errors.push(`Object ${object.id} has invalid transform values.`);
   }
   const materials=validateSceneMaterials(scene);
