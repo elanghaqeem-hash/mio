@@ -17,6 +17,7 @@ Authoritative branch: `main`
 | V5.6 | Boolean Modifier + Scene Operand Binding | Merged | PR #496 / main `5bbb9073` |
 | V5.7 | UV Core | Merged | PR #497 / main `5e8aca9f` |
 | V5.8 | Material & Texture Pipeline | Merged | PR #498 / main `653fb754` |
+| V5.9 | Import/Export Hardening | Merged | PR #499 / main `52937fa4` |
 
 ## Fixed next-stage roadmap
 | Version | Scope | Acceptance gate | Status |
@@ -25,8 +26,8 @@ Authoritative branch: `main`
 | V5.6 | Boolean Modifier + Scene Operand Binding | non-destructive operand reference; missing/self/cycle protection; modifier evaluation through scene resolver; no Three.js source-of-truth mutation | Merged |
 | V5.7 | UV Core | per-corner UV representation; planar/cube unwrap; seam contract; deterministic UV persistence; projection tests | Merged |
 | V5.8 | Material & Texture Pipeline | material slots; texture references; PBR parameters; UV-backed viewport projection; save/load fidelity | Merged |
-| V5.9 | Import/Export Hardening | GLB/glTF round-trip; mesh/material/transform validation; unsupported-feature reporting; deterministic export | In development |
-| V6.0 | Production Integration & Performance | Studio UI wiring; undo/redo transactions; worker-safe heavy evaluation; caching; stress/performance gates; end-to-end model→save→export validation | Planned |
+| V5.9 | Import/Export Hardening | GLB/glTF round-trip; mesh/material/transform validation; unsupported-feature reporting; deterministic export | Merged |
+| V6.0 | Production Integration & Performance | Studio UI wiring; undo/redo transactions; worker-safe heavy evaluation; caching; stress/performance gates; end-to-end model→save→export validation | In development |
 
 ## Tracking rules
 1. One milestone = one branch = one PR = one checkpoint document.
@@ -45,4 +46,5 @@ Authoritative branch: `main`
 - V5.6 passed all three GitHub gates and was squash-merged to `main` as `5bbb9073`.
 - V5.7 passed all three GitHub gates and was squash-merged to `main` as `5e8aca9f`.
 - V5.8 passed all three GitHub gates and was squash-merged to `main` as `653fb754`.
-- Started V5.9 Import/Export Hardening on `creative/3d-modeling-v5.9-import-export`.
+- V5.9 passed all three GitHub gates and was squash-merged to `main` as `52937fa4`.
+- Started V6.0 Production Integration & Performance on `creative/3d-modeling-v6.0-production-readiness`.
