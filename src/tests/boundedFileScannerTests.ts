@@ -55,5 +55,63 @@ export async function runBoundedFileScannerTests(): Promise<SuiteResult> {
   await new BoundedFileScanner(readOnlySource).scan({ workspaceId: 'ws_test', relativePath: '.', depth: 'FAST', recursive: false });
   check(mutationCalls === 1 && !('move' in readOnlySource) && !('delete' in readOnlySource), 'Scanner dependency exposes list-only authority and no mutation surface');
 
+  const policySource: ReadOnlyFileScanSource = {
+    listDirectory: async (_workspaceId, relativePath) => relativePath === '.'
+      ? [
+          { name: '.secret', type: 'FILE', bytes: 1 },
+          { name: '.git', type: 'DIRECTORY' },
+          { name: 'node_modules', type: 'DIRECTORY' },
+          { name: 'cache.tmp', type: 'FILE', bytes: 1 },
+          { name: 'keep.png', type: 'FILE', bytes: 2 },
+          { name: 'nested', type: 'DIRECTORY' },
+        ]
+      : relativePath === 'nested'
+        ? [{ name: 'deep.jpg', type: 'FILE', bytes: 3 }]
+        : [],
+  };
+  const policyScanner = new BoundedFileScanner(policySource);
+  const policyResult = await policyScanner.scan({
+    workspaceId: 'ws_policy',
+    relativePath: '.',
+    depth: 'FAST',
+    recursive: true,
+    excludeExtensions: ['tmp'],
+  });
+  check(policyResult.files.map((file) => file.identity.relativePath).join('|') === 'keep.png|nested/deep.jpg', 'Default policy skips hidden/system-heavy paths and configured extensions');
+  check(policyResult.skippedCount === 4, 'Policy exclusions are counted as skipped entries');
+
+  const hiddenResult = await policyScanner.scan({
+    workspaceId: 'ws_policy',
+    relativePath: '.',
+    depth: 'FAST',
+    recursive: false,
+    includeHidden: true,
+    excludeNames: ['keep.png'],
+  });
+  check(hiddenResult.files.some((file) => file.identity.name === '.secret') && !hiddenResult.files.some((file) => file.identity.name === 'keep.png'), 'Hidden-file inclusion is explicit and custom name exclusions remain authoritative');
+
+  check(await rejects(() => policyScanner.scan({
+    workspaceId: 'ws_policy',
+    relativePath: '.',
+    depth: 'FAST',
+    recursive: true,
+    maxDepth: 1,
+  }), 'traversal depth') === false, 'Configured depth one permits exactly one nested directory level');
+
+  const depthSource: ReadOnlyFileScanSource = {
+    listDirectory: async (_workspaceId, relativePath) =>
+      relativePath === '.' ? [{ name: 'a', type: 'DIRECTORY' }]
+      : relativePath === 'a' ? [{ name: 'b', type: 'DIRECTORY' }]
+      : relativePath === 'a/b' ? [{ name: 'too-deep.txt', type: 'FILE', bytes: 1 }]
+      : [],
+  };
+  check(await rejects(() => new BoundedFileScanner(depthSource).scan({
+    workspaceId: 'ws_depth',
+    relativePath: '.',
+    depth: 'FAST',
+    recursive: true,
+    maxDepth: 1,
+  }), 'traversal depth'), 'Configured maximum traversal depth is enforced');
+
   return { passed, total };
 }
