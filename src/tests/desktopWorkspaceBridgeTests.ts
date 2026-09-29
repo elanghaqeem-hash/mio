@@ -42,6 +42,10 @@ export async function runDesktopWorkspaceBridgeTests(): Promise<SuiteResult> {
     const workspace = await sandbox.authorizeRoot(root);
     check(/^ws_[a-zA-Z0-9-]+$/.test(workspace.id) && !('rootPath' in workspace), 'Authorized workspace returns an opaque id without exposing the absolute root');
 
+    const listedEntries = await sandbox.listDirectory(workspace.id, '.');
+    const listedNote = listedEntries.find((entry) => entry.name === 'notes.txt');
+    check(listedNote?.type === 'FILE' && listedNote.bytes === Buffer.byteLength('safe workspace text') && Number.isFinite(listedNote.modifiedAtMs), 'Workspace listing returns bounded file metadata without exposing absolute paths');
+
     const safeRead = await sandbox.readText(workspace.id, 'notes.txt');
     check(safeRead.data === 'safe workspace text' && safeRead.bytes > 0, 'WorkspaceSandbox reads bounded text inside the authorized root');
 

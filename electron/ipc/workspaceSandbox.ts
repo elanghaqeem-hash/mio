@@ -10,6 +10,9 @@ export interface AuthorizedWorkspaceDescriptor {
 export interface WorkspaceDirectoryEntry {
   name: string;
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
+  bytes?: number;
+  modifiedAtMs?: number;
+  createdAtMs?: number;
 }
 
 export interface WorkspaceTreeHashFile {
@@ -103,9 +106,24 @@ export class WorkspaceSandbox {
     const entries = await fs.promises.readdir(targetPath, { withFileTypes: true });
     if (entries.length > this.maxDirectoryEntries) throw new Error(`Directory exceeds bounded listing limit (${entries.length} > ${this.maxDirectoryEntries} entries)`);
 
-    return entries.map((entry) => ({
-      name: entry.name,
-      type: entry.isFile() ? 'FILE' : entry.isDirectory() ? 'DIRECTORY' : entry.isSymbolicLink() ? 'SYMLINK' : 'OTHER',
+    return Promise.all(entries.map(async (entry) => {
+      const type = entry.isFile() ? 'FILE' : entry.isDirectory() ? 'DIRECTORY' : entry.isSymbolicLink() ? 'SYMLINK' : 'OTHER';
+      if (type === 'SYMLINK' || type === 'OTHER') return { name: entry.name, type };
+
+      const entryPath = path.join(targetPath, entry.name);
+      const lstat = await fs.promises.lstat(entryPath);
+      if (lstat.isSymbolicLink()) return { name: entry.name, type: 'SYMLINK' as const };
+
+      const canonicalEntry = await fs.promises.realpath(entryPath);
+      this.assertContained(targetPath, canonicalEntry, 'Listed entry escapes requested workspace directory');
+      const entryStat = await fs.promises.stat(canonicalEntry);
+      return {
+        name: entry.name,
+        type,
+        bytes: entryStat.isFile() ? entryStat.size : undefined,
+        modifiedAtMs: Number.isFinite(entryStat.mtimeMs) ? entryStat.mtimeMs : undefined,
+        createdAtMs: Number.isFinite(entryStat.birthtimeMs) ? entryStat.birthtimeMs : undefined,
+      };
     }));
   }
 

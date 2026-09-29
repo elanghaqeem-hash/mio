@@ -27,7 +27,8 @@
     "preview": "vite preview",
     "release:animation-v1": "node scripts/animation-v1-release-check.mjs",
     "deploy:verify:animation": "node scripts/verify-animation-deployment.mjs",
-    "release:animation-e2e-plan": "node scripts/animation-v1-e2e-plan.mjs"
+    "release:animation-e2e-plan": "node scripts/animation-v1-e2e-plan.mjs",
+    "benchmark:file-scanner": "tsx scripts/benchmarks/file-scanner-benchmark.ts"
   },
   "dependencies": {
     "@types/three": "^0.186.0",
