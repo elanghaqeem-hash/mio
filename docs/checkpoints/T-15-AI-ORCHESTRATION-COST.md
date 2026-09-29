@@ -7,13 +7,13 @@ Status: IN PROGRESS
 Provide a provider-agnostic orchestration layer for Mio intelligence engines: capability-aware routing, privacy/locality policy, bounded fallback, explicit cost budgets, deterministic cache keys, and provenance.
 
 ## Timeline
-- T-15.01#A — IN PROGRESS: orchestration contracts and policy.
-- T-15.02#A — PLANNED: budget/cost ledger.
-- T-15.03#A — PLANNED: deterministic cache.
-- T-15.04#A — PLANNED: fallback/circuit policy.
-- T-15.05#A — PLANNED: provenance receipts.
-- T-15.06#A — PLANNED: provider adapter boundary.
-- T-15.07#A — PLANNED: tests and acceptance.
+- T-15.01#A — COMPLETE: orchestration contracts and policy.
+- T-15.02#A — COMPLETE: budget/cost ledger.
+- T-15.03#A — COMPLETE: deterministic cache.
+- T-15.04#A — COMPLETE: fallback/circuit policy.
+- T-15.05#A — COMPLETE: provenance receipts.
+- T-15.06#A — COMPLETE: provider adapter boundary.
+- T-15.07#A — TESTING: tests and acceptance.
 
 ## Invariants
 - No API keys in source or receipts.
