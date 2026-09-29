@@ -5,6 +5,7 @@ import {
   type FileScanRequest,
   type FileScanResult,
 } from './contracts';
+import { inspectFileSignature } from './FileSignatureInspector';
 
 export interface ReadOnlyScanEntry {
   name: string;
@@ -16,6 +17,8 @@ export interface ReadOnlyScanEntry {
 
 export interface ReadOnlyFileScanSource {
   listDirectory(workspaceId: string, relativePath: string): Promise<ReadOnlyScanEntry[]>;
+  readFileHeader?(workspaceId: string, relativePath: string, maxBytes: number): Promise<{ bytes: number[]; fileBytes: number }>;
+  hashFile?(workspaceId: string, relativePath: string): Promise<{ sha256: string; bytes: number; modifiedAtMs?: number }>;
 }
 
 const DEFAULT_MAX_FILES = 5000;
@@ -75,6 +78,29 @@ export class BoundedFileScanner {
         if (totalBytes + bytes > maxBytes) throw new Error(`File scan exceeds bounded byte budget (${maxBytes})`);
         totalBytes += bytes;
 
+        let signatureMetadata: FileAsset['metadata'] extends infer M ? Partial<M> : never = {};
+        let detectedMime: string | undefined;
+        if (request.inspectSignatures && this.source.readFileHeader) {
+          const header = await this.source.readFileHeader(request.workspaceId, childPath, 512);
+          const inspection = inspectFileSignature(entry.name, new Uint8Array(header.bytes));
+          detectedMime = inspection.mimeType;
+          signatureMetadata = {
+            signature: inspection.signature,
+            signatureSource: inspection.source,
+            extensionConsistent: inspection.extensionConsistent,
+            supportedFormat: inspection.supported,
+            corruptReason: inspection.corruptReason,
+          };
+        }
+        let hashMetadata: FileAsset['metadata'] extends infer M ? Partial<M> : never = {};
+        if (request.hashFiles && this.source.hashFile) {
+          const hashed = await this.source.hashFile(request.workspaceId, childPath);
+          if (hashed.bytes !== bytes || (entry.modifiedAtMs !== undefined && hashed.modifiedAtMs !== undefined && entry.modifiedAtMs !== hashed.modifiedAtMs)) {
+            throw new Error(`File changed during scan: ${childPath}`);
+          }
+          hashMetadata = { sha256: hashed.sha256 };
+        }
+
         files.push({
           schemaVersion: 1,
           identity: {
@@ -82,12 +108,15 @@ export class BoundedFileScanner {
             relativePath: childPath,
             name: entry.name,
             extension,
-            kind: classifyFileAsset(entry.name),
+            mimeType: detectedMime,
+            kind: classifyFileAsset(entry.name, detectedMime),
           },
           metadata: {
             bytes,
             modifiedAtMs: entry.modifiedAtMs,
             createdAtMs: entry.createdAtMs,
+            ...signatureMetadata,
+            ...hashMetadata,
           },
           state: 'METADATA_READY',
         });
