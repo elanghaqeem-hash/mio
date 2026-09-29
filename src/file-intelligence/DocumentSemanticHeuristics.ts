@@ -14,6 +14,6 @@ export function inferDocumentSemanticsFromText(text:string,evidenceRefs:string[]
  ];
  for(const [candidate,re,score] of rules)if(has(normalized,re)&&score>confidence){type=candidate;confidence=score;}
  const topics:string[]=[];
- for(const [topic,re] of [['cybersecurity',/\b(cyber|security|keamanan siber)\b/i],['risk',/\b(risk|risiko)\b/i],['finance',/\b(finance|financial|keuangan|revenue|pendapatan)\b/i],['privacy',/\b(privacy|data pribadi|pelindungan data)\b/i]] as const)if(has(normalized,re))topics.push(topic);
+ for(const [topic,re] of [['cybersecurity',/(?:\bcybersecurity\b|\bcyber\b|\bsecurity\b|\bkeamanan siber\b)/i],['risk',/\b(risk|risiko)\b/i],['finance',/\b(finance|financial|keuangan|revenue|pendapatan)\b/i],['privacy',/\b(privacy|data pribadi|pelindungan data)\b/i]] as const)if(has(normalized,re))topics.push(topic);
  return {documentType:{value:type,evidence:evidence(evidenceRefs,confidence)},topics:topics.map(value=>({value,evidence:evidence(evidenceRefs,.6)})),entities:[],analyzerVersion:'mio-document-semantics-v1'};
 }
