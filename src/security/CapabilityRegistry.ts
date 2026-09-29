@@ -78,6 +78,7 @@ export interface CapabilityRegistryOptions {
   desktopBrowserBridge?: boolean;
   desktopAdapterIntegrityBridge?: boolean;
   desktopTrainingBridge?: boolean;
+  desktopMutationBridge?: boolean;
 }
 
 export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptions = {}): CapabilityRegistry {
@@ -148,6 +149,21 @@ export function createDefaultCapabilityRegistry(options: CapabilityRegistryOptio
     networkAccess: false,
     scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'PATH'],
     timeoutMs: 10000,
+  });
+
+  const mutationAvailability = options.desktopMutationBridge ? 'AVAILABLE' : 'UNAVAILABLE';
+  registry.register({
+    id: 'service.desktop.workspace.mutate',
+    kind: 'SERVICE',
+    description: 'Execute preview-bound, explicitly approved, collision-blocking mutations inside an authorized desktop workspace. Permanent delete is not supported.',
+    ownerLayer: 'SERVICE',
+    modes: ['FILES', 'PROJECT'],
+    riskLevel: 'CRITICAL',
+    permissionLevel: 'L5_DESTRUCTIVE',
+    availability: mutationAvailability,
+    networkAccess: false,
+    scopeFields: ['TASK', 'PROJECT', 'RESOURCE', 'PATH'],
+    timeoutMs: 120000,
   });
 
   const adapterIntegrityAvailability = options.desktopAdapterIntegrityBridge ? 'AVAILABLE' : 'UNAVAILABLE';
@@ -256,6 +272,7 @@ export function createDesktopCapabilityRegistry(): CapabilityRegistry {
     desktopBrowserBridge: true,
     desktopAdapterIntegrityBridge: true,
     desktopTrainingBridge: true,
+    desktopMutationBridge: true,
   });
 }
 
