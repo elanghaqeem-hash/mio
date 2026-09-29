@@ -1,4 +1,4 @@
-import { runMioTestSuite } from './systemTests';
+import { runAIOrchestrationTests } from './aiOrchestrationTests';import { runMioTestSuite } from './systemTests';
 import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
 import { runModelRouterTests } from './modelRouterTests';
