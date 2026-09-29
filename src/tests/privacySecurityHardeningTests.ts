@@ -1,0 +1,9 @@
+import { MutationApprovalStore } from '../../electron/ipc/mutationApprovalStore';import { authorizeRemoteProcessing } from '../security/RemoteProcessingPolicy';import { assertNoSecretFields,redactSensitiveValue } from '../security/SecretRedaction';
+export async function runPrivacySecurityHardeningTests(){let passed=0;const total=8;const ok=(v:boolean)=>{if(!v)throw new Error('Privacy/security assertion failed');passed++;};
+ const tx={id:'t1',workspaceId:'ws_test',operations:[{id:'o1',kind:'MOVE' as const,source:'a',target:'b',collisionPolicy:'BLOCK' as const}]};const store=new MutationApprovalStore(1000);const approval=store.issue(tx);store.consume(tx,approval.token);ok(true);let replay=false;try{store.consume(tx,approval.token);}catch{replay=true;}ok(replay);
+ const tamper=store.issue(tx);let altered=false;try{store.consume({...tx,operations:[{...tx.operations[0],target:'c'}]},tamper.token);}catch{altered=true;}ok(altered);
+ const expiredStore=new MutationApprovalStore(-1);const expired=expiredStore.issue(tx);let expiry=false;try{expiredStore.consume(tx,expired.token);}catch{expiry=true;}ok(expiry);
+ ok(!authorizeRemoteProcessing({privacy:'LOCAL_ONLY',sensitive:false},{remoteEnabled:true,explicitConsent:true,allowSensitiveContent:true}).allowed);
+ ok(!authorizeRemoteProcessing({privacy:'REMOTE_ALLOWED',sensitive:true},{remoteEnabled:true,explicitConsent:true,allowSensitiveContent:false}).allowed);
+ const redacted=redactSensitiveValue({authorization:'Bearer abc',nested:{apiKey:'123'},message:'Bearer xyz'}) as any;ok(redacted.authorization==='[REDACTED]'&&redacted.nested.apiKey==='[REDACTED]'&&redacted.message==='Bearer [REDACTED]');
+ let rejected=false;try{assertNoSecretFields({token:'x'});}catch{rejected=true;}ok(rejected);return {name:'Privacy Security Hardening',passed,total};}
