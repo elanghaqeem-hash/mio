@@ -6,6 +6,7 @@ import { TrainingHandoffReader, type ReadTrainingHandoffRequest } from './traini
 import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
 import { readBoundedZipEntries } from './boundedZipReader';
+import { assertApprovedDesktopMutation, type DesktopMutationApproval, type DesktopMutationTransaction } from './mutationApproval';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -223,6 +224,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
+    },
+
+    handleExecuteWorkspaceMutation: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!request || typeof request !== 'object') return { success: false, error: 'Invalid mutation request' };
+      const value=request as {transaction?:DesktopMutationTransaction;approval?:DesktopMutationApproval;nonce?:unknown};
+      if (!value.transaction || !value.approval || typeof value.nonce!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
+      try {
+        assertApprovedDesktopMutation(value.transaction,value.approval,value.nonce);
+        const completedOperationIds:string[]=[];
+        for(const operation of value.transaction.operations){try{await workspaceSandbox.mutate(value.transaction.workspaceId,operation);completedOperationIds.push(operation.id);}catch(error){return {success:false,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',completedOperationIds,failedOperationId:operation.id,error:error instanceof Error?error.message:String(error)},error:error instanceof Error?error.message:String(error)};}}
+        return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
+      } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
     },
 
     handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
