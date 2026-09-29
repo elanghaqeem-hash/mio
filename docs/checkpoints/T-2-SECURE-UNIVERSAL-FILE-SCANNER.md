@@ -32,7 +32,7 @@ T-2 turns the T-1 bounded metadata foundation into Mio's secure universal discov
 - T-2.06#B — COMPLETE: incremental reuse keyed by workspace/path/size/mtime.
 - T-2.06#C — COMPLETE: immutable scan cache with workspace invalidation.
 - T-2.06#D — COMPLETE: cooperative pause/resume/cancel checkpoints.
-- T-2.07#A — PENDING: acceptance gate.
+- T-2.07#A — COMPLETE: Mio CI, MIO Validation Gate, MIO Training Runner Contract, and Cloudflare Web Build passed on commit ed6d2cc1a6f8c007c797e6077c7f2a9016a885fb.
 
 ## Default exclusions
 
