@@ -30,7 +30,7 @@ Turn image assets discovered by T-2 into locally inspectable visual assets befor
 - T-3.07#A — COMPLETE: deterministic 64-bit difference-hash perceptual fingerprint.
 - T-3.07#B — COMPLETE: Hamming perceptual distance and normalized similarity score.
 - T-3.07#C — COMPLETE: deterministic threshold-based similarity clustering.
-- T-3.08#A — PENDING: acceptance gate.
+- T-3.08#A — COMPLETE: Mio CI, MIO Validation Gate, MIO Training Runner Contract, and Cloudflare Web Build passed on commit 16e4af75b19fcbbf7260ad982f0cdff5e84cbb08.
 
 ## Privacy boundary
 
