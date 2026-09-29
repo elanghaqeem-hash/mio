@@ -4,7 +4,7 @@ interface SuiteResult { passed:number; total:number; }
 export async function runDocumentLayoutTests():Promise<SuiteResult>{
  let passed=0,total=0; const check=(c:boolean,l:string)=>{total++;if(!c)throw new Error(`DocumentLayout test failed: ${l}`);passed++;console.log(`✓ [PASS] ${l}`);};
  const box=normalizeDocumentBox(1000,2000,{x:100,y:200,width:500,height:400});
- check(box.x===0.1&&box.y===0.1&&box.width===0.5&&box.height===0.2,'Physical coordinates normalize to 0..1 page space');
+ check(Math.abs(box.x-0.1)<1e-9&&Math.abs(box.y-0.1)<1e-9&&Math.abs(box.width-0.5)<1e-9&&Math.abs(box.height-0.2)<1e-9,'Physical coordinates normalize to 0..1 page space');
  const clipped=normalizeDocumentBox(100,100,{x:90,y:90,width:30,height:30});
  check(Math.abs(clipped.width-0.1)<1e-9&&Math.abs(clipped.height-0.1)<1e-9,'Regions extending past page bounds are safely clipped');
  const regions:DocumentRegion[]=[
