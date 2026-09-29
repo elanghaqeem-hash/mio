@@ -6,6 +6,8 @@ import {
   type FileScanResult,
 } from './contracts';
 import { inspectFileSignature } from './FileSignatureInspector';
+import { FileScanCache } from './FileScanCache';
+import type { FileScanController } from './FileScanController';
 
 export interface ReadOnlyScanEntry {
   name: string;
@@ -31,9 +33,9 @@ const isHiddenName = (name: string): boolean => name.startsWith('.') && name !==
 const joinRelative = (parent: string, child: string): string => parent === '.' ? child : `${parent}/${child}`;
 
 export class BoundedFileScanner {
-  constructor(private readonly source: ReadOnlyFileScanSource) {}
+  constructor(private readonly source: ReadOnlyFileScanSource, private readonly cache?: FileScanCache) {}
 
-  public async scan(request: FileScanRequest, signal?: AbortSignal): Promise<FileScanResult> {
+  public async scan(request: FileScanRequest, signal?: AbortSignal, controller?: FileScanController): Promise<FileScanResult> {
     const startedAtMs = Date.now();
     const maxFiles = this.boundedLimit(request.maxFiles, DEFAULT_MAX_FILES, 'maxFiles');
     const maxBytes = this.boundedLimit(request.maxBytes, DEFAULT_MAX_BYTES, 'maxBytes');
@@ -47,6 +49,7 @@ export class BoundedFileScanner {
 
     const visit = async (relativePath: string, depth: number): Promise<void> => {
       this.assertActive(signal);
+      await controller?.checkpoint();
       if (depth > maxDepth) throw new Error(`File scan exceeds maximum traversal depth (${maxDepth})`);
 
       const entries = await this.source.listDirectory(request.workspaceId, relativePath);
@@ -54,6 +57,7 @@ export class BoundedFileScanner {
 
       for (const entry of ordered) {
         this.assertActive(signal);
+        await controller?.checkpoint();
         const childPath = joinRelative(relativePath, entry.name);
         if (excludedNames.has(entry.name) || (!request.includeHidden && isHiddenName(entry.name))) {
           skippedCount += 1;
@@ -78,6 +82,13 @@ export class BoundedFileScanner {
         if (totalBytes + bytes > maxBytes) throw new Error(`File scan exceeds bounded byte budget (${maxBytes})`);
         totalBytes += bytes;
 
+        const cacheKey = { workspaceId: request.workspaceId, relativePath: childPath, bytes, modifiedAtMs: entry.modifiedAtMs };
+        const cached = this.cache?.get(cacheKey);
+        if (cached && (!request.inspectSignatures || cached.metadata.signatureSource) && (!request.hashFiles || cached.metadata.sha256)) {
+          files.push(cached);
+          continue;
+        }
+
         let signatureMetadata: Partial<FileAsset['metadata']> = {};
         let detectedMime: string | undefined;
         if (request.inspectSignatures && this.source.readFileHeader) {
@@ -101,7 +112,7 @@ export class BoundedFileScanner {
           hashMetadata = { sha256: hashed.sha256 };
         }
 
-        files.push({
+        const asset: FileAsset = {
           schemaVersion: 1,
           identity: {
             workspaceId: request.workspaceId,
@@ -119,7 +130,9 @@ export class BoundedFileScanner {
             ...hashMetadata,
           },
           state: 'METADATA_READY',
-        });
+        };
+        files.push(asset);
+        this.cache?.put(cacheKey, asset);
       }
     };
 
