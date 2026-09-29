@@ -26,7 +26,7 @@ export class FileScanController {
     if (this.stateValue === 'CANCELLED') throw new DOMException('File scan cancelled', 'AbortError');
     if (this.stateValue !== 'PAUSED') return;
     await new Promise<void>((resolve) => this.waiters.push(resolve));
-    if (this.stateValue === 'CANCELLED') throw new DOMException('File scan cancelled', 'AbortError');
+    if (this.state === 'CANCELLED') throw new DOMException('File scan cancelled', 'AbortError');
   }
 
   private releaseWaiters(): void {
