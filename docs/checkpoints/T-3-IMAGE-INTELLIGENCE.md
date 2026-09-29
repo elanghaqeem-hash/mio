@@ -27,7 +27,9 @@ Turn image assets discovered by T-2 into locally inspectable visual assets befor
 - T-3.06#A — COMPLETE: bounded grayscale luminance/contrast/sharpness measurement (max 4MP sample).
 - T-3.06#B — COMPLETE: deterministic under/over-exposure and shadow/highlight clipping flags.
 - T-3.06#C — COMPLETE: low-contrast/likely-blur flags without subjective aesthetic scoring.
-- T-3.07#A–#C — PENDING: perceptual fingerprint, similarity and clustering.
+- T-3.07#A — COMPLETE: deterministic 64-bit difference-hash perceptual fingerprint.
+- T-3.07#B — COMPLETE: Hamming perceptual distance and normalized similarity score.
+- T-3.07#C — COMPLETE: deterministic threshold-based similarity clustering.
 - T-3.08#A — PENDING: acceptance gate.
 
 ## Privacy boundary
