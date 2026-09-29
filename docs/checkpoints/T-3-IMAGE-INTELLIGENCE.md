@@ -24,7 +24,9 @@ Turn image assets discovered by T-2 into locally inspectable visual assets befor
 - T-3.05#A — COMPLETE: provider-agnostic OCR result/region contract with normalized coordinates and confidence.
 - T-3.05#B — COMPLETE: language/language-confidence fields and LOCAL_ENGINE/EXTERNAL_ENGINE provenance enforcement.
 - T-3.05#C — COMPLETE: Unicode-normalized searchable OCR text/token index.
-- T-3.06#A–#C — PENDING: blur/exposure/quality signals.
+- T-3.06#A — COMPLETE: bounded grayscale luminance/contrast/sharpness measurement (max 4MP sample).
+- T-3.06#B — COMPLETE: deterministic under/over-exposure and shadow/highlight clipping flags.
+- T-3.06#C — COMPLETE: low-contrast/likely-blur flags without subjective aesthetic scoring.
 - T-3.07#A–#C — PENDING: perceptual fingerprint, similarity and clustering.
 - T-3.08#A — PENDING: acceptance gate.
 
