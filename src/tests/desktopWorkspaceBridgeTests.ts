@@ -46,6 +46,13 @@ export async function runDesktopWorkspaceBridgeTests(): Promise<SuiteResult> {
     const listedNote = listedEntries.find((entry) => entry.name === 'notes.txt');
     check(listedNote?.type === 'FILE' && listedNote.bytes === Buffer.byteLength('safe workspace text') && Number.isFinite(listedNote.modifiedAtMs), 'Workspace listing returns bounded file metadata without exposing absolute paths');
 
+    const headerRead = await sandbox.readFileHeader(workspace.id, 'notes.txt', 8);
+    check(headerRead.bytes.length === 8 && headerRead.fileBytes === Buffer.byteLength('safe workspace text'), 'Workspace header read is bounded and reports original file size');
+    check(await rejects(() => sandbox.readFileHeader(workspace.id, 'notes.txt', 513), 'between 1 and 512'), 'Workspace header read rejects requests above the 512-byte signature ceiling');
+
+    const fileHash = await sandbox.hashFileEvidence(workspace.id, 'notes.txt');
+    check(/^[a-f0-9]{64}$/.test(fileHash.sha256) && fileHash.bytes === Buffer.byteLength('safe workspace text'), 'Workspace per-file hashing returns bounded SHA-256 evidence');
+
     const safeRead = await sandbox.readText(workspace.id, 'notes.txt');
     check(safeRead.data === 'safe workspace text' && safeRead.bytes > 0, 'WorkspaceSandbox reads bounded text inside the authorized root');
 
