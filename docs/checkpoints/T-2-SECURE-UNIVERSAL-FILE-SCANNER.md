@@ -16,8 +16,13 @@ T-2 turns the T-1 bounded metadata foundation into Mio's secure universal discov
 - T-2.02#B — COMPLETE: known MIME signatures are checked against compatible filename extensions.
 - T-2.02#C — COMPLETE: workspace header reads are capped at 512 bytes and remain within authorized paths.
 - T-2.02#D — COMPLETE: unknown binary signatures remain unsupported rather than guessed; truncated known headers are flagged.
-- T-2.03#A–#D — PARTIAL: name/path/size/timestamps exist; richer media/document metadata pending.
-- T-2.04#A–#C — PENDING: hashing, duplicate fingerprint, changed-file detection.
+- T-2.03#A — COMPLETE: canonical relative name/path metadata.
+- T-2.03#B — COMPLETE: bounded file size metadata.
+- T-2.03#C — COMPLETE: created/modified timestamps.
+- T-2.03#D — IN PROGRESS: signature/MIME metadata is integrated; richer media/document-specific metadata belongs to T-3–T-7.
+- T-2.04#A — COMPLETE: bounded per-file SHA-256 evidence.
+- T-2.04#B — COMPLETE: exact duplicates share deterministic SHA-256 fingerprints.
+- T-2.04#C — COMPLETE: size/mtime drift during scan/hash is rejected as changed-file evidence.
 - T-2.05#A–#E — PARTIAL: workspace containment, symlink and path traversal defenses inherited from T-1; malformed/resource protections continue in T-2.
 - T-2.06#A–#D — PENDING: concurrency, incremental scan, cache, pause/resume.
 - T-2.07#A — PENDING: acceptance gate.
