@@ -45,6 +45,7 @@ const DEFAULT_MAX_HASH_BYTES = 4 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_HASH_DEPTH = 24;
 const HASH_CHUNK_BYTES = 1024 * 1024;
 const MAX_SIGNATURE_BYTES = 512;
+const MAX_DOCUMENT_ARCHIVE_BYTES = 32 * 1024 * 1024;
 
 interface AuthorizedWorkspaceRecord extends AuthorizedWorkspaceDescriptor {
   rootPath: string;
@@ -113,6 +114,17 @@ export class WorkspaceSandbox {
     } finally {
       await handle.close();
     }
+  }
+
+  public async readDocumentArchive(workspaceId: string, relativePath: string): Promise<{ bytes: number[]; fileBytes: number }> {
+    const targetPath = await this.resolveExisting(workspaceId, relativePath);
+    const before = await fs.promises.stat(targetPath);
+    if (!before.isFile()) throw new Error('Requested workspace path is not a file');
+    if (before.size > MAX_DOCUMENT_ARCHIVE_BYTES) throw new Error(`Document archive exceeds bounded read limit (${before.size} > ${MAX_DOCUMENT_ARCHIVE_BYTES} bytes)`);
+    const buffer = await fs.promises.readFile(targetPath);
+    const after = await fs.promises.stat(targetPath);
+    if (!after.isFile() || before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error('Workspace document changed while reading');
+    return { bytes: [...buffer], fileBytes: after.size };
   }
 
   public async listDirectory(workspaceId: string, relativePath: string = '.'): Promise<WorkspaceDirectoryEntry[]> {
