@@ -144,6 +144,20 @@ export class WorkspaceSandbox {
     }));
   }
 
+  public async hashFileEvidence(workspaceId: string, relativePath: string): Promise<{ sha256: string; bytes: number; modifiedAtMs: number }> {
+    const targetPath = await this.resolveExisting(workspaceId, relativePath);
+    const before = await fs.promises.stat(targetPath);
+    if (!before.isFile()) throw new Error('Requested workspace path is not a file');
+    if (before.size > this.maxHashBytes) throw new Error(`File exceeds bounded hash byte budget (${before.size} > ${this.maxHashBytes})`);
+
+    const sha256 = await this.hashFile(targetPath);
+    const after = await fs.promises.stat(targetPath);
+    if (!after.isFile() || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      throw new Error('Workspace file changed while hashing');
+    }
+    return { sha256, bytes: after.size, modifiedAtMs: after.mtimeMs };
+  }
+
   public async hashTree(workspaceId: string, relativePath: string = '.'): Promise<WorkspaceTreeHashResult> {
     const targetRoot = await this.resolveExisting(workspaceId, relativePath || '.');
     const rootStat = await fs.promises.stat(targetRoot);
