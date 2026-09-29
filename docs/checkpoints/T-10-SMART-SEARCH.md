@@ -7,13 +7,13 @@ Status: IN PROGRESS
 Provide bounded, evidence-grounded search across filenames, metadata, extracted text, semantic embeddings, visual/cross-modal evidence, and natural-language query plans.
 
 ## Timeline
-- T-10.01#A — IN PROGRESS: search query/result schema and invariants.
-- T-10.02#A — PLANNED: filename and metadata lexical search.
-- T-10.03#A — PLANNED: bounded full-text search.
-- T-10.04#A — PLANNED: semantic embedding search.
-- T-10.05#A — PLANNED: visual/cross-modal search bridge.
-- T-10.06#A — PLANNED: natural-language query planning contract.
-- T-10.07#A — PLANNED: deterministic ranking and provenance.
+- T-10.01#A — COMPLETE: bounded query/result schema with evidence provenance.
+- T-10.02#A — COMPLETE: deterministic filename and metadata lexical search.
+- T-10.03#A — COMPLETE: bounded full-text matching with local snippets/locators.
+- T-10.04#A — COMPLETE: compatible-model semantic embedding search.
+- T-10.05#A — COMPLETE: cross-modal embedding search bridge with modality evidence.
+- T-10.06#A — COMPLETE (contract): validated rules/local-model/external-model query plans with explicit provenance.
+- T-10.07#A — COMPLETE: deterministic evidence-aware ranking preserving source provenance.
 - T-10.08#A — PLANNED: acceptance gate.
 
 ## Boundary
