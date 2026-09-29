@@ -29,14 +29,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
-
       - name: Build web
         run: npm run build:web
 
       - name: Build Electron main process
         run: npm run build:electron
+
+      - name: Test and release smoke
+        run: npm test
 
       - name: File scanner benchmark
         run: npm run benchmark:file-scanner
