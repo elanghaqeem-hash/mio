@@ -13,7 +13,7 @@ Unify semantic evidence across image, document, video, audio, creative, and 3D a
 - T-8.04#A — COMPLETE: normalized semantic entity aggregation.
 - T-8.05#A — COMPLETE (contract): bounded finite non-zero embeddings with model/provenance validation.
 - T-8.06#A — COMPLETE: deterministic cosine similarity only within the same embedding model space.
-- T-8.07#A — PLANNED: confidence/provenance aggregation.
+- T-8.07#A — COMPLETE: deterministic confidence/provenance aggregation; source weights are an internal aggregation policy, not calibrated probabilities.
 - T-8.08#A — PLANNED: acceptance gate.
 
 ## Boundary
