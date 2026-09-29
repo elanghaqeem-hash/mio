@@ -12,10 +12,10 @@ T-2 turns the T-1 bounded metadata foundation into Mio's secure universal discov
 - T-2.01#B — COMPLETE: configurable traversal depth plus existing file-count and byte budgets.
 - T-2.01#C — COMPLETE: default and request-scoped exclusion rules.
 - T-2.01#D — COMPLETE: hidden files are excluded by default and require explicit opt-in.
-- T-2.02#A — NEXT: MIME detection.
-- T-2.02#B — NEXT: extension/MIME consistency validation.
-- T-2.02#C — NEXT: bounded magic-byte signature validation.
-- T-2.02#D — NEXT: unsupported/corrupt-file detection.
+- T-2.02#A — COMPLETE: bounded signature-based MIME detection for initial image/video/audio/document/container formats.
+- T-2.02#B — COMPLETE: known MIME signatures are checked against compatible filename extensions.
+- T-2.02#C — COMPLETE: workspace header reads are capped at 512 bytes and remain within authorized paths.
+- T-2.02#D — COMPLETE: unknown binary signatures remain unsupported rather than guessed; truncated known headers are flagged.
 - T-2.03#A–#D — PARTIAL: name/path/size/timestamps exist; richer media/document metadata pending.
 - T-2.04#A–#C — PENDING: hashing, duplicate fingerprint, changed-file detection.
 - T-2.05#A–#E — PARTIAL: workspace containment, symlink and path traversal defenses inherited from T-1; malformed/resource protections continue in T-2.
