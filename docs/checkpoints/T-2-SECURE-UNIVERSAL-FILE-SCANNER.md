@@ -28,7 +28,7 @@ T-2 turns the T-1 bounded metadata foundation into Mio's secure universal discov
 - T-2.05#C — COMPLETE: absolute/parent path traversal protection inherited and regression-tested.
 - T-2.05#D — COMPLETE: unknown/truncated signatures are isolated as unsupported/corrupt evidence rather than guessed.
 - T-2.05#E — COMPLETE: directory entries, header bytes, file count, byte budget, traversal depth, and hash bytes are bounded.
-- T-2.06#A — NEXT: bounded concurrent enrichment workers.
+- T-2.06#A — COMPLETE: deterministic enrichment worker pool with configurable concurrency capped at 16.
 - T-2.06#B — COMPLETE: incremental reuse keyed by workspace/path/size/mtime.
 - T-2.06#C — COMPLETE: immutable scan cache with workspace invalidation.
 - T-2.06#D — COMPLETE: cooperative pause/resume/cancel checkpoints.
