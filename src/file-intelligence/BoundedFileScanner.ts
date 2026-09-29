@@ -78,7 +78,7 @@ export class BoundedFileScanner {
         if (totalBytes + bytes > maxBytes) throw new Error(`File scan exceeds bounded byte budget (${maxBytes})`);
         totalBytes += bytes;
 
-        let signatureMetadata: FileAsset['metadata'] extends infer M ? Partial<M> : never = {};
+        let signatureMetadata: Partial<FileAsset['metadata']> = {};
         let detectedMime: string | undefined;
         if (request.inspectSignatures && this.source.readFileHeader) {
           const header = await this.source.readFileHeader(request.workspaceId, childPath, 512);
@@ -92,7 +92,7 @@ export class BoundedFileScanner {
             corruptReason: inspection.corruptReason,
           };
         }
-        let hashMetadata: FileAsset['metadata'] extends infer M ? Partial<M> : never = {};
+        let hashMetadata: Partial<FileAsset['metadata']> = {};
         if (request.hashFiles && this.source.hashFile) {
           const hashed = await this.source.hashFile(request.workspaceId, childPath);
           if (hashed.bytes !== bytes || (entry.modifiedAtMs !== undefined && hashed.modifiedAtMs !== undefined && entry.modifiedAtMs !== hashed.modifiedAtMs)) {
