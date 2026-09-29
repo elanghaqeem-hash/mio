@@ -13,7 +13,7 @@ Extend Mio file intelligence to creative assets and 3D files using bounded metad
 - T-7.03#A — COMPLETE (contract): mesh/vertex/triangle/material/texture/animation metadata require parser provenance and bounded validation.
 - T-7.04#A — COMPLETE (contract): preview/render evidence is pixel-bounded and requires explicit local/external/embedded/imported provenance.
 - T-7.05#A — COMPLETE (bridge): validated preview evidence can enter T-3 Image Intelligence without claiming an implicit renderer.
-- T-7.06#A — PLANNED: creative/3D relationships and dependencies.
+- T-7.06#A — COMPLETE (contract): texture/material/external/embedded/derived relationships require evidence, reject traversal-like targets and duplicates, and imported references cannot be silently promoted to verified.
 - T-7.07#A — PLANNED: acceptance gate.
 
 ## Boundary
