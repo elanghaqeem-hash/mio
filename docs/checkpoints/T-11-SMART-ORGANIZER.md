@@ -7,13 +7,13 @@ Status: IN PROGRESS
 Turn file intelligence, search, and relationship evidence into deterministic, previewable organization recommendations without mutating the filesystem.
 
 ## Timeline
-- T-11.01#A — IN PROGRESS: organization rule/action/manifest contracts.
-- T-11.02#A — PLANNED: category/folder recommendations.
-- T-11.03#A — PLANNED: rename/move recommendations.
-- T-11.04#A — PLANNED: duplicate handling recommendations.
-- T-11.05#A — PLANNED: project/client grouping.
-- T-11.06#A — PLANNED: natural-language organization-plan contract.
-- T-11.07#A — PLANNED: deterministic preview manifest/conflict reporting.
+- T-11.01#A — COMPLETE: recommendation-only action/manifest contracts enforce approval and prohibit execution.
+- T-11.02#A — COMPLETE: metadata-grounded category/folder recommendations.
+- T-11.03#A — COMPLETE: sanitized rename/move recommendations with no mutation path.
+- T-11.04#A — COMPLETE: exact hash duplicates produce review recommendations only.
+- T-11.05#A — COMPLETE: semantic project/client grouping recommendations.
+- T-11.06#A — COMPLETE (contract): rules/local/external planner provenance with explicit non-execution.
+- T-11.07#A — COMPLETE: deterministic preview detects multiple rename/move and rename target collisions.
 - T-11.08#A — PLANNED: acceptance gate.
 
 ## Safety boundary
