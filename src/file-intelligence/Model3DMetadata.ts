@@ -4,7 +4,7 @@ export interface Model3DMetadata{
  animations:{count:number;names?:string[];durationSeconds?:number};
  source:'STRUCTURE_PARSER'|'IMPORTED_METADATA';parserId:string;analyzerVersion:'mio-model-3d-metadata-v1';
 }
-const nonneg=(n:number|undefined)=>n===undefined&&(true)||Number.isSafeInteger(n)&&n>=0;
+const nonneg=(n:number|undefined)=>n===undefined||(Number.isSafeInteger(n)&&n!==undefined&&n>=0);
 export function validateModel3DMetadata(m:Model3DMetadata):Model3DMetadata{
  if(!m.parserId.trim())throw new Error('3D metadata parser provenance is required');
  if(!nonneg(m.geometry.meshCount)||!nonneg(m.geometry.vertexCount)||!nonneg(m.geometry.triangleCount)||!nonneg(m.materials.count)||!nonneg(m.textures.count)||!nonneg(m.animations.count))throw new Error('3D metadata counts must be non-negative integers');
