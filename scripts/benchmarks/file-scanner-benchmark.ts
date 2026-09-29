@@ -25,33 +25,41 @@ const source: ReadOnlyFileScanSource = {
   },
 };
 
-const scanner = new BoundedFileScanner(source);
-const durations: number[] = [];
-
-for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-  const started = performance.now();
-  const result = await scanner.scan({
-    workspaceId: 'ws_benchmark',
-    relativePath: '.',
-    depth: 'FAST',
-    recursive: false,
-    maxFiles: FILE_COUNT,
-  });
-  durations.push(performance.now() - started);
-  if (result.files.length !== FILE_COUNT) throw new Error('Benchmark scan returned an unexpected file count');
+async function main(): Promise<void> {
+  const scanner = new BoundedFileScanner(source);
+  const durations: number[] = [];
+  
+  for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+    const started = performance.now();
+    const result = await scanner.scan({
+      workspaceId: 'ws_benchmark',
+      relativePath: '.',
+      depth: 'FAST',
+      recursive: false,
+      maxFiles: FILE_COUNT,
+    });
+    durations.push(performance.now() - started);
+    if (result.files.length !== FILE_COUNT) throw new Error('Benchmark scan returned an unexpected file count');
+  }
+  
+  const sorted = [...durations].sort((a, b) => a - b);
+  const medianMs = sorted[Math.floor(sorted.length / 2)];
+  const totalMs = durations.reduce((sum, value) => sum + value, 0);
+  const filesPerSecond = Math.round((FILE_COUNT * ITERATIONS * 1000) / totalMs);
+  
+  console.log(JSON.stringify({
+    benchmark: 'mio-bounded-file-scanner-v1',
+    fileCount: FILE_COUNT,
+    iterations: ITERATIONS,
+    medianMs: Number(medianMs.toFixed(2)),
+    averageMs: Number((totalMs / ITERATIONS).toFixed(2)),
+    filesPerSecond,
+    note: 'Synthetic metadata benchmark; excludes real disk I/O and media decoding.',
+  }, null, 2));
+  
 }
 
-const sorted = [...durations].sort((a, b) => a - b);
-const medianMs = sorted[Math.floor(sorted.length / 2)];
-const totalMs = durations.reduce((sum, value) => sum + value, 0);
-const filesPerSecond = Math.round((FILE_COUNT * ITERATIONS * 1000) / totalMs);
-
-console.log(JSON.stringify({
-  benchmark: 'mio-bounded-file-scanner-v1',
-  fileCount: FILE_COUNT,
-  iterations: ITERATIONS,
-  medianMs: Number(medianMs.toFixed(2)),
-  averageMs: Number((totalMs / ITERATIONS).toFixed(2)),
-  filesPerSecond,
-  note: 'Synthetic metadata benchmark; excludes real disk I/O and media decoding.',
-}, null, 2));
+main().catch((error) => {
+  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  process.exitCode = 1;
+});
