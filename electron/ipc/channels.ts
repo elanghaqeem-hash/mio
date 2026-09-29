@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   FS_READ_DOCUMENT_ENTRIES: 'mio:fs:readDocumentEntries',
   FS_HASH_WORKSPACE_TREE: 'mio:fs:hashWorkspaceTree',
   FS_REQUEST_WORKSPACE_MUTATION_APPROVAL: 'mio:fs:requestWorkspaceMutationApproval',
+  FS_LIST_WORKSPACE_MUTATION_AUDIT: 'mio:fs:listWorkspaceMutationAudit',
   FS_EXECUTE_WORKSPACE_MUTATION: 'mio:fs:executeWorkspaceMutation',
 
   // Governed read-only browser bridge.
