@@ -30,8 +30,15 @@ Extend Mio's accepted T-2/T-3 intelligence pipeline to documents while preservin
 - T-6.07#A — COMPLETE: typed document relationship contract with evidence/confidence/source provenance.
 - T-6.07#B — COMPLETE: embedded-asset reference contract with safe normalized package paths and media typing.
 - T-6.07#C — COMPLETE: deterministic validation/order plus rejection of traversal and ungrounded relationships.
-- T-6.08#A — PENDING: acceptance gate.
+- T-6.08#A — COMPLETE: PR head verified mergeable/clean and all required workflows passed (Mio CI, MIO Validation Gate, MIO Training Runner Contract, Cloudflare Web Build).
 
 ## Boundary
 
 A bounded PDF byte sample can provide evidence, not a guaranteed full-document page count or integrity verdict. OOXML format identity must come from package entries rather than file extension alone.
+
+## Acceptance evidence
+
+- PR #506 head `253e5095337d44895ded233338413cc48883c887` was verified clean/mergeable against `main`.
+- Required workflows: 4/4 SUCCESS.
+- Comparison: branch is 45 commits ahead and 0 behind `main` at acceptance check.
+- Scope remains bounded: no macro execution, no claim of raw PDF rasterization, and no claim of connected OCR/summarization model beyond the implemented contracts/adapters.
