@@ -5,6 +5,6 @@ export async function runVideoFrameImageBridgeTests():Promise<SuiteResult>{
  const e=bridgeVideoFrameToImageIntelligence({timestampSeconds:5,width:1920,height:1080,sampleReason:'INTERVAL',source:'LOCAL_DECODER',decoderId:'decoder-test',externalProcessing:false});
  check(e.imageIntelligenceReady&&e.decoderId==='decoder-test','Extracted frame becomes T-3-ready evidence with provenance');
  let fakeLocal=false;try{bridgeVideoFrameToImageIntelligence({...e,source:'EXTERNAL_DECODER',externalProcessing:false});}catch{fakeLocal=true;}check(fakeLocal,'External decoder cannot masquerade as local');
- let dimensions=false;try{bridgeVideoFrameToImageIntelligence({...e,width:0});}catch{dimensions=true;}check(dimensions,'Invalid frame dimensions are rejected');
+ let dimensions=false;try{bridgeVideoFrameToImageIntelligence({timestampSeconds:e.timestampSeconds,width:0,height:e.height,sampleReason:e.sampleReason,source:'LOCAL_DECODER',decoderId:e.decoderId,externalProcessing:false});}catch{dimensions=true;}check(dimensions,'Invalid frame dimensions are rejected');
  return {passed,total};
 }
