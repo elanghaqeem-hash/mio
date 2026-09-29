@@ -38,6 +38,11 @@ export interface FileAssetMetadata {
   modifiedAtMs?: number;
   createdAtMs?: number;
   sha256?: string;
+  signature?: string;
+  signatureSource?: 'SIGNATURE' | 'TEXT_HEURISTIC' | 'UNKNOWN';
+  extensionConsistent?: boolean;
+  supportedFormat?: boolean;
+  corruptReason?: string;
 }
 
 export interface MediaDimensions {
@@ -85,6 +90,8 @@ export interface FileScanRequest {
   includeHidden?: boolean;
   excludeNames?: string[];
   excludeExtensions?: string[];
+  inspectSignatures?: boolean;
+  hashFiles?: boolean;
 }
 
 export interface FileScanResult {
