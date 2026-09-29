@@ -19,8 +19,8 @@ This checkpoint establishes the read-only domain foundation for the Mio Multimod
 - T-1.05#A — COMPLETE: scanning remains read-only, workspace scoped, and exposes no mutation dependency.
 - T-1.05#B — COMPLETE: tests cover symlink skipping, bounded file/byte budgets, cancellation, and absence of mutation authority.
 - T-1.06#A — COMPLETE: initial contract test suite added and registered.
-- T-1.06#B — NEXT: scanner benchmark baseline.
-- T-1.07#A — PENDING: acceptance gate requires CI/build/test evidence.
+- T-1.06#B — COMPLETE: reproducible synthetic metadata scanner benchmark added (`npm run benchmark:file-scanner`); no performance number is claimed until execution evidence exists.
+- T-1.07#A — BLOCKED: CI workflow now defines lint, test, web build, Electron build, and scanner benchmark gates, but GitHub has not reported a workflow run for the current PR head yet.
 
 ## Current security invariants
 
@@ -33,4 +33,4 @@ This checkpoint establishes the read-only domain foundation for the Mio Multimod
 
 ## Next implementation target
 
-T-1.06#B is the next target: establish scanner performance baselines, then run available CI/build/test evidence for T-1.07#A before advancing to T-2.
+T-1.07#A remains the only T-1 blocker. Do not merge or advance the acceptance status until GitHub reports passing CI/build/test evidence for the PR head.
