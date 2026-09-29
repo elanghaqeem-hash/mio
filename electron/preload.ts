@@ -135,6 +135,7 @@ export interface MioDesktopAPI {
   listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: MioWorkspaceDirectoryEntry[]; error?: string }>;
   readDocumentEntries: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: Array<{ name: string; bytes: number[] }>; fileBytes?: number; error?: string }>;
   hashWorkspaceTree: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; result?: MioWorkspaceTreeHashResult; error?: string }>;
+  listWorkspaceMutationAudit: (workspaceId:string) => Promise<{success:boolean;events?:Array<{sequence:number;transactionId:string;state:string;operationKind?:string;source?:string;target?:string;recordedAt:string}>;error?:string}>;
   requestWorkspaceMutationApproval: (request: unknown) => Promise<{ success:boolean; cancelled?:boolean; approval?:{token:string;transactionId:string;workspaceId:string;expiresAt:number}; error?:string }>;
   executeWorkspaceMutation: (request: unknown) => Promise<{ success: boolean; receipt?: unknown; error?: string }>;
   browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
@@ -169,6 +170,7 @@ const desktopAPI: MioDesktopAPI = {
   listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
   readDocumentEntries: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_DOCUMENT_ENTRIES, request),
   hashWorkspaceTree: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, request),
+  listWorkspaceMutationAudit: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE_MUTATION_AUDIT, workspaceId),
   requestWorkspaceMutationApproval: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_REQUEST_WORKSPACE_MUTATION_APPROVAL, request),
   executeWorkspaceMutation: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_EXECUTE_WORKSPACE_MUTATION, request),
   browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),
