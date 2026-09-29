@@ -10,6 +10,7 @@ import {
   type DesktopWorkspaceEntry,
 } from '../../platform/desktop/DesktopWorkspaceGateway';
 import { KnowledgeIngestionService } from '../../services/KnowledgeIngestionService';
+import { lexicalSearch } from '../../file-intelligence/LexicalSearch';
 
 interface PreviewState {
   path: string;
@@ -43,8 +44,10 @@ export const FileOrganizationView: React.FC = () => {
   const [status, setStatus] = useState(bridge ? 'No workspace authorized.' : 'Desktop workspace bridge unavailable in this runtime.');
   const [busy, setBusy] = useState(false);
   const [activePanel, setActivePanel] = useState<'BROWSE'|'SEARCH'|'RELATIONSHIPS'|'ORGANIZE'|'RECOVERY'>('BROWSE');
+  const [searchQuery,setSearchQuery]=useState('');
   const fileCount = entries.filter((entry) => entry.type === 'FILE').length;
   const directoryCount = entries.filter((entry) => entry.type === 'DIRECTORY').length;
+  const searchResults=useMemo(()=>lexicalSearch(entries.map((entry)=>({assetId:normalizeChildPath(currentPath,entry.name),filename:entry.name,metadata:{type:entry.type,bytes:entry.bytes??null,modifiedAtMs:entry.modifiedAtMs??null}})),searchQuery,['FILENAME','METADATA'],50),[entries,currentPath,searchQuery]);
 
   const executeList = useCallback(async (authorizedWorkspace: DesktopWorkspaceDescriptor, relativePath: string) => {
     if (!gateway) return;
@@ -213,7 +216,7 @@ export const FileOrganizationView: React.FC = () => {
         <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Mutation</div><div className="mt-1 text-xs text-amber-300">APPROVAL REQUIRED</div></div>
       </div>
       {activePanel !== 'BROWSE' && <div className="mb-4 rounded-xl border border-gray-800 bg-[#0d121d] p-4">
-        {activePanel === 'SEARCH' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Search size={14}/> SMART SEARCH</div><div className="mt-2 text-[11px] text-gray-500">Search UI is staged. Filename/metadata/full-text/semantic engines exist as T-10 contracts, but this workspace has no runtime search index adapter yet; no synthetic results are shown.</div></>}
+        {activePanel === 'SEARCH' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Search size={14}/> SMART SEARCH</div><input value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="Search current directory by filename or metadata…" className="mt-3 w-full rounded-lg border border-gray-700 bg-[#080b12] px-3 py-2 text-gray-200 outline-none focus:border-cyan-600"/><div className="mt-2 text-[10px] text-gray-600">Local current-directory index · filename + metadata only. Full-text/semantic/cross-modal require analyzed index adapters.</div>{searchQuery && <div className="mt-3 max-h-40 overflow-auto">{searchResults.length===0?<div className="text-gray-500">No local matches.</div>:searchResults.map(r=><button key={r.assetId} onClick={()=>{const entry=entries.find(e=>normalizeChildPath(currentPath,e.name)===r.assetId);if(entry)void handleEntry(entry)}} className="flex w-full items-center justify-between border-t border-gray-800 py-2 text-left"><span className="truncate text-gray-300">{r.assetId}</span><span className="ml-3 text-[9px] text-cyan-500">{r.evidence.map(e=>e.mode).join(' · ')}</span></button>)}</div>}</>}
         {activePanel === 'RELATIONSHIPS' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Network size={14}/> RELATIONSHIP VIEWER</div><div className="mt-2 text-[11px] text-gray-500">T-9 relationship graph supports duplicates, semantic similarity, project/client, temporal, reference, and dependency edges. No graph is displayed until analyzed assets are connected to this workspace.</div></>}
         {activePanel === 'ORGANIZE' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Sparkles size={14}/> ORGANIZATION PREVIEW</div><div className="mt-2 text-[11px] text-gray-500">Recommendations remain preview-only. File mutation cannot run from this panel without a concrete T-11 recommendation manifest and T-12 explicit approval.</div></>}
         {activePanel === 'RECOVERY' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><History size={14}/> RECOVERY & AUDIT</div><div className="mt-2 text-[11px] text-gray-500">T-13 records privileged mutation events. Undo for rename/move must return through fresh preview and approval. Trash is not represented as automatically restorable.</div></>}
