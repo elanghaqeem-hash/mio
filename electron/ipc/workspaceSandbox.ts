@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { shell } from 'electron';
 
 export interface AuthorizedWorkspaceDescriptor {
   id: string;
@@ -281,7 +282,7 @@ export class WorkspaceSandbox {
     if (operation.kind === 'MKDIR') { if (!target) throw new Error('MKDIR target required'); await fs.promises.mkdir(target); return; }
     if (!operation.source) throw new Error('Mutation source required');
     const source = await this.resolveExisting(workspaceId, operation.source);
-    if (operation.kind === 'TRASH') throw new Error('TRASH requires Electron shell integration and cannot use filesystem delete');
+    if (operation.kind === 'TRASH') { await shell.trashItem(source); return; }
     if (!target) throw new Error('Mutation target required');
     if (operation.kind === 'COPY') { const stat=await fs.promises.stat(source); if (!stat.isFile()) throw new Error('T-12 COPY supports regular files only'); await fs.promises.copyFile(source,target,fs.constants.COPYFILE_EXCL); return; }
     await fs.promises.rename(source,target);
