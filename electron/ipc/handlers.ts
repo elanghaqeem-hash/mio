@@ -7,6 +7,7 @@ import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobM
 import { WorkspaceSandbox } from './workspaceSandbox';
 import { readBoundedZipEntries } from './boundedZipReader';
 import { assertApprovedDesktopMutation, type DesktopMutationApproval, type DesktopMutationTransaction } from './mutationApproval';
+import { DesktopMutationJournalStore } from './mutationJournalStore';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -26,6 +27,7 @@ const MAX_TRAINING_PATH = 4096;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
+  const mutationJournal = DesktopMutationJournalStore.atUserData(app.getPath('userData'));
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
@@ -232,9 +234,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       if (!value.transaction || !value.approval || typeof value.nonce!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
       try {
         assertApprovedDesktopMutation(value.transaction,value.approval,value.nonce);
-        const completedOperationIds:string[]=[];
-        for(const operation of value.transaction.operations){try{await workspaceSandbox.mutate(value.transaction.workspaceId,operation);completedOperationIds.push(operation.id);}catch(error){return {success:false,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',completedOperationIds,failedOperationId:operation.id,error:error instanceof Error?error.message:String(error)},error:error instanceof Error?error.message:String(error)};}}
-        return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
+        const completedOperationIds:string[]=[];mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'STARTED'});
+        for(const operation of value.transaction.operations){try{await workspaceSandbox.mutate(value.transaction.workspaceId,operation);completedOperationIds.push(operation.id);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_COMPLETED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target});}catch(error){const message=error instanceof Error?error.message:String(error);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_FAILED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target,error:message});mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',error:message});return {success:false,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',completedOperationIds,failedOperationId:operation.id,error:message},error:message};}}
+        mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
       } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
     },
 
