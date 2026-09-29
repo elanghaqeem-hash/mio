@@ -113,5 +113,45 @@ export async function runBoundedFileScannerTests(): Promise<SuiteResult> {
     maxDepth: 1,
   }), 'traversal depth'), 'Configured maximum traversal depth is enforced');
 
+  const evidenceSource: ReadOnlyFileScanSource = {
+    listDirectory: async () => [{ name: 'renamed.jpg', type: 'FILE', bytes: 28, modifiedAtMs: 100 }],
+    readFileHeader: async () => ({
+      bytes: [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a, ...new Array(20).fill(0)],
+      fileBytes: 28,
+    }),
+    hashFile: async () => ({ sha256: 'a'.repeat(64), bytes: 28, modifiedAtMs: 100 }),
+  };
+  const evidenceResult = await new BoundedFileScanner(evidenceSource).scan({
+    workspaceId: 'ws_evidence',
+    relativePath: '.',
+    depth: 'FAST',
+    recursive: false,
+    inspectSignatures: true,
+    hashFiles: true,
+  });
+  const evidence = evidenceResult.files[0];
+  check(evidence.identity.mimeType === 'image/png' && evidence.identity.kind === 'IMAGE', 'Signature evidence overrides misleading extension for asset classification');
+  check(evidence.metadata.extensionConsistent === false && evidence.metadata.sha256 === 'a'.repeat(64), 'Scan persists extension mismatch and SHA-256 evidence');
+
+  const duplicateSource: ReadOnlyFileScanSource = {
+    listDirectory: async () => [
+      { name: 'copy-a.txt', type: 'FILE', bytes: 4, modifiedAtMs: 1 },
+      { name: 'copy-b.txt', type: 'FILE', bytes: 4, modifiedAtMs: 1 },
+    ],
+    hashFile: async () => ({ sha256: 'b'.repeat(64), bytes: 4, modifiedAtMs: 1 }),
+  };
+  const duplicateResult = await new BoundedFileScanner(duplicateSource).scan({
+    workspaceId: 'ws_duplicates', relativePath: '.', depth: 'FAST', recursive: false, hashFiles: true,
+  });
+  check(duplicateResult.files[0].metadata.sha256 === duplicateResult.files[1].metadata.sha256, 'Exact duplicate fingerprint is represented by identical SHA-256 evidence');
+
+  const changedSource: ReadOnlyFileScanSource = {
+    listDirectory: async () => [{ name: 'changing.txt', type: 'FILE', bytes: 4, modifiedAtMs: 1 }],
+    hashFile: async () => ({ sha256: 'c'.repeat(64), bytes: 5, modifiedAtMs: 2 }),
+  };
+  check(await rejects(() => new BoundedFileScanner(changedSource).scan({
+    workspaceId: 'ws_changed', relativePath: '.', depth: 'FAST', recursive: false, hashFiles: true,
+  }), 'changed during scan'), 'Changed-file detection rejects stale discovery metadata');
+
   return { passed, total };
 }
