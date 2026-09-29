@@ -7,10 +7,10 @@ Status: IN PROGRESS
 Build an evidence-grounded asset relationship graph over exact duplicates, semantic similarity, project/client association, temporal proximity, content references, and dependencies.
 
 ## Timeline
-- T-9.01#A — IN PROGRESS: graph node/edge schema and invariants.
-- T-9.02#A — PLANNED: exact duplicate edges.
-- T-9.03#A — PLANNED: semantic similarity edges.
-- T-9.04#A — PLANNED: project/client and temporal edges.
+- T-9.01#A — COMPLETE: evidence-grounded graph node/edge schema and invariants.
+- T-9.02#A — COMPLETE: SHA-256-grounded exact duplicate edges with confidence 1.
+- T-9.03#A — COMPLETE: thresholded semantic similarity edges preserve model-space evidence and score.
+- T-9.04#A — COMPLETE: project/client associations distinguish inferred vs user-confirmed evidence; temporal edges retain distance/window evidence.
 - T-9.05#A — PLANNED: content/dependency edges.
 - T-9.06#A — PLANNED: bounded graph queries and traversal.
 - T-9.07#A — PLANNED: acceptance gate.
