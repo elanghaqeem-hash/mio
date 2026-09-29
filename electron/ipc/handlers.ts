@@ -182,9 +182,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
         }
         const wanted = allNames.map((name) => name.replace(/\\\\/g, '/')).filter((name) =>
           name === 'word/document.xml' ||
-          /^ppt\\/slides\\/slide\\d+\\.xml$/i.test(name) ||
+          /^ppt[/]slides[/]slide\\d+\\.xml$/i.test(name) ||
           name === 'xl/sharedStrings.xml' ||
-          /^xl\\/worksheets\\/sheet\\d+\\.xml$/i.test(name)
+          /^xl[/]worksheets[/]sheet\\d+\\.xml$/i.test(name)
         ).sort((a, b) => a.localeCompare(b));
         const entries = readBoundedZipEntries(bytes, new Set(wanted)).map((entry) => ({ name: entry.name, bytes: [...entry.bytes] }));
         return { success: true, entries, fileBytes: archive.fileBytes };
