@@ -5,6 +5,7 @@ import { TrainingHandoffPackager, type PackageTrainingHandoffRequest } from './t
 import { TrainingHandoffReader, type ReadTrainingHandoffRequest } from './trainingHandoffReader';
 import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
+import { readBoundedZipEntries } from './boundedZipReader';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -155,6 +156,38 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       try {
         const result = await workspaceSandbox.readText(request.workspaceId, request.relativePath);
         return { success: true, data: result.data, bytes: result.bytes };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+
+    handleReadDocumentEntries: async (_event: IpcMainInvokeEvent, request: unknown) => {
+      if (!validateWorkspacePathRequest(request)) return { success: false, error: 'Invalid document package-read request' };
+      try {
+        const archive = await workspaceSandbox.readDocumentArchive(request.workspaceId, request.relativePath);
+        const allNames: string[] = [];
+        // First pass intentionally requests no payload; current bounded ZIP reader validates local headers while walking.
+        // Candidate OOXML names are derived by a lightweight local-header walk below without exposing arbitrary archive entries.
+        const bytes = new Uint8Array(archive.bytes);
+        let offset = 0;
+        const u16 = (o: number) => bytes[o] | (bytes[o + 1] << 8);
+        const u32 = (o: number) => (bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16) | (bytes[o + 3] * 0x1000000)) >>> 0;
+        while (offset + 30 <= bytes.length && u32(offset) === 0x04034b50) {
+          const compressed = u32(offset + 18), nameLength = u16(offset + 26), extraLength = u16(offset + 28);
+          const nameStart = offset + 30, dataStart = nameStart + nameLength + extraLength, dataEnd = dataStart + compressed;
+          if (dataEnd > bytes.length) throw new Error('Truncated document ZIP entry');
+          allNames.push(new TextDecoder('utf-8').decode(bytes.subarray(nameStart, nameStart + nameLength)));
+          offset = dataEnd;
+          if (allNames.length > 512) throw new Error('Document ZIP exceeds bounded entry count');
+        }
+        const wanted = allNames.map((name) => name.replace(/\\\\/g, '/')).filter((name) =>
+          name === 'word/document.xml' ||
+          /^ppt[/]slides[/]slide\\d+\\.xml$/i.test(name) ||
+          name === 'xl/sharedStrings.xml' ||
+          /^xl[/]worksheets[/]sheet\\d+\\.xml$/i.test(name)
+        ).sort((a, b) => a.localeCompare(b));
+        const entries = readBoundedZipEntries(bytes, new Set(wanted)).map((entry) => ({ name: entry.name, bytes: [...entry.bytes] }));
+        return { success: true, entries, fileBytes: archive.fileBytes };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }

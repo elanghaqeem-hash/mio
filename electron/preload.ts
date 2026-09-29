@@ -133,6 +133,7 @@ export interface MioDesktopAPI {
   revokeWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
   readWorkspaceText: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; data?: string; bytes?: number; error?: string }>;
   listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: MioWorkspaceDirectoryEntry[]; error?: string }>;
+  readDocumentEntries: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: Array<{ name: string; bytes: number[] }>; fileBytes?: number; error?: string }>;
   hashWorkspaceTree: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; result?: MioWorkspaceTreeHashResult; error?: string }>;
   browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
 
@@ -164,6 +165,7 @@ const desktopAPI: MioDesktopAPI = {
   revokeWorkspace: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_REVOKE_WORKSPACE, workspaceId),
   readWorkspaceText: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_WORKSPACE_TEXT, request),
   listWorkspace: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_LIST_WORKSPACE, request),
+  readDocumentEntries: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_DOCUMENT_ENTRIES, request),
   hashWorkspaceTree: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, request),
   browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),
 
