@@ -6,7 +6,8 @@ import { TrainingHandoffReader, type ReadTrainingHandoffRequest } from './traini
 import { TrainingJobManager, type StartTrainingJobRequest } from './trainingJobManager';
 import { WorkspaceSandbox } from './workspaceSandbox';
 import { readBoundedZipEntries } from './boundedZipReader';
-import { assertApprovedDesktopMutation, type DesktopMutationApproval, type DesktopMutationTransaction } from './mutationApproval';
+import { type DesktopMutationTransaction } from './mutationApproval';
+import { MutationApprovalStore } from './mutationApprovalStore';
 import { DesktopMutationJournalStore } from './mutationJournalStore';
 
 export interface WorkspacePathRequest {
@@ -28,6 +29,7 @@ const MAX_TRAINING_PATH = 4096;
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
   const mutationJournal = DesktopMutationJournalStore.atUserData(app.getPath('userData'));
+  const mutationApprovals = new MutationApprovalStore();
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
@@ -151,6 +153,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
         trainingJobManager.cancelWorkspace(workspaceId);
         return { success: false, error: 'Active governed training used this workspace. Cancellation was requested; retry revocation after the job reaches a terminal state.' };
       }
+      mutationApprovals.revokeWorkspace(workspaceId);
       return { success: workspaceSandbox.revoke(workspaceId) };
     },
 
@@ -228,12 +231,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
+    handleRequestWorkspaceMutationApproval: async (_event:IpcMainInvokeEvent, request:unknown) => {
+      const value=request as {transaction?:DesktopMutationTransaction};if(!value?.transaction||!validateWorkspaceId(value.transaction.workspaceId))return {success:false,error:'Invalid mutation approval request'};
+      const choice=await dialog.showMessageBox(mainWindow,{type:'warning',title:'Approve Mio file changes',message:`Approve ${value.transaction.operations.length} file operation(s)?`,detail:'Mio will execute only this exact workspace transaction. Approval expires in 5 minutes and can be used once.',buttons:['Cancel','Approve'],defaultId:0,cancelId:0,noLink:true});
+      if(choice.response!==1)return {success:false,cancelled:true};return {success:true,approval:mutationApprovals.issue(value.transaction)};
+    },
+
     handleExecuteWorkspaceMutation: async (_event: IpcMainInvokeEvent, request: unknown) => {
       if (!request || typeof request !== 'object') return { success: false, error: 'Invalid mutation request' };
-      const value=request as {transaction?:DesktopMutationTransaction;approval?:DesktopMutationApproval;nonce?:unknown};
-      if (!value.transaction || !value.approval || typeof value.nonce!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
+      const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
+      if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
       try {
-        assertApprovedDesktopMutation(value.transaction,value.approval,value.nonce);
+        mutationApprovals.consume(value.transaction,value.approvalToken);
         const completedOperationIds:string[]=[];mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'STARTED'});
         for(const operation of value.transaction.operations){try{await workspaceSandbox.mutate(value.transaction.workspaceId,operation);completedOperationIds.push(operation.id);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_COMPLETED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target});}catch(error){const message=error instanceof Error?error.message:String(error);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_FAILED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target,error:message});mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',error:message});return {success:false,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',completedOperationIds,failedOperationId:operation.id,error:message},error:message};}}
         mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
@@ -304,6 +313,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     revokeAllWorkspaceAuthority: () => {
       trainingJobManager.forceStopAll();
+      mutationApprovals.clear();
       workspaceSandbox.revokeAll();
     },
   };
