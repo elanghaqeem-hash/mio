@@ -12,7 +12,7 @@ Extend Mio's accepted file/image/document intelligence foundations into bounded,
 - T-4.02#A — COMPLETE: deterministic uniform sampling plus bounded scene-candidate merge contract.
 - T-4.02#B — COMPLETE: default 12 / maximum 120 sample budget with deterministic millisecond timestamps.
 - T-4.03#A — COMPLETE (bridge): extracted-frame evidence is validated and marked ready for T-3 image intelligence with decoder provenance; actual frame decoding remains an external dependency.
-- T-4.04#A — PLANNED: evidence-grounded activity/scene/screen-recording semantics.
+- T-4.04#A — COMPLETE (contract): scene/activity/screen-recording/title-card/dialogue semantics require sampled-frame evidence, confidence, and explicit heuristic/local/external-model provenance; no semantic model is claimed connected.
 - T-4.05#A — PLANNED: similarity/fingerprint contracts.
 - T-4.06#A — PLANNED: safe transcode/clip planning boundary.
 - T-4.07#A — PLANNED: acceptance gate.
