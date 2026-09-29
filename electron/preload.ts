@@ -9,6 +9,9 @@ export interface MioWorkspaceDescriptor {
 export interface MioWorkspaceDirectoryEntry {
   name: string;
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
+  bytes?: number;
+  modifiedAtMs?: number;
+  createdAtMs?: number;
 }
 
 export interface MioWorkspaceTreeHashResult {
