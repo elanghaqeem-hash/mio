@@ -12,7 +12,7 @@ Extend Mio's accepted multimodal foundations into bounded, provenance-aware audi
 - T-5.02#A — COMPLETE (contract): speech/music/SFX/mixed/silence classification requires bounded time evidence, confidence, and explicit heuristic/local/external-model provenance.
 - T-5.03#A — COMPLETE (contract): transcription requires ordered timestamp evidence, engine provenance, bounded confidence, and speaker IDs require explicit diarization provenance; no STT/diarization engine is claimed connected.
 - T-5.04#A — COMPLETE (contract): topic/meeting/summary/keyword/action-item insights must cite valid transcript segment indexes with confidence and heuristic/local/external-model provenance.
-- T-5.05#A — PLANNED: audio similarity/fingerprint contract.
+- T-5.05#A — COMPLETE: bounded non-overlapping time-window 64-bit fingerprint contract and normalized 0..1 similarity; exact file identity remains T-2 SHA-256.
 - T-5.06#A — PLANNED: acceptance gate.
 
 ## Boundary
