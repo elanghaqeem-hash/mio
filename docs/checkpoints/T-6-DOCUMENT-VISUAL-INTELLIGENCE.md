@@ -27,7 +27,9 @@ Extend Mio's accepted T-2/T-3 intelligence pipeline to documents while preservin
 - T-6.06#B — COMPLETE: evidence-grounded topic contract plus conservative local heuristic baseline.
 - T-6.06#C — COMPLETE: entity contract with unique IDs, typed values and mandatory evidence provenance.
 - T-6.06#D — COMPLETE (contract): summary semantics require evidence refs and explicit local/external model provenance; no summarization model is claimed as connected.
-- T-6.07#A–#C — PENDING: document relationships and embedded-asset references.
+- T-6.07#A — COMPLETE: typed document relationship contract with evidence/confidence/source provenance.
+- T-6.07#B — COMPLETE: embedded-asset reference contract with safe normalized package paths and media typing.
+- T-6.07#C — COMPLETE: deterministic validation/order plus rejection of traversal and ungrounded relationships.
 - T-6.08#A — PENDING: acceptance gate.
 
 ## Boundary
