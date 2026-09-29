@@ -264,6 +264,29 @@ export class WorkspaceSandbox {
     return canonicalTarget;
   }
 
+  public async mutate(workspaceId: string, operation: { kind: 'MKDIR' | 'RENAME' | 'MOVE' | 'COPY' | 'TRASH'; source?: string; target?: string }): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error('Unknown or revoked workspace authority');
+    const resolveTarget = (relativePath: string): string => {
+      this.validateRelativePath(relativePath);
+      const target = path.resolve(workspace.rootPath, relativePath);
+      this.assertContained(workspace.rootPath, target, 'Mutation target escapes authorized workspace root');
+      return target;
+    };
+    const target = operation.target ? resolveTarget(operation.target) : undefined;
+    if (target) {
+      try { await fs.promises.lstat(target); throw new Error('Mutation target already exists'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    }
+    if (operation.kind === 'MKDIR') { if (!target) throw new Error('MKDIR target required'); await fs.promises.mkdir(target); return; }
+    if (!operation.source) throw new Error('Mutation source required');
+    const source = await this.resolveExisting(workspaceId, operation.source);
+    if (operation.kind === 'TRASH') throw new Error('TRASH requires Electron shell integration and cannot use filesystem delete');
+    if (!target) throw new Error('Mutation target required');
+    if (operation.kind === 'COPY') { const stat=await fs.promises.stat(source); if (!stat.isFile()) throw new Error('T-12 COPY supports regular files only'); await fs.promises.copyFile(source,target,fs.constants.COPYFILE_EXCL); return; }
+    await fs.promises.rename(source,target);
+  }
+
   private async hashFile(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('sha256');
