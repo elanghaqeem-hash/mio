@@ -10,6 +10,9 @@ export interface DesktopWorkspaceDescriptor {
 export interface DesktopWorkspaceEntry {
   name: string;
   type: 'FILE' | 'DIRECTORY' | 'SYMLINK' | 'OTHER';
+  bytes?: number;
+  modifiedAtMs?: number;
+  createdAtMs?: number;
 }
 
 export interface DesktopWorkspaceBridge {
