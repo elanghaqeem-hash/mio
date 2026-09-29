@@ -7,9 +7,9 @@ Status: IN PROGRESS
 Extend Mio's accepted multimodal foundations into bounded, provenance-aware audio intelligence for speech, music, SFX, and mixed audio without claiming decoder/transcription/model capabilities that are not connected.
 
 ## Timeline
-- T-5.01#A — IN PROGRESS: canonical audio probe/stream metadata contract.
-- T-5.01#B — PLANNED: duration/sample-rate/channels/bitrate/codec validation.
-- T-5.02#A — PLANNED: speech/music/SFX/mixed classification contract.
+- T-5.01#A — COMPLETE: canonical audio probe/stream metadata contract with explicit local/external provenance.
+- T-5.01#B — COMPLETE: duration/sample-rate/channels/bitrate/codec validation plus deterministic primary-stream selection.
+- T-5.02#A — COMPLETE (contract): speech/music/SFX/mixed/silence classification requires bounded time evidence, confidence, and explicit heuristic/local/external-model provenance.
 - T-5.03#A — PLANNED: transcription/timestamp/speaker provenance contract.
 - T-5.04#A — PLANNED: topic/meeting/summary/keyword intelligence.
 - T-5.05#A — PLANNED: audio similarity/fingerprint contract.
