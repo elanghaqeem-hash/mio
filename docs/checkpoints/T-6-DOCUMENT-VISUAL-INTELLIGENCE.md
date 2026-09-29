@@ -22,7 +22,7 @@ Extend Mio's accepted T-2/T-3 intelligence pipeline to documents while preservin
 - T-6.04#C — COMPLETE: provenance-aware region validation and deterministic reading-order sorting.
 - T-6.05#A — COMPLETE: provenance-safe mapping from T-3 OCR results into document page regions.
 - T-6.05#B — COMPLETE: OCR engine/language/local-vs-external provenance propagation and deterministic reading order.
-- T-6.05#C — IN PROGRESS: scanned-page render/vision adapter; OCR-to-layout boundary is complete, raw PDF/page rendering is not yet implemented.
+- T-6.05#C — COMPLETE (adapter boundary): bounded rendered-page input validates page/pixel provenance, enforces a 4MP budget, and normalizes grayscale for T-3 OCR/quality/vision. Raw PDF rasterization remains an explicit renderer dependency and is not claimed by this milestone.
 - T-6.06#A–#D — PENDING: document type/topic/entity/summary semantics with provenance.
 - T-6.07#A–#C — PENDING: document relationships and embedded-asset references.
 - T-6.08#A — PENDING: acceptance gate.
