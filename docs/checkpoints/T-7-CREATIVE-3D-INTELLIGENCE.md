@@ -9,10 +9,10 @@ Extend Mio file intelligence to creative assets and 3D files using bounded metad
 ## Timeline
 - T-7.01#A — COMPLETE: creative/3D asset identity contracts for PSD/SVG/AI/GLTF/GLB/OBJ/FBX/STL/BLEND.
 - T-7.01#B — COMPLETE (bounded): signature/structure recognition for PSD, GLB, FBX, BLEND, GLTF, SVG, and OBJ; unsupported/proprietary structures remain unclaimed.
-- T-7.02#A — PLANNED: graphic/layered-asset inspection contract.
-- T-7.03#A — PLANNED: 3D geometry/material/texture/animation metadata.
-- T-7.04#A — PLANNED: preview/render evidence contract.
-- T-7.05#A — PLANNED: visual/semantic analysis bridge.
+- T-7.02#A — COMPLETE (contract): layered graphic dimensions/layers/visibility/opacity/blend/bounds require parser provenance.
+- T-7.03#A — COMPLETE (contract): mesh/vertex/triangle/material/texture/animation metadata require parser provenance and bounded validation.
+- T-7.04#A — COMPLETE (contract): preview/render evidence is pixel-bounded and requires explicit local/external/embedded/imported provenance.
+- T-7.05#A — COMPLETE (bridge): validated preview evidence can enter T-3 Image Intelligence without claiming an implicit renderer.
 - T-7.06#A — PLANNED: creative/3D relationships and dependencies.
 - T-7.07#A — PLANNED: acceptance gate.
 
