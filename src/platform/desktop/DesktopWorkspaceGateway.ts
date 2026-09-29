@@ -20,6 +20,7 @@ export interface DesktopWorkspaceBridge {
   revokeWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
   readWorkspaceText: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; data?: string; bytes?: number; error?: string }>;
   listWorkspace: (request: { workspaceId: string; relativePath: string }) => Promise<{ success: boolean; entries?: DesktopWorkspaceEntry[]; error?: string }>;
+  listWorkspaceMutationAudit?: (workspaceId:string) => Promise<{success:boolean;events?:Array<{sequence:number;transactionId:string;state:string;operationKind?:string;source?:string;target?:string;recordedAt:string}>;error?:string}>;
   requestWorkspaceMutationApproval?: (request: unknown) => Promise<{success:boolean;cancelled?:boolean;approval?:{token:string};error?:string}>;
   executeWorkspaceMutation?: (request: unknown) => Promise<{success:boolean;receipt?:unknown;error?:string}>;
 }
