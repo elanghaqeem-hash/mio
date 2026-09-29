@@ -81,6 +81,10 @@ export interface FileScanRequest {
   recursive: boolean;
   maxFiles?: number;
   maxBytes?: number;
+  maxDepth?: number;
+  includeHidden?: boolean;
+  excludeNames?: string[];
+  excludeExtensions?: string[];
 }
 
 export interface FileScanResult {
