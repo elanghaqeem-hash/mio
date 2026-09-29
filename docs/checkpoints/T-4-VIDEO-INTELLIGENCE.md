@@ -9,9 +9,9 @@ Extend Mio's accepted file/image/document intelligence foundations into bounded,
 ## Timeline
 - T-4.01#A — COMPLETE: canonical video probe/stream metadata contracts with explicit local/external provenance.
 - T-4.01#B — COMPLETE: duration/bitrate/dimensions/frame-rate/sample-rate/channels/codec/container validation plus deterministic primary-video selection.
-- T-4.02#A — PLANNED: scene/keyframe sampling contract.
-- T-4.02#B — PLANNED: bounded sampling budgets and deterministic timestamps.
-- T-4.03#A — PLANNED: reuse T-3 image intelligence for extracted frames.
+- T-4.02#A — COMPLETE: deterministic uniform sampling plus bounded scene-candidate merge contract.
+- T-4.02#B — COMPLETE: default 12 / maximum 120 sample budget with deterministic millisecond timestamps.
+- T-4.03#A — COMPLETE (bridge): extracted-frame evidence is validated and marked ready for T-3 image intelligence with decoder provenance; actual frame decoding remains an external dependency.
 - T-4.04#A — PLANNED: evidence-grounded activity/scene/screen-recording semantics.
 - T-4.05#A — PLANNED: similarity/fingerprint contracts.
 - T-4.06#A — PLANNED: safe transcode/clip planning boundary.
