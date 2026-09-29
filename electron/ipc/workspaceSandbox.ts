@@ -44,6 +44,7 @@ const DEFAULT_MAX_HASH_FILES = 5000;
 const DEFAULT_MAX_HASH_BYTES = 4 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_HASH_DEPTH = 24;
 const HASH_CHUNK_BYTES = 1024 * 1024;
+const MAX_SIGNATURE_BYTES = 512;
 
 interface AuthorizedWorkspaceRecord extends AuthorizedWorkspaceDescriptor {
   rootPath: string;
@@ -96,6 +97,22 @@ export class WorkspaceSandbox {
     const data = await fs.promises.readFile(targetPath, 'utf-8');
     if (data.includes('\u0000')) throw new Error('Binary or null-delimited content is not accepted by text-read capability');
     return { data, bytes: stat.size };
+  }
+
+  public async readFileHeader(workspaceId: string, relativePath: string, maxBytes: number = MAX_SIGNATURE_BYTES): Promise<{ bytes: number[]; fileBytes: number }> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_SIGNATURE_BYTES) throw new Error(`Header read limit must be between 1 and ${MAX_SIGNATURE_BYTES} bytes`);
+    const targetPath = await this.resolveExisting(workspaceId, relativePath);
+    const stat = await fs.promises.stat(targetPath);
+    if (!stat.isFile()) throw new Error('Requested workspace path is not a file');
+
+    const handle = await fs.promises.open(targetPath, 'r');
+    try {
+      const buffer = Buffer.alloc(Math.min(maxBytes, stat.size));
+      const result = await handle.read(buffer, 0, buffer.length, 0);
+      return { bytes: [...buffer.subarray(0, result.bytesRead)], fileBytes: stat.size };
+    } finally {
+      await handle.close();
+    }
   }
 
   public async listDirectory(workspaceId: string, relativePath: string = '.'): Promise<WorkspaceDirectoryEntry[]> {
