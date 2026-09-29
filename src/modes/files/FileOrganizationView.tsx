@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, BookOpen, ChevronLeft, FileText, Folder, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronLeft, FileText, Folder, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Unplug, Search, Network, Sparkles, History, ScanSearch } from 'lucide-react';
 import { ProjectManager } from '../../project/ProjectManager';
 import {
   authorizeDesktopWorkspace,
@@ -10,6 +10,7 @@ import {
   type DesktopWorkspaceEntry,
 } from '../../platform/desktop/DesktopWorkspaceGateway';
 import { KnowledgeIngestionService } from '../../services/KnowledgeIngestionService';
+import { lexicalSearch } from '../../file-intelligence/LexicalSearch';
 
 interface PreviewState {
   path: string;
@@ -39,8 +40,18 @@ export const FileOrganizationView: React.FC = () => {
   const [currentPath, setCurrentPath] = useState('.');
   const [entries, setEntries] = useState<DesktopWorkspaceEntry[]>([]);
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<DesktopWorkspaceEntry | null>(null);
   const [status, setStatus] = useState(bridge ? 'No workspace authorized.' : 'Desktop workspace bridge unavailable in this runtime.');
   const [busy, setBusy] = useState(false);
+  const [activePanel, setActivePanel] = useState<'BROWSE'|'SEARCH'|'RELATIONSHIPS'|'ORGANIZE'|'RECOVERY'>('BROWSE');
+  const [searchQuery,setSearchQuery]=useState('');
+  const [pendingAction,setPendingAction]=useState<{kind:'MOVE'|'RENAME';source:string;target:string}|null>(null);
+  const [targetPath,setTargetPath]=useState('');
+  const [mutationBusy,setMutationBusy]=useState(false);
+  const [auditEvents,setAuditEvents]=useState<Array<{sequence:number;transactionId:string;state:string;operationKind?:string;source?:string;target?:string;recordedAt:string}>>([]);
+  const fileCount = entries.filter((entry) => entry.type === 'FILE').length;
+  const directoryCount = entries.filter((entry) => entry.type === 'DIRECTORY').length;
+  const searchResults=useMemo(()=>lexicalSearch(entries.map((entry)=>({assetId:normalizeChildPath(currentPath,entry.name),filename:entry.name,metadata:{type:entry.type,bytes:entry.bytes??null,modifiedAtMs:entry.modifiedAtMs??null}})),searchQuery,['FILENAME','METADATA'],50),[entries,currentPath,searchQuery]);
 
   const executeList = useCallback(async (authorizedWorkspace: DesktopWorkspaceDescriptor, relativePath: string) => {
     if (!gateway) return;
@@ -63,6 +74,7 @@ export const FileOrganizationView: React.FC = () => {
       setEntries(result.data.entries);
       setCurrentPath(relativePath);
       setPreview(null);
+      setSelectedEntry(null);
       setStatus(`Read-only directory loaded: ${relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -98,6 +110,7 @@ export const FileOrganizationView: React.FC = () => {
       setWorkspace(null);
       setEntries([]);
       setPreview(null);
+      setSelectedEntry(null);
       setCurrentPath('.');
       setStatus('Workspace authority revoked. Re-authorization is required before further access.');
     }
@@ -106,6 +119,7 @@ export const FileOrganizationView: React.FC = () => {
   const handleEntry = async (entry: DesktopWorkspaceEntry) => {
     if (!workspace || !gateway) return;
     const relativePath = normalizeChildPath(currentPath, entry.name);
+    setSelectedEntry(entry);
     if (entry.type === 'DIRECTORY') {
       await executeList(workspace, relativePath);
       return;
@@ -145,6 +159,18 @@ export const FileOrganizationView: React.FC = () => {
     }
   };
 
+  const loadAudit=async()=>{if(!workspace||!bridge?.listWorkspaceMutationAudit)return;const r=await bridge.listWorkspaceMutationAudit(workspace.id);if(r.success)setAuditEvents(r.events??[]);else setStatus(r.error??'Audit history unavailable');};
+
+  const handleApprovedMutation = async () => {
+    if(!workspace||!bridge||!pendingAction||!bridge.requestWorkspaceMutationApproval||!bridge.executeWorkspaceMutation)return;
+    setMutationBusy(true);try{
+      const transaction={id:`ui:${Date.now()}`,workspaceId:workspace.id,operations:[{id:'ui-op-1',kind:pendingAction.kind,source:pendingAction.source,target:pendingAction.target,collisionPolicy:'BLOCK' as const}]};
+      const approval=await bridge.requestWorkspaceMutationApproval({transaction});if(!approval.success||!approval.approval){setStatus(approval.cancelled?'Mutation approval cancelled.':approval.error??'Mutation approval failed');return;}
+      const result=await bridge.executeWorkspaceMutation({transaction,approvalToken:approval.approval.token});if(!result.success)throw new Error(result.error??'Mutation execution failed');
+      setPendingAction(null);setTargetPath('');setStatus('Approved mutation completed and journaled.');await executeList(workspace,currentPath);
+    }catch(error){setStatus(error instanceof Error?error.message:String(error));}finally{setMutationBusy(false);}
+  };
+
   const handleIngest = () => {
     if (!workspace || !preview) return;
     try {
@@ -182,8 +208,8 @@ export const FileOrganizationView: React.FC = () => {
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#07090e] p-4 font-mono text-xs text-gray-300">
       <div className="mb-4 flex items-center justify-between rounded-xl border border-gray-800 bg-[#0d121d] p-3">
         <div>
-          <div className="flex items-center gap-2 text-cyan-300"><FolderOpen size={16} /><span className="font-bold text-sm">PROJECT WORKSPACE // READ-ONLY FILE BROWSER</span></div>
-          <div className="mt-1 text-[10px] text-gray-500">Explicit workspace authority · bounded reads · no write/delete/move operations</div>
+          <div className="flex items-center gap-2 text-cyan-300"><FolderOpen size={16} /><span className="font-bold text-sm">MIO FILE INTELLIGENCE</span></div>
+          <div className="mt-1 text-[10px] text-gray-500">Scan · inspect · search · organize · approval-gated mutation · recovery audit</div>
         </div>
         <div className="flex gap-2">
           {workspace ? (
@@ -194,8 +220,25 @@ export const FileOrganizationView: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
-        <div className="col-span-7 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+        {([
+          ['BROWSE','Browse',ScanSearch],['SEARCH','Smart Search',Search],['RELATIONSHIPS','Relationships',Network],['ORGANIZE','Organize',Sparkles],['RECOVERY','Recovery',History],
+        ] as const).map(([id,label,Icon]) => <button key={id} onClick={()=>setActivePanel(id)} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[11px] ${activePanel===id?'border-cyan-500/60 bg-cyan-500/10 text-cyan-300':'border-gray-800 bg-[#0d121d] text-gray-500 hover:text-gray-300'}`}><Icon size={13}/>{label}</button>)}
+      </div>
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Files visible</div><div className="mt-1 text-lg text-gray-200">{fileCount}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Folders visible</div><div className="mt-1 text-lg text-gray-200">{directoryCount}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Authority</div><div className="mt-1 text-xs text-gray-200">{workspace?'AUTHORIZED':'LOCKED'}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Mutation</div><div className="mt-1 text-xs text-amber-300">APPROVAL REQUIRED</div></div>
+      </div>
+      {activePanel !== 'BROWSE' && <div className="mb-4 rounded-xl border border-gray-800 bg-[#0d121d] p-4">
+        {activePanel === 'SEARCH' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Search size={14}/> SMART SEARCH</div><input value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="Search current directory by filename or metadata…" className="mt-3 w-full rounded-lg border border-gray-700 bg-[#080b12] px-3 py-2 text-gray-200 outline-none focus:border-cyan-600"/><div className="mt-2 text-[10px] text-gray-600">Local current-directory index · filename + metadata only. Full-text/semantic/cross-modal require analyzed index adapters.</div>{searchQuery && <div className="mt-3 max-h-40 overflow-auto">{searchResults.length===0?<div className="text-gray-500">No local matches.</div>:searchResults.map(r=><button key={r.assetId} onClick={()=>{const entry=entries.find(e=>normalizeChildPath(currentPath,e.name)===r.assetId);if(entry)void handleEntry(entry)}} className="flex w-full items-center justify-between border-t border-gray-800 py-2 text-left"><span className="truncate text-gray-300">{r.assetId}</span><span className="ml-3 text-[9px] text-cyan-500">{r.evidence.map(e=>e.mode).join(' · ')}</span></button>)}</div>}</>}
+        {activePanel === 'RELATIONSHIPS' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Network size={14}/> RELATIONSHIP VIEWER</div><div className="mt-2 text-[11px] text-gray-500">T-9 relationship graph supports duplicates, semantic similarity, project/client, temporal, reference, and dependency edges. No graph is displayed until analyzed assets are connected to this workspace.</div></>}
+        {activePanel === 'ORGANIZE' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Sparkles size={14}/> ORGANIZATION PREVIEW</div>{selectedEntry&&selectedEntry.type==='FILE'?<><div className="mt-2 text-[11px] text-gray-400">Selected: <span className="text-gray-200">{selectedEntry.name}</span></div><div className="mt-3 flex gap-2"><input value={targetPath} onChange={e=>setTargetPath(e.target.value)} placeholder="Relative target path…" className="min-w-0 flex-1 rounded border border-gray-700 bg-[#080b12] px-3 py-2"/><button disabled={!targetPath.trim()} onClick={()=>setPendingAction({kind:'MOVE',source:normalizeChildPath(currentPath,selectedEntry.name),target:targetPath.trim()})} className="rounded bg-gray-800 px-3 disabled:opacity-30">Preview Move</button></div>{pendingAction&&<div className="mt-3 rounded-lg border border-amber-700/40 bg-amber-950/10 p-3"><div className="text-amber-300">PREVIEW ONLY · APPROVAL REQUIRED</div><div className="mt-2 break-all text-gray-400">{pendingAction.source} → {pendingAction.target}</div><div className="mt-2 text-[10px] text-gray-600">Execution requires a native Electron confirmation. Approval is one-use, expires, and is bound to this exact transaction.</div><button disabled={mutationBusy||!bridge?.requestWorkspaceMutationApproval||!bridge?.executeWorkspaceMutation} onClick={()=>void handleApprovedMutation()} className="mt-3 rounded bg-amber-500 px-3 py-2 font-bold text-black disabled:opacity-30">{mutationBusy?'Executing…':'Request Approval & Execute'}</button></div>}</>:<div className="mt-2 text-[11px] text-gray-500">Select a regular file to prepare an organization preview.</div>}</>}
+        {activePanel === 'RECOVERY' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><History size={14}/> RECOVERY & AUDIT</div><div className="mt-2 text-[11px] text-gray-500">Verified hash-chained history for this authorized workspace. Undo still requires a fresh T-12 preview and approval.</div><button disabled={!workspace||!bridge?.listWorkspaceMutationAudit} onClick={()=>void loadAudit()} className="mt-3 rounded bg-gray-800 px-3 py-2 disabled:opacity-30">Load Verified History</button><div className="mt-3 max-h-44 overflow-auto">{auditEvents.slice().reverse().map(e=><div key={e.sequence} className="border-t border-gray-800 py-2"><span className="text-cyan-500">#{e.sequence}</span> <span className="text-gray-300">{e.state}</span> <span className="text-gray-600">{e.operationKind??''}</span><div className="truncate text-[9px] text-gray-600">{e.source??''}{e.target?` → ${e.target}`:''}</div></div>)}</div></>}
+      </div>}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-7 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
           <div className="flex items-center justify-between border-b border-gray-800 bg-[#111726] p-3">
             <div className="flex items-center gap-2">
               <Folder size={14} className="text-cyan-400" />
@@ -206,6 +249,7 @@ export const FileOrganizationView: React.FC = () => {
               <button disabled={!workspace || busy} onClick={() => workspace && executeList(workspace, currentPath)} className="rounded bg-gray-800 p-1.5 disabled:opacity-30"><RefreshCw size={13} /></button>
             </div>
           </div>
+          <div className="border-b border-gray-800 px-3 py-2 text-[10px] text-gray-500">{busy ? `Scanning current directory…` : workspace ? `${entries.length} entries loaded · bounded listing` : `Scanner idle · authorize a workspace to begin`}</div>
           <div className="flex-1 overflow-y-auto">
             {!workspace && <div className="p-6 text-gray-500">Authorize a folder using the native desktop picker. The absolute root remains inside Electron main-process authority.</div>}
             {workspace && entries.length === 0 && !busy && <div className="p-6 text-gray-500">No entries in this directory.</div>}
@@ -215,14 +259,20 @@ export const FileOrganizationView: React.FC = () => {
                   {entry.type === 'DIRECTORY' ? <Folder size={14} className="text-cyan-400" /> : <FileText size={14} className="text-gray-400" />}
                   <span className="truncate">{entry.name}</span>
                 </div>
-                <div className="col-span-4 text-right text-[10px] text-gray-500">{entry.type}</div>
+                <div className="col-span-4 text-right text-[10px] text-gray-500">{entry.type}{entry.bytes !== undefined ? ` · ${entry.bytes.toLocaleString()} B` : ``}</div>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="col-span-5 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
-          <div className="border-b border-gray-800 bg-[#111726] p-3 font-bold text-gray-400">READ-ONLY PREVIEW / QUARANTINE</div>
+        <div className="lg:col-span-5 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
+          <div className="border-b border-gray-800 bg-[#111726] p-3 font-bold text-gray-400">INTELLIGENCE INSPECTOR</div>
+          {selectedEntry && <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-gray-800 p-3 text-[10px]">
+            <div><span className="text-gray-600">TYPE</span><div className="mt-1 text-gray-300">{selectedEntry.type}</div></div>
+            <div><span className="text-gray-600">SIZE</span><div className="mt-1 text-gray-300">{selectedEntry.bytes === undefined ? '—' : `${selectedEntry.bytes.toLocaleString()} B`}</div></div>
+            <div><span className="text-gray-600">MODIFIED</span><div className="mt-1 text-gray-300">{selectedEntry.modifiedAtMs ? new Date(selectedEntry.modifiedAtMs).toLocaleString() : '—'}</div></div>
+            <div><span className="text-gray-600">INTELLIGENCE</span><div className="mt-1 text-amber-300">NOT ANALYZED</div></div>
+          </div>}
           {preview ? (
             <>
               <div className="border-b border-gray-800 p-3">

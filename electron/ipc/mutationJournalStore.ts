@@ -5,6 +5,7 @@ export class DesktopMutationJournalStore{
  private sequence=0;private previousHash='GENESIS';
  constructor(private readonly filePath:string){}
  public static atUserData(userData:string){return new DesktopMutationJournalStore(path.join(userData,'mutation-audit-v1.jsonl'));}
+ public list(workspaceId:string,limit=100):DesktopMutationJournalEvent[]{if(!fs.existsSync(this.filePath))return [];const lines=fs.readFileSync(this.filePath,'utf8').split(/\r?\n/).filter(Boolean);let previous='GENESIS';const valid:DesktopMutationJournalEvent[]=[];for(const line of lines){const event=JSON.parse(line) as DesktopMutationJournalEvent;const {eventHash,...base}=event;const expected=crypto.createHash('sha256').update(JSON.stringify(base)).digest('hex');if(expected!==eventHash||event.previousHash!==previous)throw new Error('Mutation audit integrity verification failed');previous=eventHash;if(event.workspaceId===workspaceId)valid.push(event);}return valid.slice(-Math.min(500,Math.max(1,limit)));}
  public append(input:Omit<DesktopMutationJournalEvent,'schemaVersion'|'sequence'|'recordedAt'|'previousHash'|'eventHash'>):DesktopMutationJournalEvent{
   const base={schemaVersion:1 as const,sequence:++this.sequence,...input,recordedAt:new Date().toISOString(),previousHash:this.previousHash};
   const eventHash=crypto.createHash('sha256').update(JSON.stringify(base)).digest('hex');const event={...base,eventHash};fs.appendFileSync(this.filePath,JSON.stringify(event)+'\n',{encoding:'utf8',mode:0o600});this.previousHash=eventHash;return event;
