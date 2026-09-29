@@ -231,6 +231,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
+    handleListWorkspaceMutationAudit: (_event:IpcMainInvokeEvent, workspaceId:unknown) => {if(!validateWorkspaceId(workspaceId))return {success:false,error:'Invalid workspace audit request'};try{return {success:true,events:mutationJournal.list(workspaceId,200)};}catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}},
+
     handleRequestWorkspaceMutationApproval: async (_event:IpcMainInvokeEvent, request:unknown) => {
       const value=request as {transaction?:DesktopMutationTransaction};if(!value?.transaction||!validateWorkspaceId(value.transaction.workspaceId))return {success:false,error:'Invalid mutation approval request'};
       const choice=await dialog.showMessageBox(mainWindow,{type:'warning',title:'Approve Mio file changes',message:`Approve ${value.transaction.operations.length} file operation(s)?`,detail:'Mio will execute only this exact workspace transaction. Approval expires in 5 minutes and can be used once.',buttons:['Cancel','Approve'],defaultId:0,cancelId:0,noLink:true});
