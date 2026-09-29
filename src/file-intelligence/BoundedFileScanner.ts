@@ -21,6 +21,9 @@ export interface ReadOnlyFileScanSource {
 const DEFAULT_MAX_FILES = 5000;
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_SCAN_DEPTH = 24;
+const DEFAULT_EXCLUDED_NAMES = new Set(['node_modules', '.git', '.svn', '.hg', '$RECYCLE.BIN', 'System Volume Information']);
+
+const isHiddenName = (name: string): boolean => name.startsWith('.') && name !== '.' && name !== '..';
 
 const joinRelative = (parent: string, child: string): string => parent === '.' ? child : `${parent}/${child}`;
 
@@ -31,6 +34,9 @@ export class BoundedFileScanner {
     const startedAtMs = Date.now();
     const maxFiles = this.boundedLimit(request.maxFiles, DEFAULT_MAX_FILES, 'maxFiles');
     const maxBytes = this.boundedLimit(request.maxBytes, DEFAULT_MAX_BYTES, 'maxBytes');
+    const maxDepth = this.boundedLimit(request.maxDepth, MAX_SCAN_DEPTH, 'maxDepth');
+    const excludedNames = new Set([...DEFAULT_EXCLUDED_NAMES, ...(request.excludeNames ?? [])]);
+    const excludedExtensions = new Set((request.excludeExtensions ?? []).map((value) => value.replace(/^\./, '').toLowerCase()).filter(Boolean));
     const files: FileAsset[] = [];
     let totalBytes = 0;
     let skippedCount = 0;
@@ -38,7 +44,7 @@ export class BoundedFileScanner {
 
     const visit = async (relativePath: string, depth: number): Promise<void> => {
       this.assertActive(signal);
-      if (depth > MAX_SCAN_DEPTH) throw new Error(`File scan exceeds maximum traversal depth (${MAX_SCAN_DEPTH})`);
+      if (depth > maxDepth) throw new Error(`File scan exceeds maximum traversal depth (${maxDepth})`);
 
       const entries = await this.source.listDirectory(request.workspaceId, relativePath);
       const ordered = [...entries].sort((left, right) => left.name.localeCompare(right.name));
@@ -46,11 +52,20 @@ export class BoundedFileScanner {
       for (const entry of ordered) {
         this.assertActive(signal);
         const childPath = joinRelative(relativePath, entry.name);
+        if (excludedNames.has(entry.name) || (!request.includeHidden && isHiddenName(entry.name))) {
+          skippedCount += 1;
+          continue;
+        }
         if (entry.type === 'DIRECTORY') {
           if (request.recursive) await visit(childPath, depth + 1);
           continue;
         }
         if (entry.type !== 'FILE') {
+          skippedCount += 1;
+          continue;
+        }
+        const extension = normalizeFileExtension(entry.name);
+        if (extension && excludedExtensions.has(extension)) {
           skippedCount += 1;
           continue;
         }
@@ -66,7 +81,7 @@ export class BoundedFileScanner {
             workspaceId: request.workspaceId,
             relativePath: childPath,
             name: entry.name,
-            extension: normalizeFileExtension(entry.name),
+            extension,
             kind: classifyFileAsset(entry.name),
           },
           metadata: {
