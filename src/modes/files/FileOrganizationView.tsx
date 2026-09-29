@@ -212,6 +212,12 @@ export const FileOrganizationView: React.FC = () => {
         <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Authority</div><div className="mt-1 text-xs text-gray-200">{workspace?'AUTHORIZED':'LOCKED'}</div></div>
         <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Mutation</div><div className="mt-1 text-xs text-amber-300">APPROVAL REQUIRED</div></div>
       </div>
+      {activePanel !== 'BROWSE' && <div className="mb-4 rounded-xl border border-gray-800 bg-[#0d121d] p-4">
+        {activePanel === 'SEARCH' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Search size={14}/> SMART SEARCH</div><div className="mt-2 text-[11px] text-gray-500">Search UI is staged. Filename/metadata/full-text/semantic engines exist as T-10 contracts, but this workspace has no runtime search index adapter yet; no synthetic results are shown.</div></>}
+        {activePanel === 'RELATIONSHIPS' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Network size={14}/> RELATIONSHIP VIEWER</div><div className="mt-2 text-[11px] text-gray-500">T-9 relationship graph supports duplicates, semantic similarity, project/client, temporal, reference, and dependency edges. No graph is displayed until analyzed assets are connected to this workspace.</div></>}
+        {activePanel === 'ORGANIZE' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><Sparkles size={14}/> ORGANIZATION PREVIEW</div><div className="mt-2 text-[11px] text-gray-500">Recommendations remain preview-only. File mutation cannot run from this panel without a concrete T-11 recommendation manifest and T-12 explicit approval.</div></>}
+        {activePanel === 'RECOVERY' && <><div className="flex items-center gap-2 font-bold text-cyan-300"><History size={14}/> RECOVERY & AUDIT</div><div className="mt-2 text-[11px] text-gray-500">T-13 records privileged mutation events. Undo for rename/move must return through fresh preview and approval. Trash is not represented as automatically restorable.</div></>}
+      </div>}
       <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
         <div className="col-span-7 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
           <div className="flex items-center justify-between border-b border-gray-800 bg-[#111726] p-3">
