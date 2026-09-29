@@ -39,6 +39,7 @@ export const FileOrganizationView: React.FC = () => {
   const [currentPath, setCurrentPath] = useState('.');
   const [entries, setEntries] = useState<DesktopWorkspaceEntry[]>([]);
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<DesktopWorkspaceEntry | null>(null);
   const [status, setStatus] = useState(bridge ? 'No workspace authorized.' : 'Desktop workspace bridge unavailable in this runtime.');
   const [busy, setBusy] = useState(false);
   const [activePanel, setActivePanel] = useState<'BROWSE'|'SEARCH'|'RELATIONSHIPS'|'ORGANIZE'|'RECOVERY'>('BROWSE');
@@ -66,6 +67,7 @@ export const FileOrganizationView: React.FC = () => {
       setEntries(result.data.entries);
       setCurrentPath(relativePath);
       setPreview(null);
+      setSelectedEntry(null);
       setStatus(`Read-only directory loaded: ${relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -101,6 +103,7 @@ export const FileOrganizationView: React.FC = () => {
       setWorkspace(null);
       setEntries([]);
       setPreview(null);
+      setSelectedEntry(null);
       setCurrentPath('.');
       setStatus('Workspace authority revoked. Re-authorization is required before further access.');
     }
@@ -109,6 +112,7 @@ export const FileOrganizationView: React.FC = () => {
   const handleEntry = async (entry: DesktopWorkspaceEntry) => {
     if (!workspace || !gateway) return;
     const relativePath = normalizeChildPath(currentPath, entry.name);
+    setSelectedEntry(entry);
     if (entry.type === 'DIRECTORY') {
       await executeList(workspace, relativePath);
       return;
@@ -220,6 +224,7 @@ export const FileOrganizationView: React.FC = () => {
               <button disabled={!workspace || busy} onClick={() => workspace && executeList(workspace, currentPath)} className="rounded bg-gray-800 p-1.5 disabled:opacity-30"><RefreshCw size={13} /></button>
             </div>
           </div>
+          <div className="border-b border-gray-800 px-3 py-2 text-[10px] text-gray-500">{busy ? `Scanning current directory…` : workspace ? `${entries.length} entries loaded · bounded listing` : `Scanner idle · authorize a workspace to begin`}</div>
           <div className="flex-1 overflow-y-auto">
             {!workspace && <div className="p-6 text-gray-500">Authorize a folder using the native desktop picker. The absolute root remains inside Electron main-process authority.</div>}
             {workspace && entries.length === 0 && !busy && <div className="p-6 text-gray-500">No entries in this directory.</div>}
@@ -229,14 +234,20 @@ export const FileOrganizationView: React.FC = () => {
                   {entry.type === 'DIRECTORY' ? <Folder size={14} className="text-cyan-400" /> : <FileText size={14} className="text-gray-400" />}
                   <span className="truncate">{entry.name}</span>
                 </div>
-                <div className="col-span-4 text-right text-[10px] text-gray-500">{entry.type}</div>
+                <div className="col-span-4 text-right text-[10px] text-gray-500">{entry.type}{entry.bytes !== undefined ? ` · ${entry.bytes.toLocaleString()} B` : ``}</div>
               </button>
             ))}
           </div>
         </div>
 
         <div className="col-span-5 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
-          <div className="border-b border-gray-800 bg-[#111726] p-3 font-bold text-gray-400">READ-ONLY PREVIEW / QUARANTINE</div>
+          <div className="border-b border-gray-800 bg-[#111726] p-3 font-bold text-gray-400">INTELLIGENCE INSPECTOR</div>
+          {selectedEntry && <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-gray-800 p-3 text-[10px]">
+            <div><span className="text-gray-600">TYPE</span><div className="mt-1 text-gray-300">{selectedEntry.type}</div></div>
+            <div><span className="text-gray-600">SIZE</span><div className="mt-1 text-gray-300">{selectedEntry.bytes === undefined ? '—' : `${selectedEntry.bytes.toLocaleString()} B`}</div></div>
+            <div><span className="text-gray-600">MODIFIED</span><div className="mt-1 text-gray-300">{selectedEntry.modifiedAtMs ? new Date(selectedEntry.modifiedAtMs).toLocaleString() : '—'}</div></div>
+            <div><span className="text-gray-600">INTELLIGENCE</span><div className="mt-1 text-amber-300">NOT ANALYZED</div></div>
+          </div>}
           {preview ? (
             <>
               <div className="border-b border-gray-800 p-3">
