@@ -21,7 +21,9 @@ Turn image assets discovered by T-2 into locally inspectable visual assets befor
 - T-3.04#B — COMPLETE: deterministic local-feature classification contract for screenshot/document/photo/graphic/illustration.
 - T-3.04#C — COMPLETE: scene/object/text/UI signal schema with confidence validation.
 - T-3.04#D — COMPLETE: LOCAL_HEURISTIC/LOCAL_MODEL/EXTERNAL_MODEL provenance enforcement; model-derived signals require modelId.
-- T-3.05#A–#C — PENDING: OCR, language and text index.
+- T-3.05#A — COMPLETE: provider-agnostic OCR result/region contract with normalized coordinates and confidence.
+- T-3.05#B — COMPLETE: language/language-confidence fields and LOCAL_ENGINE/EXTERNAL_ENGINE provenance enforcement.
+- T-3.05#C — COMPLETE: Unicode-normalized searchable OCR text/token index.
 - T-3.06#A–#C — PENDING: blur/exposure/quality signals.
 - T-3.07#A–#C — PENDING: perceptual fingerprint, similarity and clustering.
 - T-3.08#A — PENDING: acceptance gate.
