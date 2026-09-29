@@ -23,8 +23,15 @@ T-2 turns the T-1 bounded metadata foundation into Mio's secure universal discov
 - T-2.04#A — COMPLETE: bounded per-file SHA-256 evidence.
 - T-2.04#B — COMPLETE: exact duplicates share deterministic SHA-256 fingerprints.
 - T-2.04#C — COMPLETE: size/mtime drift during scan/hash is rejected as changed-file evidence.
-- T-2.05#A–#E — PARTIAL: workspace containment, symlink and path traversal defenses inherited from T-1; malformed/resource protections continue in T-2.
-- T-2.06#A–#D — PENDING: concurrency, incremental scan, cache, pause/resume.
+- T-2.05#A — COMPLETE: authorized workspace containment inherited and regression-tested.
+- T-2.05#B — COMPLETE: symlink breakout protection inherited and regression-tested.
+- T-2.05#C — COMPLETE: absolute/parent path traversal protection inherited and regression-tested.
+- T-2.05#D — COMPLETE: unknown/truncated signatures are isolated as unsupported/corrupt evidence rather than guessed.
+- T-2.05#E — COMPLETE: directory entries, header bytes, file count, byte budget, traversal depth, and hash bytes are bounded.
+- T-2.06#A — NEXT: bounded concurrent enrichment workers.
+- T-2.06#B — COMPLETE: incremental reuse keyed by workspace/path/size/mtime.
+- T-2.06#C — COMPLETE: immutable scan cache with workspace invalidation.
+- T-2.06#D — COMPLETE: cooperative pause/resume/cancel checkpoints.
 - T-2.07#A — PENDING: acceptance gate.
 
 ## Default exclusions
