@@ -15,8 +15,8 @@ Turn image assets discovered by T-2 into locally inspectable visual assets befor
 - T-3.02#A — COMPLETE: aspect ratio and landscape/portrait/square orientation.
 - T-3.02#B — COMPLETE: megapixel and deterministic resolution-class signals.
 - T-3.02#C — COMPLETE: likely-thumbnail and extreme-aspect signals.
-- T-3.03#A — NEXT: safe thumbnail/preview pipeline.
-- T-3.03#B — NEXT: EXIF orientation normalization strategy.
+- T-3.03#A — COMPLETE: bounded local-only preview sizing policy with aspect preservation and no-upscale default.
+- T-3.03#B — COMPLETE: bounded JPEG EXIF orientation parsing and display rotation/mirroring normalization.
 - T-3.04#A–#D — PENDING: visual class, scene/object, screenshot/document/photo/illustration semantics.
 - T-3.05#A–#C — PENDING: OCR, language and text index.
 - T-3.06#A–#C — PENDING: blur/exposure/quality signals.
