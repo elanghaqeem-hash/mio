@@ -1,7 +1,7 @@
 # T-7 Creative & 3D Intelligence
 
 Status date: 2026-09-29
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Goal
 Extend Mio file intelligence to creative assets and 3D files using bounded metadata/structure inspection, provenance-aware previews, and evidence-grounded relationships.
@@ -14,7 +14,10 @@ Extend Mio file intelligence to creative assets and 3D files using bounded metad
 - T-7.04#A — COMPLETE (contract): preview/render evidence is pixel-bounded and requires explicit local/external/embedded/imported provenance.
 - T-7.05#A — COMPLETE (bridge): validated preview evidence can enter T-3 Image Intelligence without claiming an implicit renderer.
 - T-7.06#A — COMPLETE (contract): texture/material/external/embedded/derived relationships require evidence, reject traversal-like targets and duplicates, and imported references cannot be silently promoted to verified.
-- T-7.07#A — PLANNED: acceptance gate.
+- T-7.07#A — COMPLETE: final implementation head passed Mio CI, MIO Validation Gate, MIO Training Runner Contract, and Cloudflare Web Build.
 
 ## Boundary
 No proprietary creative parser, 3D renderer, mesh decoder, or vision model is claimed operational unless a concrete adapter exists and passes repository acceptance tests.
+
+## Acceptance evidence
+Final implementation head `7a1b019afd54ca89c98bd82462a71fdabdce48a9` passed all four repository workflows. Acceptance covers bounded contracts, validators, signature/structure evidence, preview bridging, and relationship safety; it does not claim proprietary creative parsers, a full 3D renderer, mesh decoder, or vision model execution.
