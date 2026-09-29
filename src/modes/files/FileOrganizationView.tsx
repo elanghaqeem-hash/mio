@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, BookOpen, ChevronLeft, FileText, Folder, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronLeft, FileText, Folder, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Unplug, Search, Network, Sparkles, History, ScanSearch } from 'lucide-react';
 import { ProjectManager } from '../../project/ProjectManager';
 import {
   authorizeDesktopWorkspace,
@@ -41,6 +41,9 @@ export const FileOrganizationView: React.FC = () => {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [status, setStatus] = useState(bridge ? 'No workspace authorized.' : 'Desktop workspace bridge unavailable in this runtime.');
   const [busy, setBusy] = useState(false);
+  const [activePanel, setActivePanel] = useState<'BROWSE'|'SEARCH'|'RELATIONSHIPS'|'ORGANIZE'|'RECOVERY'>('BROWSE');
+  const fileCount = entries.filter((entry) => entry.type === 'FILE').length;
+  const directoryCount = entries.filter((entry) => entry.type === 'DIRECTORY').length;
 
   const executeList = useCallback(async (authorizedWorkspace: DesktopWorkspaceDescriptor, relativePath: string) => {
     if (!gateway) return;
@@ -182,8 +185,8 @@ export const FileOrganizationView: React.FC = () => {
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#07090e] p-4 font-mono text-xs text-gray-300">
       <div className="mb-4 flex items-center justify-between rounded-xl border border-gray-800 bg-[#0d121d] p-3">
         <div>
-          <div className="flex items-center gap-2 text-cyan-300"><FolderOpen size={16} /><span className="font-bold text-sm">PROJECT WORKSPACE // READ-ONLY FILE BROWSER</span></div>
-          <div className="mt-1 text-[10px] text-gray-500">Explicit workspace authority · bounded reads · no write/delete/move operations</div>
+          <div className="flex items-center gap-2 text-cyan-300"><FolderOpen size={16} /><span className="font-bold text-sm">MIO FILE INTELLIGENCE</span></div>
+          <div className="mt-1 text-[10px] text-gray-500">Scan · inspect · search · organize · approval-gated mutation · recovery audit</div>
         </div>
         <div className="flex gap-2">
           {workspace ? (
@@ -194,6 +197,17 @@ export const FileOrganizationView: React.FC = () => {
         </div>
       </div>
 
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+        {([
+          ['BROWSE','Browse',ScanSearch],['SEARCH','Smart Search',Search],['RELATIONSHIPS','Relationships',Network],['ORGANIZE','Organize',Sparkles],['RECOVERY','Recovery',History],
+        ] as const).map(([id,label,Icon]) => <button key={id} onClick={()=>setActivePanel(id)} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[11px] ${activePanel===id?'border-cyan-500/60 bg-cyan-500/10 text-cyan-300':'border-gray-800 bg-[#0d121d] text-gray-500 hover:text-gray-300'}`}><Icon size={13}/>{label}</button>)}
+      </div>
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Files visible</div><div className="mt-1 text-lg text-gray-200">{fileCount}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Folders visible</div><div className="mt-1 text-lg text-gray-200">{directoryCount}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Authority</div><div className="mt-1 text-xs text-gray-200">{workspace?'AUTHORIZED':'LOCKED'}</div></div>
+        <div className="rounded-lg border border-gray-800 bg-[#0d121d] p-3"><div className="text-[9px] uppercase text-gray-600">Mutation</div><div className="mt-1 text-xs text-amber-300">APPROVAL REQUIRED</div></div>
+      </div>
       <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
         <div className="col-span-7 flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-[#0d121d]">
           <div className="flex items-center justify-between border-b border-gray-800 bg-[#111726] p-3">
