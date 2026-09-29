@@ -7,8 +7,8 @@ Status: IN PROGRESS
 Extend Mio's accepted file/image/document intelligence foundations into bounded, provenance-aware video understanding without claiming decoder/model capabilities that are not connected.
 
 ## Timeline
-- T-4.01#A — IN PROGRESS: canonical video probe/stream metadata contracts.
-- T-4.01#B — PLANNED: duration/dimensions/frame-rate/codec/container validation.
+- T-4.01#A — COMPLETE: canonical video probe/stream metadata contracts with explicit local/external provenance.
+- T-4.01#B — COMPLETE: duration/bitrate/dimensions/frame-rate/sample-rate/channels/codec/container validation plus deterministic primary-video selection.
 - T-4.02#A — PLANNED: scene/keyframe sampling contract.
 - T-4.02#B — PLANNED: bounded sampling budgets and deterministic timestamps.
 - T-4.03#A — PLANNED: reuse T-3 image intelligence for extracted frames.
