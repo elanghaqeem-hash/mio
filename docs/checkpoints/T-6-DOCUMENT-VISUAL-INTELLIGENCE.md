@@ -20,7 +20,9 @@ Extend Mio's accepted T-2/T-3 intelligence pipeline to documents while preservin
 - T-6.04#A — COMPLETE: canonical page-layout and typed visual-region schema (heading, paragraph, table, image, chart, form, header/footer, list, caption).
 - T-6.04#B — COMPLETE: bounded coordinate normalization/clipping into shared 0..1 page space.
 - T-6.04#C — COMPLETE: provenance-aware region validation and deterministic reading-order sorting.
-- T-6.05#A–#C — PENDING: scanned-page routing through T-3 OCR/vision contracts.
+- T-6.05#A — COMPLETE: provenance-safe mapping from T-3 OCR results into document page regions.
+- T-6.05#B — COMPLETE: OCR engine/language/local-vs-external provenance propagation and deterministic reading order.
+- T-6.05#C — IN PROGRESS: scanned-page render/vision adapter; OCR-to-layout boundary is complete, raw PDF/page rendering is not yet implemented.
 - T-6.06#A–#D — PENDING: document type/topic/entity/summary semantics with provenance.
 - T-6.07#A–#C — PENDING: document relationships and embedded-asset references.
 - T-6.08#A — PENDING: acceptance gate.
