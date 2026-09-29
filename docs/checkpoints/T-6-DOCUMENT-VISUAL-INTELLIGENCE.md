@@ -17,7 +17,9 @@ Extend Mio's accepted T-2/T-3 intelligence pipeline to documents while preservin
 - T-6.02#D — COMPLETE: Office media evidence and mixed-content classification.
 - T-6.03#A — COMPLETE: bounded stored/deflate ZIP reader integrated through authorized workspace, trusted IPC and preload; only known OOXML text entries are exposed.
 - T-6.03#B — COMPLETE: bounded native text extraction adapters for DOCX/PPTX/XLSX XML entries (2MiB entry ceiling, 500k-character output ceiling).
-- T-6.04#A–#C — PENDING: document layout and visual region schema.
+- T-6.04#A — COMPLETE: canonical page-layout and typed visual-region schema (heading, paragraph, table, image, chart, form, header/footer, list, caption).
+- T-6.04#B — COMPLETE: bounded coordinate normalization/clipping into shared 0..1 page space.
+- T-6.04#C — COMPLETE: provenance-aware region validation and deterministic reading-order sorting.
 - T-6.05#A–#C — PENDING: scanned-page routing through T-3 OCR/vision contracts.
 - T-6.06#A–#D — PENDING: document type/topic/entity/summary semantics with provenance.
 - T-6.07#A–#C — PENDING: document relationships and embedded-asset references.
