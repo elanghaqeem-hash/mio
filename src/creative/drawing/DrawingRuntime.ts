@@ -34,14 +34,10 @@ export class DrawingRuntime {
 
   public finalizeStroke(): DrawingStroke {
     const session = this.requireSession();
-    try {
-      const stroke = session.finalize();
-      this.session = null;
-      return stroke;
-    } catch (error) {
-      // Keep the active session recoverable when finalization validation fails.
-      throw error;
-    }
+    // On validation failure finalize() restores ACTIVE and throws, so the session stays recoverable.
+    const stroke = session.finalize();
+    this.session = null;
+    return stroke;
   }
 
   public commitStroke(
@@ -58,7 +54,9 @@ export class DrawingRuntime {
       this.session = null;
       return { stroke, ...result };
     } catch (error) {
-      // Preserve the finalized session as a recovery point. The canonical document was never mutated.
+      // Reopen the session as a recovery point so the stroke can be retried or cancelled.
+      // The canonical document was never mutated.
+      session.reopenAfterFailedCommit();
       throw error;
     }
   }
