@@ -93,6 +93,8 @@ Columns: PR files changed · conflicted files on 3-way apply · net files `main`
 
 ### 5.3 CURRENT (conflicted) (2)
 
+> Update 2026-10-11: both ported in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) (MIO-PRV-00.05). Once #521 merges, #427 and #431 and the earlier 10.18 iterations (#324, #354, #382, #393, #410) can be closed.
+
 | PR | Branch | Files | Conflicts | Notes |
 |---|---|---:|---:|---|
 | #427 | mio/sfx-10.18-release-v4 | 12 | 1 | Authoritative SFX 10.18. `SFXSample*`, `SFXUnifiedGraph` absent from `main`. |

@@ -81,7 +81,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | 3D Animation | `src/modes/animation/*` | IMPLEMENTED · VERIFIED · INTEGRATED | V2.23 pending |
 | Graphic / Motion | `src/creative/GraphicMotionWorkspace.ts`, `MotionWorkspace.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · Motion V2 NOT STARTED on `main` | #265 experimental |
 | Drawing | `src/creative/drawing/*` | IMPLEMENTED · VERIFIED · **PARTIAL** | F-10; 0.4 brush engine ported in 00.04, also not yet wired into the UI |
-| Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED · SFX 10.18+ NOT on `main` | #427 |
+| Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED | SFX 10.18 sample/waveform and 10.19 timeline ported in 00.05 |
 | Photo | `src/creative/photo/*` | IMPLEMENTED (domain contract) · PARTIAL | editing features pending |
 | Core runtime contracts (`MioCapabilityRequest` etc.) | — | NOT STARTED | Types spread across `src/types/*` |
 | Unified capability protocol | `CapabilityRegistry`, `ToolRegistry`, `ToolRouter` | PARTIAL | No per-capability manifest with I/O schema, limits, cancellation |
@@ -116,7 +116,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.02 | Test gate integrity | 00.01 | Every exported test runner executes in `npm test`; a harness self-check fails on unregistered or duplicate runners; failures exposed by the change are fixed | **DONE on branch**, PR pending (§7.2) |
 | 00.03 | Close superseded/duplicate PRs | 00.01, owner approval | 55 PRs closed, each with a comment linking the audit | NOT STARTED — **needs owner approval** |
 | 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each ported onto `main` as its own commit, suites registered, full gate green | **DONE on branch** (§7.3); originals become SUPERSEDED once #521 merges |
-| 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green, merged | NOT STARTED |
+| 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green | **DONE on branch** (§7.4) |
 | 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | NOT STARTED |
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | NOT STARTED |
 | 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
@@ -231,3 +231,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | `3b6e1b7`, `83869dd`, `39b39c4`, `c6e032b`, `57d2bb8` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | #428 and #424 are UI changes verified by typecheck and source-contract tests only; they need a manual browser check. Workers AI usage beyond the free daily allocation is billed by Cloudflare and should only be enabled deliberately. MeloTTS has no Indonesian voice. |
 | Next Task | 00.05 (SFX 10.18 #427 → 10.19 #431) |
+
+### 7.4 MIO-PRV-00.05 — SFX 10.18/10.19 Consolidation
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-00 — Repository Consolidation |
+| Objective | Land the authoritative SFX 10.18 (#427) and the stacked 10.19 (#431) on current `main` |
+| Baseline | Six SFX 10.18 iterations open (#324, #354, #382, #393, #410, #427) plus #431; no `SFXSample*`, `SFXUnifiedGraph`, or `SFXTimeline*` on `main` |
+| Implemented | **#427:** sample import/relink, region editing (trim, split, move, fade, reverse, loop, pitch), waveform peak pyramid, shared DSP graph, SFX Studio UI. The original registered none of its 4 suites; all are now registered. **Review fix:** import and relink had no resource bound (an hour of 48 kHz stereo decodes to about 1.4 GB of Float32), so files over 64 MB are now rejected before reading and decoded audio over 600 s is rejected after decoding, through the existing UI error path. Added `sfxSampleResourceLimitTests`. **#431:** SFX timeline with zoom, grid/region snap, multi-select group drag, markers, and playhead. **Review fix:** removed a ref read during render (stale viewport width) with no behavior change, since its consumers use only `pixelsPerSecond`. |
+| Files Changed | `src/creative/SFX{SampleRegistry,SampleRuntime,SampleWorkspace,UnifiedGraph,TimelineWorkspace}.ts`, `src/creative/AudioWorkspace.ts`, `src/types/creative.ts`, `src/modes/sfx/SFXStudioView.tsx`, 6 SFX test suites |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · build web + Electron PASS · `npm test` **1668/1668** |
+| Security Impact | Positive: bounded memory on user-supplied audio (the PRV-06 resource-exhaustion class) |
+| Dependencies | 00.02 |
+| Acceptance Gate | **PASS** locally; CI via #521 |
+| Commit/PR | `6de1858`, `c70d2e1` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | Owner decision: should manually built sample projects honor the 30 s SFX limit that `ResultValidator.validateSFX` applies to AI-generated patches? Imports currently extend `patch.duration` past 30 s. The timeline UI still needs a manual browser check. |
+| Next Task | 00.06 (review the 5 conflicted creative PRs) |
