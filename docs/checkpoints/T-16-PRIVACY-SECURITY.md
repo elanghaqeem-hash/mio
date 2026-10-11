@@ -16,3 +16,7 @@ Security invariants: fail closed on corrupted audit chain; never persist provide
 
 ## Acceptance
 Implementation head 992c42f9f4eb9d1d35e1693dae0ca454d6f54424 passed MIO Validation Gate, Mio CI, MIO Training Runner Contract, and Cloudflare Web Build.
+
+## Audit erratum (2026-10-11, MIO-PRV-00.01)
+
+This milestone's test suite was imported into `src/tests/runAllTests.ts` but not registered in the `runners` array, so CI never executed it. The CI results cited above did not cover these tests. When run directly on 2026-10-11, the suite passed. It is registered as of MIO-PRV-00.02, and its modules are not yet integrated into the live runtime path. See `docs/roadmap/MIO-PRE-RUNTIME-TRACKER.md` (findings F-1, F-3, F-6).

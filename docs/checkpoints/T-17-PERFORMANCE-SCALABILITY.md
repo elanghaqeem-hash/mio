@@ -16,3 +16,7 @@ Performance invariants: bounded concurrency; bounded queues/caches; deterministi
 
 ## Acceptance
 Implementation head b5b5d36c76beac3e745dff082db88ce01eb574cf passed all four CI workflows.
+
+## Audit erratum (2026-10-11, MIO-PRV-00.01)
+
+This milestone's test suite was imported into `src/tests/runAllTests.ts` but not registered in the `runners` array, so CI never executed it. The CI results cited above did not cover these tests. When run directly on 2026-10-11, the suite passed. It is registered as of MIO-PRV-00.02, and its modules are not yet integrated into the live runtime path. See `docs/roadmap/MIO-PRE-RUNTIME-TRACKER.md` (findings F-1, F-3, F-6).

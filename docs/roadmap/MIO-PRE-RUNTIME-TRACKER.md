@@ -1,0 +1,216 @@
+# MIO Pre-Runtime Development Tracker
+
+Program: MIO-PRV (Pre-Runtime → Mio AI Runtime V1 entry gate)
+Tracker created: 2026-10-11 · Baseline `main` HEAD: `802af2db` (T-17)
+Companion documents: [PR consolidation audit](./MIO-PRV-00-PR-CONSOLIDATION-AUDIT.md) · [Runtime V1 readiness gate](./MIO-AI-RUNTIME-V1-READINESS.md)
+
+Status vocabulary: IMPLEMENTED · VERIFIED · INTEGRATED · DEPLOYED · PRODUCTION-READY · PARTIAL · BLOCKED · NOT STARTED. A status is only recorded with the evidence cited next to it. Checkpoint documents, commit messages, and earlier conversations are **not** evidence on their own.
+
+Decision hierarchy: Security & data integrity → Verified repository state → Approved architecture → Existing roadmap → Integration requirements → New features.
+
+---
+
+## 1. Verified baseline (2026-10-11, `main` @ `802af2db`)
+
+Commands were run in a clean checkout with Node 22.22.0 and `npm ci`.
+
+| Check | Command | Result |
+|---|---|---|
+| Install | `npm ci` | PASS |
+| Typecheck | `npx tsc -b` | PASS (exit 0) |
+| Lint | `npm run lint` (oxlint) | PASS: 0 errors, warnings only |
+| Web build | `npm run build` | PASS (main chunk 511 kB > 500 kB advisory) |
+| Electron build | `npm run build:electron` | PASS |
+| Full test | `npm test` (after build) | PASS: deployment contract, promotion selftest, release smoke, manifest, **1541/1541** |
+| Benchmark | `npm run benchmark:file-scanner` | PASS: 5,000 synthetic files, median 6.85 ms (excludes disk I/O and media decoding) |
+| GitHub CI on `main` | Mio CI, MIO Validation Gate, Cloudflare Web Build, Training Runner Contract | all `success` for `802af2db` |
+
+`npm test` requires `dist/` and `dist-electron/` to exist (the release-smoke step checks build output), so it must run after `build` and `build:electron`, as CI does.
+
+## 2. Audit findings
+
+| ID | Severity | Finding | Evidence | Disposition |
+|---|---|---|---|---|
+| F-1 | **High (gate integrity)** | 13 test suites never ran in CI. 8 were imported into `src/tests/runAllTests.ts` but missing from the `runners` array (incl. **T-15 AI orchestration, T-16 privacy/security, T-17 performance**, drawing runtime/commit/renderer, FABRIK, IK authoring); 5 were never imported (mesh transform/gizmo/preview, animation gesture controller). | `grep` of the imports against the `runners` array; each suite was then run directly. | **Fixed in MIO-PRV-00.02**: all registered, plus a harness self-check. |
+| F-2 | Medium (data integrity) | `DrawingRuntime.commitStroke()` claimed to keep a recovery session after a failed commit, but left it in `COMMITTED` state, so it could neither be retried nor cancelled (`DRAWING_STROKE_NOT_ACTIVE`). Hidden by F-1. | `runCreativeDrawingCommitRuntimeTests` threw when run directly. | **Fixed in MIO-PRV-00.02**, with a retry regression test. |
+| F-3 | High (architecture) | Two model-routing systems. The live app routes through `src/agents/ModelRouter.ts` (local heuristic, Ollama, MIO Local, secure proxy). The T-15 `src/ai-orchestration/*` layer (cost ledger, circuit breaker, bounded fallback, provenance) is referenced only by its own tests. T-16's `RemoteProcessingPolicy` and `SecretRedaction` are only used by that unintegrated layer. | Import graph: `selectAIRoute`, `AICostLedger`, `executeWithBoundedFallback` have no non-test importers outside `src/ai-orchestration`. | MIO-PRV-02.01 must pick one router and fold the other in. |
+| F-4 | Medium (integration) | File Intelligence T-3 to T-11 engines (image, video, audio, document, 3D, semantic, relationship graph, smart search, organizer) are not consumed by the app or the agent. Only `LexicalSearch` and the safe-mutation flow are used, from `src/modes/files/FileOrganizationView.tsx`. | Import graph of `src/file-intelligence/*`. | MIO-PRV-04 / MIO-PRV-00.08 (T-18). |
+| F-5 | Medium (repository) | `main` history starts 2026-09-26; PRs created earlier share no ancestor with `main`. 70 open PRs, of which 55 are superseded or duplicate. 540 remote branches. | See the PR audit. | MIO-PRV-00.03 to 00.09. |
+| F-6 | Medium (traceability) | The T-15, T-16, and T-17 checkpoint docs state "COMPLETE" and "passed all CI", but their suites never executed (F-1). They do pass when run directly (7/7, 8/8, 7/7). | Direct runs on 2026-10-11. | Errata added to those checkpoint docs. Status recorded here as VERIFIED (2026-10-11), NOT INTEGRATED. |
+| F-7 | Low (CI) | CI Node versions differ: `ci.yml` 24, `training-runner-contract.yml` 24, `mio-validation.yml` 22, Cloudflare build `.node-version` = 22.16.0. | Workflow files. | MIO-PRV-00.10. |
+| F-8 | Info | Voice V1 production acceptance is `blocked` by design until physical-device (iOS Safari, desktop Safari, Chromium) and licensed-provider audio evidence exist. CI cannot produce that evidence. | `docs/MIO_VOICE_V1_PRODUCTION_ACCEPTANCE.md`, `docs/MIO_VOICE_V1_DEVICE_EVIDENCE_RECORD.md`. | MIO-PRV-07 (needs the owner's devices). |
+| F-9 | Info | No Computer Use subsystem, unified execution-trace model, unified core contract set, or end-to-end integration suite exists yet. | No such modules on `main`. | MIO-PRV-01, 09, 10, 11. |
+| F-10 | Low | `DrawingRuntime` (Drawing 0.2/0.3) is used only by tests and is not wired into the Drawing UI. | Import graph. | MIO-PRV-08. |
+| F-11 | Low | The file-scanner benchmark is synthetic; there is no real-disk or media-decoding benchmark. | Benchmark output note. | MIO-PRV-04. |
+
+## 3. Roadmap inventory (existing tracks found on `main`)
+
+| Track | Docs | Latest on `main` | Open / pending |
+|---|---|---|---|
+| TP-0.x platform foundation (task runtime, scheduler, resource governance, scoped authorization, capability gateway, desktop bridges, knowledge, research, deployment, routing, MIO Local, training/promotion/provenance) | `docs/checkpoints/TP-0.7` … `TP-0.70` | TP-0.70 | — |
+| T-x Multimodal File Intelligence | `docs/checkpoints/T-1` … `T-17` | T-17 | T-18 agent integration (#520, blocked) |
+| Mio Voice V2 → V4.x → RC1 → V1 | `docs/MIO_*VOICE*`, `docs/MIO_V4_*` | V1 boundary/evidence/acceptance evaluators | V1 production acceptance blocked on device evidence; Cloudflare Workers AI TTS (#502) |
+| Creative Document Kernel / Studios | `CREATIVE-1.0` … `1.8`, `2.2`, `10.0`, `10.1` | 1.8 / 10.1 | — |
+| 3D Modeling | `3D-MODELING-V1.0` … `V6.0`, `3D-MODELING-ROADMAP-V5.5-V6.0` | V6.0 closed | — |
+| 3D Animation | test suites (V1, V2.x IK/FABRIK) | V2.x | V2.23 (#424) |
+| Graphic / Motion | `CREATIVE-1.5`, Graphic V3.x | Graphic V3.2.x | V3.2.4 (#428); Motion V2 (#265, experimental) |
+| Drawing | `CREATIVE-1.3` | 0.1–0.3 | 0.4 brush engine (#418) |
+| Music / SFX | `CREATIVE-1.6`, `10.0`, `10.1` | Music 10.x automation | Music 10.63 (#423); SFX 10.18 (#427), 10.19 (#431) |
+| Photo | `CREATIVE-1.4` | PHOTO-01 domain contract | further photo editing |
+
+None of these targets is removed by this program. MIO-PRV adds the cross-cutting runtime work they need to converge on Runtime V1.
+
+## 4. Subsystem status matrix (evidence as of 2026-10-11)
+
+| Subsystem | Key modules | Status | Evidence / gap |
+|---|---|---|---|
+| Agent orchestrator | `src/agents/AgentOrchestrator.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Used by the chat path; uses `ModelContextAssembler` |
+| Model routing (live) | `src/agents/ModelRouter.ts`, `src/intelligence/model/*`, `functions/api/ai/generate.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · **PARTIAL** vs PRV-02 | No cost budget, circuit breaker, or capability registry on the live path (F-3) |
+| AI orchestration & cost (T-15) | `src/ai-orchestration/*` | IMPLEMENTED · VERIFIED (2026-10-11) · **NOT INTEGRATED** | F-3, F-6 |
+| Task runtime / scheduler / integrity | `src/orchestrator/*` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.7/0.8 suites registered |
+| Permission / capability / gateway | `PermissionEngine`, `CapabilityRegistry`, `SecureServiceGateway`, `PolicyEngine` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.10/0.11 suites |
+| Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · INTEGRATED | 13 non-test importers; cancellation coverage to be confirmed in PRV-06 |
+| Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · INTEGRATED · **PARTIAL** vs PRV-03 | No file-intelligence, graph, creative-document, or token-budget inputs yet |
+| Memory | `src/memory/*`, `src/security/MemoryManager.ts`, `GovernedMemoryActions.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Governance suites registered |
+| Research / evidence | `src/research/*`, `EvidenceGrounding.ts`, `src/project/EvidencePackage.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | — |
+| File Intelligence T-1…T-14 | `src/file-intelligence/*` | IMPLEMENTED · VERIFIED · **PARTIAL integration** | F-4 |
+| Privacy hardening (T-16) | `RemoteProcessingPolicy`, `SecretRedaction` | IMPLEMENTED · VERIFIED (2026-10-11) · **NOT INTEGRATED** | F-3 |
+| Performance (T-17) | `BoundedLruCache`, `BoundedTaskScheduler` | IMPLEMENTED · VERIFIED (2026-10-11) · PARTIAL | LRU used by `FileScanCache`; scheduler unused |
+| Voice | `src/services/voice/*`, `functions/api/voice/*` | IMPLEMENTED · VERIFIED · INTEGRATED · **production acceptance BLOCKED** | F-8 |
+| 3D Modeling | `src/modes/studio3d/*` | IMPLEMENTED · VERIFIED · INTEGRATED | V6.0 closeout merged |
+| 3D Animation | `src/modes/animation/*` | IMPLEMENTED · VERIFIED · INTEGRATED | V2.23 pending |
+| Graphic / Motion | `src/creative/GraphicMotionWorkspace.ts`, `MotionWorkspace.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · Motion V2 NOT STARTED on `main` | #265 experimental |
+| Drawing | `src/creative/drawing/*` | IMPLEMENTED · VERIFIED · **PARTIAL** | F-10; 0.4 pending |
+| Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED · SFX 10.18+ NOT on `main` | #427 |
+| Photo | `src/creative/photo/*` | IMPLEMENTED (domain contract) · PARTIAL | editing features pending |
+| Core runtime contracts (`MioCapabilityRequest` etc.) | — | NOT STARTED | Types spread across `src/types/*` |
+| Unified capability protocol | `CapabilityRegistry`, `ToolRegistry`, `ToolRouter` | PARTIAL | No per-capability manifest with I/O schema, limits, cancellation |
+| Computer Use | `DesktopBrowserGateway` (governed read only), `workspaceSandbox` | NOT STARTED | F-9 |
+| Observability / tracing | `ExecutionLedger`, `SecurityAuditLog`, `MutationAuditLog`, `AIProvenance` | PARTIAL | No shared trace ID or cost/latency model |
+| MioBench integration suite | `src/tests/*` (unit + contract) | NOT STARTED | 1610 unit/contract assertions; no end-to-end workflows |
+| Deployment | Cloudflare Pages build, Windows RC targets | VERIFIED (contract checks) | Post-deploy verification needs a live URL |
+
+## 5. Dependencies and critical path
+
+```
+PRV-00 Consolidation ──► PRV-01 Contract freeze ──► PRV-02 Router V2 ──► PRV-03 Context engine ──► PRV-05 Capability protocol ──► PRV-10 Observability ──► PRV-11 MioBench ──► Runtime V1 gate
+                              │                         ▲                     ▲                         │
+                              ├──► PRV-06 Security regression (runs alongside every milestone; freeze before PRV-11)
+                              ├──► PRV-04 File Intelligence hardening ────────┘                         │
+                              └──► PRV-09 Computer Use foundation (needs 05 + 06) ◄─────────────────────┘
+Parallel tracks (do not block the critical path unless in Runtime V1 scope): PRV-07 Voice, PRV-08 Creative adapters
+```
+
+**Critical path:** 00 → 01 → 02 → 03 → 05 → 10 → 11.
+
+## 6. Backlog
+
+Each row's acceptance criteria are the minimum. Test evidence must be a CI run or command output referenced in the task report.
+
+### MIO-PRV-00 — Repository consolidation
+Exit gate: stable baseline; each open PR has a clear purpose; every important change is tracked.
+
+| Task | Name | Depends on | Acceptance criteria | Status |
+|---|---|---|---|---|
+| 00.01 | Comprehensive repository & roadmap audit | — | Baseline verified by commands; all open PRs classified by content; subsystem matrix; backlog | **DONE** (this document + PR audit) |
+| 00.02 | Test gate integrity | 00.01 | Every exported test runner executes in `npm test`; a harness self-check fails on unregistered or duplicate runners; failures exposed by the change are fixed | **DONE on branch**, PR pending (§7.2) |
+| 00.03 | Close superseded/duplicate PRs | 00.01, owner approval | 55 PRs closed, each with a comment linking the audit | NOT STARTED — **needs owner approval** |
+| 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each rebased on `main`, suites registered, full gate green, merged individually | NOT STARTED |
+| 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green, merged | NOT STARTED |
+| 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | NOT STARTED |
+| 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | NOT STARTED |
+| 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
+| 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
+| 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | NOT STARTED |
+
+### MIO-PRV-01 — Core runtime contract freeze
+Exit gate: core contracts usable without depending on any subsystem's UI.
+
+| Task | Name | Acceptance criteria |
+|---|---|---|
+| 01.01 | Contract inventory | Map existing types (`src/types/*`, `ai-orchestration`, `file-intelligence/contracts.ts`, voice) to the target contracts; list overlaps |
+| 01.02 | Define `MioCapabilityRequest/Result`, `MioContext`, `MioEvidence`, `MioPermission`, `MioArtifact`, `MioExecutionTrace`, `MioRuntimeError` (v1) | Typed, versioned (`schemaVersion`), runtime validators with no new runtime dependency, no UI imports |
+| 01.03 | Adapters from existing types | Existing subsystems expose contract-shaped values without behavior change; all existing tests green |
+| 01.04 | Compatibility tests | Round-trip, rejection of malformed input, version-mismatch handling |
+
+### MIO-PRV-02 — Model Router V2
+Exit gate: local/cloud routing follows policy, cost limits, and test results.
+
+| Task | Name | Acceptance criteria |
+|---|---|---|
+| 02.01 | Router unification decision (F-3) | ADR choosing one router; the other folded in; no duplicate routing logic |
+| 02.02 | Model capability registry | Capabilities, context limits, locality, and cost per provider/model, sourced from configured providers only |
+| 02.03 | Cost governance on the live path | Per-task and monthly budgets enforced fail-closed; paid routes off unless explicitly enabled |
+| 02.04 | Resilience | Provider timeout, circuit breaker, deterministic fallback order, provider health |
+| 02.05 | Privacy-safe fallback | Tests prove no cloud fallback for `LOCAL_ONLY` / private data |
+
+### MIO-PRV-03 — Unified Context Engine
+Exit gate: relevant context without cross-project leakage, and external content never gains authority.
+
+03.01 context-source adapters (intent, conversation, working memory, governed memory, project knowledge, file intelligence, graph, research evidence, creative document, task state, permission state) · 03.02 relevance ranking + token budgeting · 03.03 provenance + trust classification · 03.04 project isolation tests · 03.05 prompt-injection regression set.
+
+### MIO-PRV-04 — Multimodal File Intelligence hardening
+Exit gate: ingestion, indexing, search, and relationship retrieval meet measured benchmarks.
+
+04.01 integrate T-3…T-11 engines behind the capability protocol · 04.02 corrupted/unsupported file handling · 04.03 size/resource limits · 04.04 incremental indexing + rebuild/migration · 04.05 cancellation + cache consistency · 04.06 real-disk benchmark (replacing the synthetic-only benchmark).
+
+### MIO-PRV-05 — Unified Capability Protocol
+Exit gate: the agent discovers and invokes capabilities through one controlled protocol.
+
+05.01 capability manifest schema (I/O schema, risk level, permissions, limits, cancellation, audit) · 05.02 manifests for files, research, memory, model inference, creative, voice · 05.03 execution through `CapabilityRegistry` + `SecureServiceGateway` · 05.04 negative tests (unknown capability, schema violation, permission denial).
+
+### MIO-PRV-06 — Security regression & governance freeze
+Exit gate: no open critical/high finding affecting Runtime V1; regression gate passes.
+
+06.01 consolidate the existing security suites into a named regression gate · 06.02 add missing cases: path traversal, SSRF, secret exposure, cross-project leakage, resource exhaustion · 06.03 Emergency Stop cancellation coverage across task, model, voice, and creative · 06.04 audit completeness check.
+
+### MIO-PRV-07 — Mio Voice runtime stabilization (parallel)
+07.01 integrate #502 (Workers AI TTS) with gateway tests · 07.02 STT path review · 07.03 physical-device evidence runs on iOS Safari, desktop Safari, and Chromium (**needs the owner's devices**) · 07.04 latency/interruption/fallback acceptance from measured data. Consent rule: no voice cloning or speaker imitation without documented rights.
+
+### MIO-PRV-08 — Creative capability adapters (parallel)
+08.01 adapter contract over the Creative Document Kernel · 08.02 one validated structured-instruction workflow per in-scope engine · 08.03 wire `DrawingRuntime` into the Drawing UI (F-10) · 08.04 keep the active creative roadmaps (advanced 3D, Drawing brush engine, Motion V2, Music/SFX/Photo) on their own tracks.
+
+### MIO-PRV-09 — Governed Computer Use foundation
+09.01 action taxonomy (observe, navigate, read, low-risk, mutating, sensitive) · 09.02 observe/read-only implementation behind the sandbox · 09.03 approval flow for mutating actions; irreversible, financial, credential, and external-submission actions denied by policy · 09.04 audit + cancellation tests.
+
+### MIO-PRV-10 — Observability, recovery & cost governance
+10.01 `MioExecutionTrace` emitted by router, tools, permissions, and capabilities · 10.02 token, cost, and latency accounting · 10.03 checkpoint + recovery that never auto-retries mutating actions with an uncertain outcome.
+
+### MIO-PRV-11 — MioBench integration & production gate
+11.01 harness for the 15 required end-to-end workflows · 11.02 negative, concurrency, and performance scenarios · 11.03 gate wired into CI.
+
+## 7. Task reports
+
+### 7.1 MIO-PRV-00.01 — Comprehensive Repository & Roadmap Audit
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-00 — Repository Consolidation |
+| Objective | Establish an evidence-based baseline, classify all open work, and produce the consolidated roadmap and backlog |
+| Baseline | `main` @ `802af2db`; 70 open PRs; 540 branches; 0 open issues |
+| Implemented | This tracker, the [PR audit](./MIO-PRV-00-PR-CONSOLIDATION-AUDIT.md), the [readiness gate](./MIO-AI-RUNTIME-V1-READINESS.md), and errata on the T-15/T-16/T-17 checkpoints |
+| Files Changed | `docs/roadmap/*` (new), `docs/checkpoints/T-15-…`, `T-16-…`, `T-17-…` (errata) |
+| Test Results | Baseline in §1; per-PR content classification in the PR audit |
+| Security Impact | None (documentation). Identified that T-16 privacy controls are not on the live path (F-3). |
+| Dependencies | — |
+| Acceptance Gate | **PASS** |
+| Commit/PR | Branch `claude/mio-runtime-v1-prep-x0bpzv` |
+| Remaining Gaps | Owner decisions for 00.03 and 00.09; branch-level (non-PR) triage |
+| Next Task | MIO-PRV-00.02 |
+
+### 7.2 MIO-PRV-00.02 — Test Gate Integrity
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-00 — Repository Consolidation |
+| Objective | Guarantee that every test suite in the repository runs in CI (F-1), and fix what that exposes |
+| Baseline | 13 suites never executed; `npm test` reported 1541/1541 |
+| Implemented | Registered all 13 suites in `runAllTests.ts`. Added `testHarnessIntegrityTests.ts`, which fails if any exported `run*` function in `src/tests` is not in `runners` or is registered twice. Fixed F-2: added `DrawingStrokeSession.reopenAfterFailedCommit()`; `DrawingRuntime.commitStroke()` now reopens the session when the commit plan fails; removed two no-op try/catch wrappers (lint `no-useless-catch`). Added a retry regression case. |
+| Files Changed | `src/tests/runAllTests.ts`, `src/tests/testHarnessIntegrityTests.ts` (new), `src/tests/creativeDrawingCommitRuntimeTests.ts`, `src/creative/drawing/DrawingRuntime.ts`, `src/creative/drawing/DrawingStrokeSession.ts` |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · `npm run build` + `build:electron` PASS · `npm test` **1610/1610** PASS. Negative checks: removing a runner from `runners` fails with `Unregistered test runners: runMeshGizmoStateTests`; reverting the drawing fix fails with `DRAWING_STROKE_NOT_ACTIVE`. |
+| Security Impact | Positive: T-16 privacy/security assertions now run on every PR |
+| Dependencies | 00.01 |
+| Acceptance Gate | **PASS** locally; CI NOT VERIFIED until a PR runs |
+| Commit/PR | Branch `claude/mio-runtime-v1-prep-x0bpzv` (PR not yet opened) |
+| Remaining Gaps | Open PRs that add suites (e.g. #520) must also register them, which the new self-check now enforces |
+| Next Task | MIO-PRV-00.03 (needs owner approval) and 00.04, which can start in parallel |
