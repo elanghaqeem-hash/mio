@@ -122,6 +122,8 @@ Columns: PR files changed · conflicted files on 3-way apply · net files `main`
 
 ### 5.5 EXPERIMENTAL (2)
 
+> Update 2026-10-11: see the [Motion V2 re-port plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md). A trial port showed #265's own Motion core fails 4 checks (2 compile errors, 4 suites returning `void`, and an undo defect in grouped keyframe moves), and that its non-Motion files are stale copies that would regress `main`.
+
 | PR | Branch | Notes |
 |---|---|---|
 | #265 | feat/motion-graphic-engine-v2 (draft) | 54 files, +2,580 lines, 13 conflicted files, 37 net files. Motion V2 is an active roadmap target; `main` has only `src/creative/MotionWorkspace.ts`. Requires a planned re-port onto current `main`, not a merge. |

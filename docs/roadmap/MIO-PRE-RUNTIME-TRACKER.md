@@ -118,7 +118,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each ported onto `main` as its own commit, suites registered, full gate green | **DONE on branch** (§7.3); originals become SUPERSEDED once #521 merges |
 | 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green | **DONE on branch** (§7.4) |
 | 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | **DONE on branch** (§7.5) |
-| 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | NOT STARTED |
+| 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | **DONE**: [plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md); phases tracked as MIO-PRV-08.M1–M4 |
 | 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
 | 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
 | 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | NOT STARTED |
@@ -168,7 +168,7 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 07.01 integrate #502 (Workers AI TTS) with gateway tests · 07.02 STT path review · 07.03 physical-device evidence runs on iOS Safari, desktop Safari, and Chromium (**needs the owner's devices**) · 07.04 latency/interruption/fallback acceptance from measured data. Consent rule: no voice cloning or speaker imitation without documented rights.
 
 ### MIO-PRV-08 — Creative capability adapters (parallel)
-08.01 adapter contract over the Creative Document Kernel · 08.02 one validated structured-instruction workflow per in-scope engine · 08.03 wire `DrawingRuntime` into the Drawing UI (F-10) · 08.04 keep the active creative roadmaps (advanced 3D, Drawing brush engine, Motion V2, Music/SFX/Photo) on their own tracks.
+08.M1–M4 Motion V2 re-port in four phases (see the [plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md); #265's own core fails 4 checks, including a grouped-move undo defect) · 08.01 adapter contract over the Creative Document Kernel · 08.02 one validated structured-instruction workflow per in-scope engine · 08.03 wire `DrawingRuntime` into the Drawing UI (F-10) · 08.04 keep the active creative roadmaps (advanced 3D, Drawing brush engine, Motion V2, Music/SFX/Photo) on their own tracks.
 
 ### MIO-PRV-09 — Governed Computer Use foundation
 09.01 action taxonomy (observe, navigate, read, low-risk, mutating, sensitive) · 09.02 observe/read-only implementation behind the sandbox · 09.03 approval flow for mutating actions; irreversible, financial, credential, and external-submission actions denied by policy · 09.04 audit + cancellation tests.
