@@ -83,7 +83,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | Drawing | `src/creative/drawing/*` | IMPLEMENTED · VERIFIED · **PARTIAL** | F-10; 0.4 brush engine ported in 00.04, also not yet wired into the UI |
 | Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED | SFX 10.18 sample/waveform and 10.19 timeline ported in 00.05 |
 | Photo | `src/creative/photo/*` | IMPLEMENTED (domain contract) · PARTIAL | editing features pending |
-| Core runtime contracts (`MioCapabilityRequest` etc.) | — | NOT STARTED | Types spread across `src/types/*` |
+| Core runtime contracts (`MioCapabilityRequest` etc.) | `src/contracts/*` | IMPLEMENTED · VERIFIED · not yet emitted natively | v1 contracts, validators, adapters (PRV-01); native emission in PRV-05/10 |
 | Unified capability protocol | `CapabilityRegistry`, `ToolRegistry`, `ToolRouter` | PARTIAL | No per-capability manifest with I/O schema, limits, cancellation |
 | Computer Use | `DesktopBrowserGateway` (governed read only), `workspaceSandbox` | NOT STARTED | F-9 |
 | Observability / tracing | `ExecutionLedger`, `SecurityAuditLog`, `MutationAuditLog`, `AIProvenance` | PARTIAL | No shared trace ID or cost/latency model |
@@ -128,10 +128,10 @@ Exit gate: core contracts usable without depending on any subsystem's UI.
 
 | Task | Name | Acceptance criteria |
 |---|---|---|
-| 01.01 | Contract inventory | Map existing types (`src/types/*`, `ai-orchestration`, `file-intelligence/contracts.ts`, voice) to the target contracts; list overlaps |
-| 01.02 | Define `MioCapabilityRequest/Result`, `MioContext`, `MioEvidence`, `MioPermission`, `MioArtifact`, `MioExecutionTrace`, `MioRuntimeError` (v1) | Typed, versioned (`schemaVersion`), runtime validators with no new runtime dependency, no UI imports |
-| 01.03 | Adapters from existing types | Existing subsystems expose contract-shaped values without behavior change; all existing tests green |
-| 01.04 | Compatibility tests | Round-trip, rejection of malformed input, version-mismatch handling |
+| 01.01 | Contract inventory | Map existing types (`src/types/*`, `ai-orchestration`, `file-intelligence/contracts.ts`, voice) to the target contracts; list overlaps — **DONE on branch** (§7.6) |
+| 01.02 | Define `MioCapabilityRequest/Result`, `MioContext`, `MioEvidence`, `MioPermission`, `MioArtifact`, `MioExecutionTrace`, `MioRuntimeError` (v1) | Typed, versioned (`schemaVersion`), runtime validators with no new runtime dependency, no UI imports — **DONE on branch** (§7.6) |
+| 01.03 | Adapters from existing types | Existing subsystems expose contract-shaped values without behavior change; all existing tests green — **DONE on branch** (§7.6) |
+| 01.04 | Compatibility tests | Round-trip, rejection of malformed input, version-mismatch handling — **DONE on branch** (§7.6) |
 
 ### MIO-PRV-02 — Model Router V2
 Exit gate: local/cloud routing follows policy, cost limits, and test results.
@@ -265,3 +265,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | `63243aa` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | Live automation needs a listening check in a browser. Music roadmap gap: per-note duplication has no UI (from #182). |
 | Next Task | 00.07 (Motion V2 re-port plan) |
+
+### 7.6 MIO-PRV-01 — Core Runtime Contract Freeze
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-01 — Core Runtime Contract Freeze |
+| Objective | One versioned, validated, UI-independent set of runtime contracts |
+| Baseline | No unified contracts; each subsystem had its own request, result, evidence, and trace shapes (inventory in [MIO-PRV-01-CORE-CONTRACTS.md](./MIO-PRV-01-CORE-CONTRACTS.md) §1) |
+| Implemented | `MioContext`, `MioPermission`, `MioCapabilityRequest`, `MioCapabilityResult`, `MioEvidence`, `MioArtifact`, `MioExecutionTrace`, `MioTraceSpan`, `MioRuntimeError` (schema v1), reusing the existing domain enums with compile-time exhaustiveness guards. Hand-written fail-closed validators (bounded, versioned, secret-key rejection, result/trace consistency, `UNKNOWN` mutations never retryable). Six adapters from existing types. |
+| Files Changed | `src/contracts/*` (new), `src/tests/mioContractTests.ts` (new), `src/tests/runAllTests.ts`, `docs/roadmap/MIO-PRV-01-CORE-CONTRACTS.md` (new) |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · `npm test` **1684/1684** (11 new contract tests). Negative check: adding an unmapped `MioSystemMode` member fails `tsc` at the exhaustiveness guard. |
+| Security Impact | Positive: contracts encode no-secrets, untrusted-evidence, and no-blind-retry rules that PRV-03/05/10 build on |
+| Dependencies | 00.02 |
+| Acceptance Gate | **PASS** for the PRV-01 exit gate (usable without any subsystem UI); CI via #521 |
+| Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | Subsystems are adapted, not yet native producers (PRV-05/10). `ToolExecutionContext`/`CapabilityExecutionContext` duplication to retire in PRV-05. |
+| Next Task | MIO-PRV-02.01 router unification decision (ADR), which also unblocks 00.08 (T-18) |

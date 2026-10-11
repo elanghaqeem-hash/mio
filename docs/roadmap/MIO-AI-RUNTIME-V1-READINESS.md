@@ -13,7 +13,7 @@ Gate values: PASS · FAIL · BLOCKED · NOT VERIFIED · NOT APPLICABLE (with jus
 |---|---|---|---|---|
 | G-00 | Repository baseline | Stable `main`; every open PR has a purpose; important changes tracked | **FAIL** | Baseline builds and tests green (tracker §1), but 55 superseded PRs are still open and the SFX/Motion/Drawing work is not consolidated (PR audit) |
 | G-00a | Test gate integrity | Every suite runs in CI; self-check present | **PASS (local)** / NOT VERIFIED (CI) | MIO-PRV-00.02: 1610/1610; negative checks fail as expected |
-| G-01 | Core contract freeze | `Mio*` contracts typed, versioned, validated, UI-independent | **FAIL** | NOT STARTED |
+| G-01 | Core contract freeze | `Mio*` contracts typed, versioned, validated, UI-independent | **PASS (local)** / NOT VERIFIED (CI) | `src/contracts` v1 + 11 tests; see [MIO-PRV-01-CORE-CONTRACTS.md](./MIO-PRV-01-CORE-CONTRACTS.md) |
 | G-02 | Model Router V2 | Policy/cost/privacy routing with fallback, timeout, circuit breaker, verified by tests on the live path | **FAIL** | Two routers; cost and resilience logic not on the live path (F-3) |
 | G-03 | Unified Context Engine | Ranked, budgeted, provenance-tagged context with project isolation and injection resistance | **FAIL** | `ModelContextAssembler` is PARTIAL |
 | G-04 | Multimodal File Intelligence | Measured reliability/performance benchmarks; engines reachable by the agent | **FAIL** | Engines not integrated (F-4); benchmark synthetic only (F-11) |
@@ -56,3 +56,4 @@ The target is minimum recurring cost. It is not a promise that every function is
 | Date | Change |
 |---|---|
 | 2026-10-11 | Initial gate evaluation (MIO-PRV-00.01); G-00a passes locally after MIO-PRV-00.02 |
+| 2026-10-11 | G-01 passes locally after MIO-PRV-01 |
