@@ -37,7 +37,7 @@ Commands were run in a clean checkout with Node 22.22.0 and `npm ci`.
 | F-4 | Medium (integration) | File Intelligence T-3 to T-11 engines (image, video, audio, document, 3D, semantic, relationship graph, smart search, organizer) are not consumed by the app or the agent. Only `LexicalSearch` and the safe-mutation flow are used, from `src/modes/files/FileOrganizationView.tsx`. | Import graph of `src/file-intelligence/*`. | MIO-PRV-04 / MIO-PRV-00.08 (T-18). |
 | F-5 | Medium (repository) | `main` history starts 2026-09-26; PRs created earlier share no ancestor with `main`. 70 open PRs, of which 55 are superseded or duplicate. 540 remote branches. | See the PR audit. | MIO-PRV-00.03 to 00.09. |
 | F-6 | Medium (traceability) | The T-15, T-16, and T-17 checkpoint docs state "COMPLETE" and "passed all CI", but their suites never executed (F-1). They do pass when run directly (7/7, 8/8, 7/7). | Direct runs on 2026-10-11. | Errata added to those checkpoint docs. Status recorded here as VERIFIED (2026-10-11), NOT INTEGRATED. |
-| F-7 | Low (CI) | CI Node versions differ: `ci.yml` 24, `training-runner-contract.yml` 24, `mio-validation.yml` 22, Cloudflare build `.node-version` = 22.16.0. | Workflow files. | MIO-PRV-00.10. |
+| F-7 | Low (CI) — **fixed in 00.10** | CI Node versions differ: `ci.yml` 24, `training-runner-contract.yml` 24, `mio-validation.yml` 22, Cloudflare build `.node-version` = 22.16.0. | Workflow files. | MIO-PRV-00.10. |
 | F-8 | Info | Voice V1 production acceptance is `blocked` by design until physical-device (iOS Safari, desktop Safari, Chromium) and licensed-provider audio evidence exist. CI cannot produce that evidence. | `docs/MIO_VOICE_V1_PRODUCTION_ACCEPTANCE.md`, `docs/MIO_VOICE_V1_DEVICE_EVIDENCE_RECORD.md`. | MIO-PRV-07 (needs the owner's devices). |
 | F-9 | Info | No Computer Use subsystem, unified execution-trace model, unified core contract set, or end-to-end integration suite exists yet. | No such modules on `main`. | MIO-PRV-01, 09, 10, 11. |
 | F-10 | Low | `DrawingRuntime` (Drawing 0.2/0.3) is used only by tests and is not wired into the Drawing UI. | Import graph. | MIO-PRV-08. |
@@ -121,7 +121,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | **DONE**: [plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md); phases tracked as MIO-PRV-08.M1–M4 |
 | 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
 | 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
-| 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | NOT STARTED |
+| 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | **PARTIAL**: Node pinned in all 4 workflows (F-7 fixed). Open: lazy-load workspace modes to split the 511 kB app chunk (three.js is already split); lint warning burn-down |
 
 ### MIO-PRV-01 — Core runtime contract freeze
 Exit gate: core contracts usable without depending on any subsystem's UI.
