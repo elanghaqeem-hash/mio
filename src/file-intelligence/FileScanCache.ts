@@ -1,38 +1,5 @@
 import type { FileAsset } from './contracts';
-
-export interface FileScanCacheKey {
-  workspaceId: string;
-  relativePath: string;
-  bytes: number;
-  modifiedAtMs?: number;
-}
-
-const keyOf = (value: FileScanCacheKey): string =>
-  JSON.stringify([value.workspaceId, value.relativePath, value.bytes, value.modifiedAtMs ?? null]);
-
-export class FileScanCache {
-  private readonly entries = new Map<string, FileAsset>();
-
-  public get(key: FileScanCacheKey): FileAsset | undefined {
-    const asset = this.entries.get(keyOf(key));
-    return asset ? structuredClone(asset) : undefined;
-  }
-
-  public put(key: FileScanCacheKey, asset: FileAsset): void {
-    this.entries.set(keyOf(key), structuredClone(asset));
-  }
-
-  public invalidateWorkspace(workspaceId: string): number {
-    let removed = 0;
-    for (const [key, asset] of this.entries) {
-      if (asset.identity.workspaceId === workspaceId) {
-        this.entries.delete(key);
-        removed += 1;
-      }
-    }
-    return removed;
-  }
-
-  public clear(): void { this.entries.clear(); }
-  public get size(): number { return this.entries.size; }
-}
+import { BoundedLruCache } from '../performance/BoundedLruCache';
+export interface FileScanCacheKey{workspaceId:string;relativePath:string;bytes:number;modifiedAtMs?:number;}
+const keyOf=(v:FileScanCacheKey):string=>JSON.stringify([v.workspaceId,v.relativePath,v.bytes,v.modifiedAtMs??null]);
+export class FileScanCache{private readonly entries:BoundedLruCache<string,FileAsset>;constructor(maxEntries=5000){this.entries=new BoundedLruCache(maxEntries);}get(key:FileScanCacheKey){const a=this.entries.get(keyOf(key));return a?structuredClone(a):undefined;}put(key:FileScanCacheKey,asset:FileAsset){this.entries.set(keyOf(key),structuredClone(asset));}invalidateWorkspace(workspaceId:string){let removed=0;for(const [key,asset] of this.entries.entries()){if(asset.identity.workspaceId===workspaceId){this.entries.delete(key);removed++;}}return removed;}clear(){this.entries.clear();}get size(){return this.entries.size;}}
