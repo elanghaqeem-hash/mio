@@ -44,7 +44,7 @@ const JWT_CLOCK_SKEW_SECONDS = 30;
 const JWKS_CACHE_MS = 5 * 60 * 1000;
 const jwksCache = new Map<string, CachedJwks>();
 
-function decodeBase64Url(value: string): Uint8Array {
+function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
   const binary = atob(padded);
