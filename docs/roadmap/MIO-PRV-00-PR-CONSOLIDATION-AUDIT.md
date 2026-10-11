@@ -81,6 +81,8 @@ Columns: PR files changed · conflicted files on 3-way apply · net files `main`
 
 ### 5.2 READY FOR INTEGRATION (5) — not on `main`, apply cleanly
 
+> Update 2026-10-11: all five are ported in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) (MIO-PRV-00.04). Once #521 merges they become SUPERSEDED and can be closed.
+
 | PR | Branch | Files | +lines | Notes |
 |---|---|---:|---:|---|
 | #502 | feat/mio-voice-cloudflare-workers-ai | 2 | 67 | Adds `cloudflare-workers-ai` TTS provider (MeloTTS). Lowest-cost hosted TTS option; deliberately falls back to device voice for unsupported locales (incl. `id-ID`). Needs a gateway test before merge. |

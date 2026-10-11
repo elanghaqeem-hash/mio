@@ -76,11 +76,11 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | File Intelligence T-1…T-14 | `src/file-intelligence/*` | IMPLEMENTED · VERIFIED · **PARTIAL integration** | F-4 |
 | Privacy hardening (T-16) | `RemoteProcessingPolicy`, `SecretRedaction` | IMPLEMENTED · VERIFIED (2026-10-11) · **NOT INTEGRATED** | F-3 |
 | Performance (T-17) | `BoundedLruCache`, `BoundedTaskScheduler` | IMPLEMENTED · VERIFIED (2026-10-11) · PARTIAL | LRU used by `FileScanCache`; scheduler unused |
-| Voice | `src/services/voice/*`, `functions/api/voice/*` | IMPLEMENTED · VERIFIED · INTEGRATED · **production acceptance BLOCKED** | F-8 |
+| Voice | `src/services/voice/*`, `functions/api/voice/*` | IMPLEMENTED · VERIFIED · INTEGRATED · **production acceptance BLOCKED** | F-8. Workers AI (MeloTTS) provider added in 00.04 (opt-in; no `id-ID`) |
 | 3D Modeling | `src/modes/studio3d/*` | IMPLEMENTED · VERIFIED · INTEGRATED | V6.0 closeout merged |
 | 3D Animation | `src/modes/animation/*` | IMPLEMENTED · VERIFIED · INTEGRATED | V2.23 pending |
 | Graphic / Motion | `src/creative/GraphicMotionWorkspace.ts`, `MotionWorkspace.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · Motion V2 NOT STARTED on `main` | #265 experimental |
-| Drawing | `src/creative/drawing/*` | IMPLEMENTED · VERIFIED · **PARTIAL** | F-10; 0.4 pending |
+| Drawing | `src/creative/drawing/*` | IMPLEMENTED · VERIFIED · **PARTIAL** | F-10; 0.4 brush engine ported in 00.04, also not yet wired into the UI |
 | Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED · SFX 10.18+ NOT on `main` | #427 |
 | Photo | `src/creative/photo/*` | IMPLEMENTED (domain contract) · PARTIAL | editing features pending |
 | Core runtime contracts (`MioCapabilityRequest` etc.) | — | NOT STARTED | Types spread across `src/types/*` |
@@ -115,7 +115,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.01 | Comprehensive repository & roadmap audit | — | Baseline verified by commands; all open PRs classified by content; subsystem matrix; backlog | **DONE** (this document + PR audit) |
 | 00.02 | Test gate integrity | 00.01 | Every exported test runner executes in `npm test`; a harness self-check fails on unregistered or duplicate runners; failures exposed by the change are fixed | **DONE on branch**, PR pending (§7.2) |
 | 00.03 | Close superseded/duplicate PRs | 00.01, owner approval | 55 PRs closed, each with a comment linking the audit | NOT STARTED — **needs owner approval** |
-| 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each rebased on `main`, suites registered, full gate green, merged individually | NOT STARTED |
+| 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each ported onto `main` as its own commit, suites registered, full gate green | **DONE on branch** (§7.3); originals become SUPERSEDED once #521 merges |
 | 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green, merged | NOT STARTED |
 | 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | NOT STARTED |
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | NOT STARTED |
@@ -214,3 +214,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | Branch `claude/mio-runtime-v1-prep-x0bpzv` (PR not yet opened) |
 | Remaining Gaps | Open PRs that add suites (e.g. #520) must also register them, which the new self-check now enforces |
 | Next Task | MIO-PRV-00.03 (needs owner approval) and 00.04, which can start in parallel |
+
+### 7.3 MIO-PRV-00.04 — Integrate Ready PRs
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-00 — Repository Consolidation |
+| Objective | Land the 5 READY PRs on current `main` without blind merges |
+| Baseline | #418, #423, #424, #428, #502 open; none on `main`. Their branches can only be integrated by porting, because most lack shared history with `main`. |
+| Implemented | One commit per PR, attributed to the original author: **#418** Drawing 0.4 brush engine (its suite was imported but unregistered, and the 00.02 self-check caught it). **#502** Workers AI TTS, with review fixes: MeloTTS-only model allowlist, a 30 s timeout on the binding call, result normalization and media-type validation (raw stream, `Response`, or base64 JSON), no error-detail leakage, a restored `endpoint` null guard that the original had lost, and a new 7-case gateway suite against the real handlers. **#424** Animation V2.23 IK handle focus. **#423** Music 10.63 offline AUX/FX automation parity. **#428** Graphic V3.2.4 segment hit & insert. |
+| Files Changed | `src/creative/drawing/DrawingBrush*.ts`, `functions/api/voice/{synthesize,_workersAi,_session}.ts`, `.env.example`, `src/modes/animation/Animation3DViewport{,Bridge}.tsx`, `src/modes/music/MusicStudioView.tsx`, `src/modes/graphic/GraphicStudioView.tsx`, tests |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · build web + Electron PASS · `npm test` **1625/1625** |
+| Security Impact | The Workers AI path fails closed (unverified model counts as unconfigured; timeout returns 504; non-audio is rejected; binding errors are not echoed). Importing `synthesize.ts` into tests brings the voice gateway under typecheck for the first time; this exposed one latent type error in `_session.ts` (type-only fix). |
+| Dependencies | 00.02 |
+| Acceptance Gate | **PASS** locally; CI via #521 |
+| Commit/PR | `3b6e1b7`, `83869dd`, `39b39c4`, `c6e032b`, `57d2bb8` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | #428 and #424 are UI changes verified by typecheck and source-contract tests only; they need a manual browser check. Workers AI usage beyond the free daily allocation is billed by Cloudflare and should only be enabled deliberately. MeloTTS has no Indonesian voice. |
+| Next Task | 00.05 (SFX 10.18 #427 → 10.19 #431) |
