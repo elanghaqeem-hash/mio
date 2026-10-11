@@ -1,3 +1,4 @@
+import { runAgentFileIntegrationTests } from './agentFileIntegrationTests';
 import { runPerformanceScalabilityTests } from './performanceScalabilityTests';import { runPrivacySecurityHardeningTests } from './privacySecurityHardeningTests';import { runAIOrchestrationTests } from './aiOrchestrationTests';import { runMioTestSuite } from './systemTests';
 import { runResearchConflictTests } from './researchConflictTests';
 import { runToolRouterTests } from './toolRouterTests';
