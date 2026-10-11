@@ -138,7 +138,7 @@ Exit gate: local/cloud routing follows policy, cost limits, and test results.
 
 | Task | Name | Acceptance criteria |
 |---|---|---|
-| 02.01 | Router unification decision (F-3) | ADR choosing one router; the other folded in; no duplicate routing logic |
+| 02.01 | Router unification decision (F-3) | ADR choosing one router; the other folded in; no duplicate routing logic — **ADR PROPOSED**: [ADR-001](./ADR-001-MODEL-ROUTER-UNIFICATION.md), awaiting owner decisions D-1 (default paid budget) and D-2 (cloud→cloud fallback) |
 | 02.02 | Model capability registry | Capabilities, context limits, locality, and cost per provider/model, sourced from configured providers only |
 | 02.03 | Cost governance on the live path | Per-task and monthly budgets enforced fail-closed; paid routes off unless explicitly enabled |
 | 02.04 | Resilience | Provider timeout, circuit breaker, deterministic fallback order, provider health |
