@@ -117,7 +117,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.03 | Close superseded/duplicate PRs | 00.01, owner approval | 55 PRs closed, each with a comment linking the audit | NOT STARTED — **needs owner approval** |
 | 00.04 | Integrate ready PRs (#502, #418, #423, #424, #428) | 00.02 | Each ported onto `main` as its own commit, suites registered, full gate green | **DONE on branch** (§7.3); originals become SUPERSEDED once #521 merges |
 | 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green | **DONE on branch** (§7.4) |
-| 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | NOT STARTED |
+| 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | **DONE on branch** (§7.5) |
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | NOT STARTED |
 | 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
 | 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
@@ -248,3 +248,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | `6de1858`, `c70d2e1` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | Owner decision: should manually built sample projects honor the 30 s SFX limit that `ResultValidator.validateSFX` applies to AI-generated patches? Imports currently extend `patch.duration` past 30 s. The timeline UI still needs a manual browser check. |
 | Next Task | 00.06 (review the 5 conflicted creative PRs) |
+
+### 7.5 MIO-PRV-00.06 — Review Conflicted Creative PRs
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-00 — Repository Consolidation |
+| Objective | Decide port vs. superseded for #182, #198, #214, #287, #368 with written evidence |
+| Baseline | 5 PRs that don't apply cleanly because `main` evolved the same files |
+| Implemented | #182, #198, #214, #287 judged **SUPERSEDED** by symbol-level comparison (see the PR audit §5.4). #368 **reimplemented**: live music playback now follows linear/smooth automation with `setValueAtTime` + `linearRampToValueAtTime` (overlap-safe) via `planMusicAutomationStep`/`applyMusicAutomationStep`, using the shared `mapMusicAutomationValue`. #368's own `setValueCurveAtTime` approach was rejected because overlapping per-step curves throw `NotSupportedError`. |
+| Files Changed | `src/creative/AudioWorkspace.ts`, `src/modes/music/MusicStudioView.tsx`, `src/tests/musicLiveAutomationTests.ts` (new), `src/tests/runAllTests.ts`, roadmap docs |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · build web + Electron PASS · `npm test` **1673/1673** |
+| Security Impact | None |
+| Dependencies | 00.02, 00.04 (#423 introduced the shared mapper) |
+| Acceptance Gate | **PASS** locally; CI via #521 |
+| Commit/PR | `63243aa` in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | Live automation needs a listening check in a browser. Music roadmap gap: per-note duplication has no UI (from #182). |
+| Next Task | 00.07 (Motion V2 re-port plan) |

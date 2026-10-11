@@ -102,6 +102,16 @@ Columns: PR files changed · conflicted files on 3-way apply · net files `main`
 
 ### 5.4 CONFLICTED — needs review (5)
 
+> Decisions 2026-10-11 (MIO-PRV-00.06):
+>
+> | PR | Decision | Evidence |
+> |---|---|---|
+> | #182 | **SUPERSEDED** | Library-only (no UI). `main`'s piano roll uses its own `moveNote`, `resizeNote`, `quantizeNoteEvent`, `transposeNotes`. Its `duplicateMusicNote` has no equivalent and was never wired into a UI; recorded as a Music roadmap gap instead of porting dead code. |
+> | #198 | **SUPERSEDED** | `beginGraphicResize`, `updateGraphicResize`, `beginGraphicRotation`, `updateGraphicRotation`, `getGraphicSelectionBounds` all on `main`; only the session type name differs. |
+> | #214 | **SUPERSEDED** | Same behavior on `main` as `beginGraphicGroupResize`/`updateGraphicGroupResize`, `getGraphicSelectionBounds`, `beginGraphicRotation`. |
+> | #287 | **SUPERSEDED** | Bézier handle editing is on `main` (`activeBezierHandle` in `GraphicStudioView`, `setGraphicSmoothPathHandle`). |
+> | #368 | **REIMPLEMENTED** in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) | Real gap: live automation was per-step stairs. Not ported verbatim, because it duplicated the post-10.63 parameter mapping and used `setValueCurveAtTime`, which throws on overlapping per-step curves. Reimplemented with overlap-safe ramps and the shared mapper. |
+
 | PR | Branch | Files | Conflicts | Question to resolve |
 |---|---|---:|---:|---|
 | #182 | feat/music-studio-2-sequencer-core | 3 | 2 | `musicSequencerCoreTests` absent from `main`; check whether Music 10.x on `main` already covers the sequencer core. |
