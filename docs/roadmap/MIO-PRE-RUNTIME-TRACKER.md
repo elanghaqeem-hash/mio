@@ -70,7 +70,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | Task runtime / scheduler / integrity | `src/orchestrator/*` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.7/0.8 suites registered |
 | Permission / capability / gateway | `PermissionEngine`, `CapabilityRegistry`, `SecureServiceGateway`, `PolicyEngine` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.10/0.11 suites |
 | Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · INTEGRATED | 13 non-test importers; cancellation coverage to be confirmed in PRV-06 |
-| Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · INTEGRATED · **PARTIAL** vs PRV-03 | No file-intelligence, graph, creative-document, or token-budget inputs yet |
+| Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · PARTIAL vs PRV-03 | `UnifiedContextEngine` + adapters + boundary hardening done; live chat still uses the TP-0.45 assembler until 03.06 |
 | Memory | `src/memory/*`, `src/security/MemoryManager.ts`, `GovernedMemoryActions.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Governance suites registered |
 | Research / evidence | `src/research/*`, `EvidenceGrounding.ts`, `src/project/EvidencePackage.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | — |
 | File Intelligence T-1…T-14 | `src/file-intelligence/*` | IMPLEMENTED · VERIFIED · **PARTIAL integration** | F-4 |
@@ -147,7 +147,14 @@ Exit gate: local/cloud routing follows policy, cost limits, and test results.
 ### MIO-PRV-03 — Unified Context Engine
 Exit gate: relevant context without cross-project leakage, and external content never gains authority.
 
-03.01 context-source adapters (intent, conversation, working memory, governed memory, project knowledge, file intelligence, graph, research evidence, creative document, task state, permission state) · 03.02 relevance ranking + token budgeting · 03.03 provenance + trust classification · 03.04 project isolation tests · 03.05 prompt-injection regression set.
+| Task | Name | Status |
+|---|---|---|
+| 03.01 | Context-source adapters (governed memory + project knowledge via the existing assembler, research evidence, task state, permission state, active creative document) | **DONE on branch** (§7.8). File-intelligence and relationship-graph sources wait on PRV-04. |
+| 03.02 | Relevance ranking + one shared budget with per-kind caps | **DONE on branch** |
+| 03.03 | Provenance (`MioEvidence` per item, drop reasons) + trust classification | **DONE on branch** |
+| 03.04 | Project-isolation tests | **DONE on branch** |
+| 03.05 | Prompt-injection regression set | **DONE on branch**, including a fix for a real boundary-spoofing vulnerability |
+| 03.06 | Wire the engine into the live chat path (`AgentOrchestrator`), keeping `EvidenceGrounding` working | NOT STARTED: changes the prompt shape, so it gets its own verified step |
 
 ### MIO-PRV-04 — Multimodal File Intelligence hardening
 Exit gate: ingestion, indexing, search, and relationship retrieval meet measured benchmarks.
@@ -299,3 +306,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | **Intended behavior change:** existing paid-cloud users must set a budget. Spend is an upper-bound estimate (conservative price ceilings), not billing data. Open: per-task USD caps, per-model price overrides, multi-local-route fallback ordering (02.02/02.04). |
 | Next Task | MIO-PRV-00.08 (T-18 bridge, now unblocked) |
+
+### 7.8 MIO-PRV-03 — Unified Context Engine (03.01–03.05)
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-03 — Unified Context Engine |
+| Objective | One context layer: isolation, trust, provenance, injection resistance, one budget |
+| Baseline | TP-0.45 `ModelContextAssembler`: project knowledge + governed memory with separate per-source budgets. No task/permission/creative state. Data blocks were spoofable (below). |
+| Implemented | **Security fix first (commit `36aec8d`):** untrusted source text could close its data block early and forge attributes (`trust="VERIFIED"`) in the project-knowledge, memory and external-content serializers. Reproduced, then fixed with `ContextBoundary` (tag neutralization and attribute escaping), with 5 regression tests that fail against the old code. **Engine:** `UnifiedContextEngine` + `selectContext`: project isolation (drops other-project candidates, and owner-less ones except external research); contract validation; RESEARCH/FILE/MODEL/TOOL content forced `UNTRUSTED`; injection-pattern flagging that downgrades trust and always ranks flagged items after clean ones; de-duplication; deterministic ranking with runtime-state priority; one shared budget (500–24,000 chars) with a default 60% per-kind cap; a drop log with reasons; `serializeUnifiedContext` with boundary protection. Adapters: TP-0.45 assembly, research report, task, permission grants, creative document. Contracts gained evidence kinds `TASK_STATE`, `CREATIVE_DOCUMENT`, `PERMISSION_STATE` (additive), and `evidenceFromMemorySource` (system-derived memory is `UNTRUSTED`). |
+| Files Changed | `src/intelligence/context/{ContextBoundary,UnifiedContextEngine}.ts` (new), `src/agents/ModelRouter.ts`, `src/intelligence/context/ModelContextMaterializer.ts`, `src/security/PolicyEngine.ts`, `src/contracts/{MioContracts,MioContractAdapters}.ts`, tests |
+| Test Results | `npm test` **1711/1711** (5 boundary + 8 engine tests). Writing the tests surfaced a ranking flaw: a high relevance score could lift flagged content above clean content. Fixed so flagged items always sort last. |
+| Security Impact | **High, positive:** closes a prompt-injection boundary-spoofing hole on the live chat path (project knowledge and memory). |
+| Dependencies | 01 |
+| Acceptance Gate | 03.01–03.05 **PASS** locally; PRV-03 exit gate **PARTIAL** until 03.06 wires the engine into the live path |
+| Commit/PR | `36aec8d` + this commit in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | 03.06 live wiring. File-intelligence and relationship-graph sources (PRV-04). The injection pattern list is heuristic: it flags and contains attacks rather than detecting all of them, and the real defense is the trust plus boundary framing. |
+| Next Task | 03.06, or PRV-06 security regression freeze |

@@ -72,7 +72,8 @@ export interface MioCapabilityRequest<I = unknown> {
   createdAt: number;
 }
 
-export const MIO_EVIDENCE_KINDS = ['RESEARCH_SOURCE', 'PROJECT_KNOWLEDGE', 'FILE', 'MEMORY', 'MODEL_OUTPUT', 'TOOL_OUTPUT'] as const;
+// TASK_STATE, CREATIVE_DOCUMENT and PERMISSION_STATE were added additively for the context engine (PRV-03).
+export const MIO_EVIDENCE_KINDS = ['RESEARCH_SOURCE', 'PROJECT_KNOWLEDGE', 'FILE', 'MEMORY', 'MODEL_OUTPUT', 'TOOL_OUTPUT', 'TASK_STATE', 'CREATIVE_DOCUMENT', 'PERMISSION_STATE'] as const;
 export type MioEvidenceKind = (typeof MIO_EVIDENCE_KINDS)[number];
 /** UNTRUSTED evidence is data only and can never grant authority or carry instructions. */
 export type MioEvidenceTrust = 'TRUSTED' | 'UNTRUSTED';

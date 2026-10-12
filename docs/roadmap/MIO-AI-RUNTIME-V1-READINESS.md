@@ -15,7 +15,7 @@ Gate values: PASS · FAIL · BLOCKED · NOT VERIFIED · NOT APPLICABLE (with jus
 | G-00a | Test gate integrity | Every suite runs in CI; self-check present | **PASS (local)** / NOT VERIFIED (CI) | MIO-PRV-00.02: 1610/1610; negative checks fail as expected |
 | G-01 | Core contract freeze | `Mio*` contracts typed, versioned, validated, UI-independent | **PASS (local)** / NOT VERIFIED (CI) | `src/contracts` v1 + 11 tests; see [MIO-PRV-01-CORE-CONTRACTS.md](./MIO-PRV-01-CORE-CONTRACTS.md) |
 | G-02 | Model Router V2 | Policy/cost/privacy routing with fallback, timeout, circuit breaker, verified by tests on the live path | **PARTIAL** | Cost, privacy, circuit breaker and provenance live (ADR-001); open: capability registry and multi-local-route order (PRV-02.02/02.04) |
-| G-03 | Unified Context Engine | Ranked, budgeted, provenance-tagged context with project isolation and injection resistance | **FAIL** | `ModelContextAssembler` is PARTIAL |
+| G-03 | Unified Context Engine | Ranked, budgeted, provenance-tagged context with project isolation and injection resistance | **PARTIAL** | Engine + adapters + boundary hardening done and tested; live chat path not yet wired (PRV-03.06) |
 | G-04 | Multimodal File Intelligence | Measured reliability/performance benchmarks; engines reachable by the agent | **FAIL** | Engines not integrated (F-4); benchmark synthetic only (F-11) |
 | G-05 | Unified Capability Protocol | Single manifest-based protocol for files, research, memory, model, creative, voice | **FAIL** | PARTIAL (`CapabilityRegistry`, `ToolRouter` without manifests) |
 | G-06 | Security regression freeze | No open critical/high finding affecting V1; regression gate green | **NOT VERIFIED** | Existing security suites pass; the consolidated gate and the missing threat cases (PRV-06.02) do not exist yet |
@@ -58,3 +58,4 @@ The target is minimum recurring cost. It is not a promise that every function is
 | 2026-10-11 | Initial gate evaluation (MIO-PRV-00.01); G-00a passes locally after MIO-PRV-00.02 |
 | 2026-10-11 | G-01 passes locally after MIO-PRV-01 |
 | 2026-10-12 | G-02 moves to PARTIAL after ADR-001 implementation |
+| 2026-10-12 | G-03 moves to PARTIAL; boundary-spoofing vulnerability fixed |

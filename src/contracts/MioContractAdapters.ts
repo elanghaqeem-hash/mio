@@ -1,7 +1,7 @@
 // MIO-PRV-01.03: adapters from existing subsystem types to the core contracts.
 // Pure functions with no behavior change in the source subsystems.
 import type { AIProvenanceReceipt } from '../ai-orchestration/AIProvenance';
-import type { ApplicationContextSource } from '../types/models';
+import type { ApplicationContextSource, MemoryContextSource } from '../types/models';
 import type { ProjectAsset } from '../types/project';
 import type { ResearchSource } from '../types/research';
 import type { AuthorizationScope, PermissionLevel } from '../types/security';
@@ -53,6 +53,23 @@ export function evidenceFromContextSource(source: ApplicationContextSource, retr
     sourceUri: clip(source.sourceUri, MIO_CONTRACT_LIMITS.longText),
     excerpt: clip(source.text, MIO_CONTRACT_LIMITS.longText),
     retrievedAt: source.reviewedAt ?? retrievedAt,
+  };
+}
+
+/**
+ * Governed memory: what the user wrote or approved is TRUSTED; anything the system derived (including
+ * stored model replies) is UNTRUSTED, so a model can never promote its own past output to authority.
+ */
+export function evidenceFromMemorySource(source: MemoryContextSource): MioEvidence {
+  const trusted = source.trust === 'USER_AUTHORED' || source.trust === 'PROJECT_VERIFIED';
+  return {
+    id: source.id,
+    kind: 'MEMORY',
+    label: clip(`${source.layer.toLowerCase()} memory · ${source.source}`, MIO_CONTRACT_LIMITS.shortText),
+    status: source.trust === 'PROJECT_VERIFIED' ? 'VERIFIED' : 'UNVERIFIED',
+    trust: trusted ? 'TRUSTED' : 'UNTRUSTED',
+    excerpt: clip(source.content, MIO_CONTRACT_LIMITS.longText),
+    retrievedAt: source.updatedAt,
   };
 }
 
