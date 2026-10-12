@@ -340,3 +340,14 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | File-intelligence and relationship-graph context sources (PRV-04); research evidence and the active creative document are not yet passed into chat (adapters exist) |
 | Next Task | MIO-PRV-06 security regression freeze |
+
+### 7.10 PR #521 pre-merge code review
+
+| Field | Value |
+|---|---|
+| Objective | Review the full #521 diff before merge, as the owner requested |
+| Findings | 10 findings. All 10 fixed in `7f58161`; none deferred |
+| Fixes | Paid response kept when spend persistence fails; `CloudBudget` ignores stale loads after a storage switch; context pipeline reproduces assembler budgets exactly and excludes flagged memory instead of relabelling it; chat evidence package lists only context actually sent; Workers AI TTS maps synchronous throws to 502 and cancels late streams; SFX split uses asset time, synth layers keep the patch duration, LOOP repeats to the render end, reversed buffers are cached |
+| Test Results | `npm test` **1721/1721**, plus lint, both builds, release smoke, and the file-scanner benchmark. 5 new regression tests |
+| Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Next Task | Merge #521 once CI is green, then MIO-PRV-06 |
