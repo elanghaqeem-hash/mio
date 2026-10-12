@@ -52,6 +52,24 @@ A successful provider readiness result is cached only in the current runtime whi
 
 The browser persists autonomy, network, provider, model, local-backend selection, fallback, and web-search preferences in the controlled `settings` storage namespace. It never persists provider secrets.
 
+## Gateway token (required for any public deployment)
+
+`/api/ai/generate` and `/api/research` spend your provider and search quota. Without protection, anyone who can reach the deployment, including a public preview URL, can call them. Protect them with a shared gateway token:
+
+1. Generate a random token of at least 32 characters, for example `openssl rand -base64 36`.
+2. In Cloudflare Pages → Settings → Variables and Secrets, add it as an **encrypted secret** named `MIO_API_GATEWAY_TOKEN` for both Production and Preview.
+3. Optionally also set `MIO_API_REQUIRE_GATEWAY_TOKEN=true`. The proxies then fail closed (503) if the token is ever removed, instead of becoming open again.
+4. Redeploy.
+5. On each of your devices, open MIO Settings → **Secure proxy access**, paste the token, select `SAVE`, then select `CHECK CONNECTION`.
+
+Behavior:
+- Without the token, or with a wrong one, both proxies answer 401 before reading the body or calling any upstream.
+- A token shorter than 32 characters is treated as misconfigured and fails closed (503).
+- The token is stored only on the device, outside the exported settings. The browser sends it only to this site's own proxy endpoints.
+- Readiness (`GET`) reports `gatewayProtection` (`TOKEN`, `UNPROTECTED`, or `MISCONFIGURED`) and whether the token this device sent was accepted.
+
+Until `MIO_API_GATEWAY_TOKEN` is set, a deployment stays `UNPROTECTED` so existing installs keep working. Rotate the token by changing the secret, redeploying, and saving the new value on each device.
+
 ## MIO Local Intelligence
 
 Select `MIO Local Intelligence — native local model + governed tools` to use the native MIO local-provider layer. MIO Local now separates the agent/tool layer from the inference runtime and supports three local backends:

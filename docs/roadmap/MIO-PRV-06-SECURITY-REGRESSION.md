@@ -1,6 +1,6 @@
 # MIO-PRV-06 — Security Regression & Governance Freeze
 
-Status: **06.01–06.04 IMPLEMENTED · VERIFIED (local)**. Exit gate **not met**: one open HIGH finding (S-1) needs an owner decision.
+Status: **06.01–06.04 IMPLEMENTED · VERIFIED** (merged in #522). S-1 fix implemented per the owner's decision (option b, shared gateway token). It takes effect once the owner sets `MIO_API_GATEWAY_TOKEN` on Cloudflare Pages.
 
 ## 1. Named regression gate (06.01)
 
@@ -45,7 +45,7 @@ Each row has a regression test in `src/tests/securityRegressionTests.ts`. All 13
 
 | # | Severity | Finding | Why it is open |
 |---|---|---|---|
-| **S-1** | **HIGH** | `/api/ai/generate` and `/api/research` have no caller authentication or rate limit, and the client picks the model. On any deployment with provider keys configured, including public preview URLs, anyone can spend the owner's API quota. | Needs an owner decision on the access model: reuse the voice gateway's Cloudflare Access/session verification, a shared gateway token, or Cloudflare rate-limiting bindings. All of these change deployment settings and secrets, which this program does not do without explicit permission. |
+| **S-1** | **HIGH** | `/api/ai/generate` and `/api/research` had no caller authentication, and the client picks the model. Anyone who can reach a deployment with provider keys could spend the owner's quota. | **Fix implemented (owner decision: option b).** Both proxies require `x-mio-gateway-token` to match `MIO_API_GATEWAY_TOKEN` (constant-time compare, at least 32 characters; a weak or required-but-missing token fails closed with 503). Rejection happens before the body is read or any upstream is called. The token is entered per device in Settings → Secure proxy access, stays out of exported settings, and is sent only to same-origin proxies. **Closes when the owner sets the secret** (steps in `docs/AI_PROVIDER_SETUP.md`); until then a deployment reports `gatewayProtection: UNPROTECTED`. Per-caller rate limiting is not part of option b. |
 | S-2 | MEDIUM | Electron main appends all renderer console output to `userData/renderer.log` | Needs a decision on what to keep: level filter plus redaction, or no file log |
 | S-3 | MEDIUM | `ollamaEndpoint`, `proxyEndpoint` and `researchEndpoint` settings are not validated. Remote use is still behind a network-origin permission grant. | Tracked for PRV-02.02 (capability registry) |
 | S-4 | MEDIUM | TOCTOU between `realpath` and `open`/`rename`; hard links to files outside the workspace | Needs `O_NOFOLLOW`/handle-based I/O in the desktop sandbox. Requires a symlink planted during an approved operation. |
@@ -66,4 +66,4 @@ By design: research sources without a `projectId` and user-level memory pass pro
 | Required threat cases covered | PASS (local) |
 | Emergency Stop coverage: task, model, voice, creative | PASS for task, model and voice. Creative is between steps only (S-8) |
 | Audit completeness check | PARTIAL (S-7) |
-| No open critical/high finding affecting V1 | **FAIL: S-1** |
+| No open critical/high finding affecting V1 | **PENDING OWNER ACTION**: the S-1 fix is in code and is active once `MIO_API_GATEWAY_TOKEN` is set |

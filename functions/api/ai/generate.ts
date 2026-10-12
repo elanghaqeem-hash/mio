@@ -1,10 +1,10 @@
-import { readBoundedJson, redactSecretText } from '../_security';
+import { GATEWAY_TOKEN_HEADER, gatewayProtection, gatewayTokenAccepted, readBoundedJson, redactSecretText, rejectUnauthorizedGatewayRequest, type GatewayTokenEnv } from '../_security';
 
 // 50 messages of up to 50,000 characters plus application context fit well inside this bound.
 const MAX_GENERATE_BODY_BYTES = 4 * 1024 * 1024;
 type CloudProviderId = 'openrouter' | 'openai' | 'gemini' | 'claude';
 
-interface Env {
+interface Env extends GatewayTokenEnv {
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
   OPENAI_API_KEY?: string;
@@ -105,6 +105,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   return json({
     provider: requestedProvider,
     ready,
+    gatewayProtection: gatewayProtection(context.env),
+    gatewayAuthorized: gatewayTokenAccepted(context.request, context.env),
     secretConfigured: hasSecret,
     modelConfigured: Boolean(model),
     model,
@@ -335,6 +337,8 @@ function uniqueCitations(citations: Array<{ url: string; title?: string }>): Arr
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
+  const rejected = rejectUnauthorizedGatewayRequest(context.request, context.env);
+  if (rejected) return json({ error: rejected.error, header: GATEWAY_TOKEN_HEADER }, rejected.status);
   const parsed = await readBoundedJson<ProxyRequest>(context.request, MAX_GENERATE_BODY_BYTES);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
   const body = parsed.value;

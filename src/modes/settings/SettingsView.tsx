@@ -5,6 +5,7 @@ import { ModelRouter } from '../../agents/ModelRouter';
 import { classifyModelCost, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot } from '../../ai-orchestration/CloudBudget';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
+import { apiGatewayCredential } from '../../security/ApiGatewayCredential';
 import { GovernedTrainingRunnerPanel } from './GovernedTrainingRunnerPanel';
 import { ModelCandidateLabPanel } from './ModelCandidateLabPanel';
 import { ModelProvenancePanel } from './ModelProvenancePanel';
@@ -36,6 +37,9 @@ export const SettingsView: React.FC = () => {
   const [checkingProvider, setCheckingProvider] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState(() => String(systemPreferences.getSnapshot().modelRouter.monthlyCloudBudgetUsd ?? 0));
   const [cloudSpend, setCloudSpend] = useState<CloudBudgetSnapshot | null>(null);
+  const [gatewayTokenDraft, setGatewayTokenDraft] = useState('');
+  const [gatewayTokenSet, setGatewayTokenSet] = useState(() => apiGatewayCredential.isSet());
+  const saveGatewayToken = (token: string) => { apiGatewayCredential.set(token); setGatewayTokenDraft(''); setGatewayTokenSet(apiGatewayCredential.isSet()); };
   const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
   const {
     provider,
@@ -194,6 +198,19 @@ export const SettingsView: React.FC = () => {
             </div>
             <input type="number" min={0} max={1000} step={0.5} inputMode="decimal" value={budgetDraft} onChange={(e) => setBudgetDraft(e.target.value)} onBlur={commitBudget} onKeyDown={(e) => { if (e.key === 'Enter') commitBudget(); }} aria-label="Monthly cloud budget in USD" className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
             {cloudSpend && <div className="text-[10px] text-gray-400">{cloudSpend.month}: estimated spend ${cloudSpend.spentUsd.toFixed(4)} of ${cloudSpend.limitUsd.toFixed(2)}. Estimates use conservative price ceilings, not billing data; check the provider dashboard for actual charges.</div>}
+          </div>
+        )}
+
+        {(cloudConfig || provider === 'mio_local') && (
+          <div data-testid="gateway-token-panel" className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-2">
+            <div className="font-bold text-gray-200">SECURE PROXY ACCESS</div>
+            <div className="text-[10px] text-gray-500">If this deployment sets MIO_API_GATEWAY_TOKEN, enter the same token here. It is stored only on this device, sent only to this site's MIO proxy, and never included in exported settings.</div>
+            <div className="flex gap-2">
+              <input type="password" autoComplete="off" spellCheck={false} value={gatewayTokenDraft} onChange={(e) => setGatewayTokenDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && gatewayTokenDraft.trim()) saveGatewayToken(gatewayTokenDraft); }} placeholder={gatewayTokenSet ? 'Token saved on this device' : 'Gateway token'} aria-label="Secure proxy gateway token" className="flex-1 bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+              <button type="button" disabled={!gatewayTokenDraft.trim()} onClick={() => saveGatewayToken(gatewayTokenDraft)} className="rounded border border-gray-700 px-2.5 py-1.5 text-gray-200 disabled:opacity-40">SAVE</button>
+              {gatewayTokenSet && <button type="button" onClick={() => saveGatewayToken('')} className="rounded border border-rose-500/40 px-2.5 py-1.5 text-rose-300">CLEAR</button>}
+            </div>
+            <div className="text-[10px] text-gray-400">{gatewayTokenSet ? 'A gateway token is saved on this device. Use CHECK CONNECTION to confirm the proxy accepts it.' : 'No gateway token saved on this device.'}</div>
           </div>
         )}
 

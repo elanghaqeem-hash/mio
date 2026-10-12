@@ -1,5 +1,6 @@
 import { AIProviderCircuitBreaker } from '../ai-orchestration/AIFallback';
 import { emergencyStop } from '../core/EmergencyStop';
+import { apiGatewayCredential } from '../security/ApiGatewayCredential';
 import { redactSecretText } from '../security/SecretRedaction';
 import { createAIProvenanceReceipt, type AIProvenanceReceipt } from '../ai-orchestration/AIProvenance';
 import { CloudBudgetLedger, actualCloudCallUsd, classifyModelCost, estimateCloudCallUsd, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot, type CloudCostClass, type CloudReservation } from '../ai-orchestration/CloudBudget';
@@ -163,15 +164,18 @@ export class ModelRouter {
       const budgetBlock = this.paidCloudBlockReason();
       if (budgetBlock) return { provider, ready: false, status: 'NOT_CONFIGURED', detail: budgetBlock };
 
-      const cacheKey = [provider, this.config.model ?? '', this.config.proxyEndpoint ?? '/api/ai/generate', this.networkState].join('|');
+      const cacheKey = [provider, this.config.model ?? '', this.config.proxyEndpoint ?? '/api/ai/generate', this.networkState, apiGatewayCredential.isSet()].join('|');
       if (!forceRefresh && this.readinessCache?.key === cacheKey && this.readinessCache.result.ready) {
         return { ...this.readinessCache.result };
       }
       const endpoint = new URL(this.config.proxyEndpoint ?? '/api/ai/generate', typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
       endpoint.searchParams.set('provider', provider);
       if (this.config.model) endpoint.searchParams.set('model', this.config.model);
-      const response = await fetch(endpoint.toString(), { method: 'GET', credentials: 'same-origin', signal: controller.signal });
-      const payload = await response.json().catch(() => ({})) as { provider?: string; ready?: boolean; detail?: string };
+      const response = await fetch(endpoint.toString(), { method: 'GET', credentials: 'same-origin', signal: controller.signal, headers: apiGatewayCredential.headersFor(endpoint.toString()) });
+      const payload = await response.json().catch(() => ({})) as { provider?: string; ready?: boolean; detail?: string; gatewayAuthorized?: boolean };
+      if (response.ok && payload.ready === true && payload.gatewayAuthorized === false) {
+        return { provider, ready: false, status: 'NOT_CONFIGURED', detail: 'The MIO secure proxy requires a gateway token. Enter it in Settings → Secure proxy access.' };
+      }
       if (response.ok && payload.ready === true) {
         const result: ProviderReadiness = { provider, ready: true, status: 'READY', detail: payload.detail ?? `${provider} secure proxy is configured.` };
         this.readinessCache = { key: cacheKey, result };
