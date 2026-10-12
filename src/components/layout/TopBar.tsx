@@ -49,7 +49,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     let unregisterTrayStop: (() => void) | undefined;
     if (window.mioDesktop?.onEmergencyStopTriggered) {
       unregisterTrayStop = window.mioDesktop.onEmergencyStopTriggered((reason) => {
-        emergencyStop.triggerEmergencyStop(reason);
+        if (!emergencyStop.isEmergencyStopped()) emergencyStop.triggerEmergencyStop(reason, { fromMainProcess: true });
       });
     }
 

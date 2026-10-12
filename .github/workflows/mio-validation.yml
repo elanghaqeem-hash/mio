@@ -42,3 +42,6 @@ jobs:
 
       - name: Run MIO system and security tests
         run: npm test
+
+      - name: Security regression gate
+        run: npm run test:security

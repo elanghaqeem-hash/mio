@@ -69,7 +69,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | AI orchestration & cost (T-15) | `src/ai-orchestration/*` | IMPLEMENTED · VERIFIED · **INTEGRATED** (ledger, circuit breaker, provenance via `ModelRouter`) | F-3 resolved by ADR-001 |
 | Task runtime / scheduler / integrity | `src/orchestrator/*` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.7/0.8 suites registered |
 | Permission / capability / gateway | `PermissionEngine`, `CapabilityRegistry`, `SecureServiceGateway`, `PolicyEngine` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.10/0.11 suites |
-| Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · INTEGRATED | 13 non-test importers; cancellation coverage to be confirmed in PRV-06 |
+| Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | PRV-06: aborts tasks, all model calls, and voice; reaches the Electron main process; audited. Creative work stops between steps only (S-8) |
 | Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · **INTEGRATED** | Live chat goes through `UnifiedContextEngine` (PRV-03.06); file-intelligence/graph sources pending PRV-04 |
 | Memory | `src/memory/*`, `src/security/MemoryManager.ts`, `GovernedMemoryActions.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Governance suites registered |
 | Research / evidence | `src/research/*`, `EvidenceGrounding.ts`, `src/project/EvidencePackage.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | — |
@@ -351,3 +351,19 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Test Results | `npm test` **1721/1721**, plus lint, both builds, release smoke, and the file-scanner benchmark. 5 new regression tests |
 | Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Next Task | Merge #521 once CI is green, then MIO-PRV-06 |
+
+### 7.11 MIO-PRV-06 — Security regression & governance freeze
+
+| Field | Value |
+|---|---|
+| Objective | Consolidate security suites into a named gate, add the missing threat cases, cover Emergency Stop, and check audit completeness |
+| Baseline | `main` @ `b5ab37e`; security suites ran only inside `npm test`; no tests for the desktop SSRF filter or `WorkspaceSandbox.mutate` |
+| Implemented | `npm run test:security` gate (27 suites, threat-tagged, own CI step, drift-checked by the harness integrity suite). 10 findings fixed (F-1 to F-10), including 2 HIGH: symlink write-escape from the workspace and an IPv6-embedded SSRF bypass. Details in [MIO-PRV-06-SECURITY-REGRESSION.md](./MIO-PRV-06-SECURITY-REGRESSION.md) |
+| Files Changed | `electron/ipc/workspaceSandbox.ts`, `electron/ipc/browserReadSandbox.ts`, `functions/api/_security.ts` (new), `functions/api/ai/generate.ts`, `functions/api/research.ts`, `functions/api/voice/{synthesize,_session}.ts`, `src/security/{SecretRedaction,PermissionEngine,SecurityAuditLog}.ts`, `src/core/EmergencyStop.ts`, `src/agents/ModelRouter.ts`, `src/platform/desktop/DesktopBrowserGateway.ts`, `src/services/MioVoiceService.ts`, `src/services/voice/MioChatVoiceController.ts`, `src/components/layout/TopBar.tsx`, `src/types/security.ts`, tests, CI workflow, `package.json` |
+| Test Results | 13 new regression tests, each failing on the pre-fix code; security gate **304/304**; the gate exits 1 with the F-1 fix reverted |
+| Security Impact | Positive. Intended behavior changes: cross-origin redirects in the desktop browser now fail; a permission grant is reused only for an identical scope |
+| Dependencies | PRV-01 contracts, PRV-02 router |
+| Acceptance Gate | **FAIL**: open HIGH S-1 (unauthenticated `/api/ai/generate` and `/api/research`) |
+| Commit/PR | New PR from `claude/mio-runtime-v1-prep-x0bpzv` |
+| Remaining Gaps | S-1 (owner decision on the access model), S-2 to S-10 (assigned to later milestones) |
+| Next Task | Owner decision on S-1; then PRV-05 Unified Capability Protocol |

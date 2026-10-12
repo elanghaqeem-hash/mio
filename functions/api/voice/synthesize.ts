@@ -1,4 +1,4 @@
-import { resolveMioVoiceSession, voiceSessionRequired, voiceSessionVerificationConfigured, type MioVoiceSessionEnv } from './_session';
+import { constantTimeEqual, resolveMioVoiceSession, voiceSessionRequired, voiceSessionVerificationConfigured, type MioVoiceSessionEnv } from './_session';
 import { enforceMioVoiceRateLimit, mioVoiceRateLimitRequired, type MioVoiceRateLimitBinding } from './_rateLimit';
 import { synthesizeWithWorkersAi, workersAiLanguage, workersAiModelSupported, type WorkersAiBinding } from './_workersAi';
 
@@ -99,7 +99,7 @@ function authorized(request: Request, env: Env): boolean {
   const expected = env.MIO_VOICE_GATEWAY_TOKEN?.trim();
   if (!expected) return true;
   const supplied = request.headers.get('x-mio-voice-token')?.trim();
-  return Boolean(supplied && supplied === expected);
+  return Boolean(supplied && constantTimeEqual(supplied, expected));
 }
 
 function safeProviderEndpoint(env: Env): URL | null {

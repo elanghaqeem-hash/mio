@@ -2,6 +2,7 @@ import { eventBus } from '../core/EventBus';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import type { StorageProvider } from '../storage/StorageProvider';
 import type { SecurityEvent } from '../types/security';
+import { redactSecretText } from './SecretRedaction';
 
 const STORAGE_KEY = 'security-audit-v1';
 const MAX_EVENTS = 300;
@@ -48,14 +49,16 @@ export class SecurityAuditLog {
   }
 
   public async clear(): Promise<void> {
-    this.events = [];
-    eventBus.emit('SECURITY_AUDIT_UPDATED', []);
+    const cleared = this.events.length;
+    this.events = [{ id: `audit_clear_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, timestamp: Date.now(), level: 'warning', category: 'AUDIT', action: 'AUDIT_LOG_CLEARED', details: `${cleared} audit events cleared by the user`, blocked: false }];
+    eventBus.emit('SECURITY_AUDIT_UPDATED', this.getEvents());
     await this.flush();
   }
 
   private record(event: SecurityEvent): void {
     if (this.events.some((existing) => existing.id === event.id)) return;
-    this.events = [{ ...event }, ...this.events].slice(0, MAX_EVENTS);
+    // Audit details often quote tool or provider errors; credentials never reach persistent storage.
+    this.events = [{ ...event, details: redactSecretText(String(event.details ?? '')) }, ...this.events].slice(0, MAX_EVENTS);
     eventBus.emit('SECURITY_AUDIT_UPDATED', this.getEvents());
     void this.flush();
   }

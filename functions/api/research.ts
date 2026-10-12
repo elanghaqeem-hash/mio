@@ -1,3 +1,7 @@
+import { readBoundedJson } from './_security';
+
+// A query is at most 500 characters; anything far larger is not a research request.
+const MAX_RESEARCH_BODY_BYTES = 16 * 1024;
 type ResearchSourceType = 'ENCYCLOPEDIA' | 'ACADEMIC' | 'WEB';
 
 interface Env {
@@ -200,12 +204,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
-  let body: { query?: unknown; count?: unknown };
-  try {
-    body = (await context.request.json()) as { query?: unknown; count?: unknown };
-  } catch {
-    return json({ error: 'Invalid JSON request body' }, 400);
-  }
+  const parsed = await readBoundedJson<{ query?: unknown; count?: unknown }>(context.request, MAX_RESEARCH_BODY_BYTES);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const body = parsed.value;
+  if (!body || typeof body !== 'object') return json({ error: 'Invalid JSON request body' }, 400);
 
   const query = typeof body.query === 'string' ? body.query.trim() : '';
   const numericCount = typeof body.count === 'number' ? body.count : Number(body.count);

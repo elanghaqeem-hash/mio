@@ -235,11 +235,13 @@ export class PermissionEngine {
     const scope = grant.scope;
     if (!grant.reusableAcrossTasks && scope.taskId !== required.taskId) return false;
     if (scope.action !== required.action || scope.target !== required.target) return false;
-    if (required.projectId && scope.projectId !== required.projectId) return false;
-    if (required.toolId && scope.toolId !== required.toolId) return false;
-    if (required.networkOrigin && scope.networkOrigin !== required.networkOrigin) return false;
-    if (required.resourceId && scope.resourceId !== required.resourceId) return false;
-    if (required.path && scope.path !== required.path) return false;
+    // Every scope dimension must match exactly in both directions: a request that omits a dimension asks for
+    // a broader authority than a grant bound to one project, tool, origin, resource, or path, so it is not covered.
+    if (scope.projectId !== required.projectId) return false;
+    if (scope.toolId !== required.toolId) return false;
+    if (scope.networkOrigin !== required.networkOrigin) return false;
+    if (scope.resourceId !== required.resourceId) return false;
+    if (scope.path !== required.path) return false;
     if (required.networkAllowed === true && scope.networkAllowed !== true) return false;
     return true;
   }

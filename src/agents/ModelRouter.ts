@@ -1,4 +1,6 @@
 import { AIProviderCircuitBreaker } from '../ai-orchestration/AIFallback';
+import { emergencyStop } from '../core/EmergencyStop';
+import { redactSecretText } from '../security/SecretRedaction';
 import { createAIProvenanceReceipt, type AIProvenanceReceipt } from '../ai-orchestration/AIProvenance';
 import { CloudBudgetLedger, actualCloudCallUsd, classifyModelCost, estimateCloudCallUsd, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot, type CloudCostClass, type CloudReservation } from '../ai-orchestration/CloudBudget';
 import { eventBus } from '../core/EventBus';
@@ -105,7 +107,7 @@ export class ModelRouter {
       ...(actualCostUsd !== undefined ? { actualCostUsd } : {}),
       cacheHit: false,
       status,
-      ...(error ? { error: error.slice(0, 300) } : {}),
+      ...(error ? { error: redactSecretText(error).slice(0, 300) } : {}),
     });
     this.provenance.push(receipt);
     if (this.provenance.length > this.MAX_PROVENANCE) this.provenance.splice(0, this.provenance.length - this.MAX_PROVENANCE);
@@ -205,6 +207,7 @@ export class ModelRouter {
     const mode = taskId ? taskRuntime.get(taskId)?.mode : undefined;
     const preparedRequest = this.materializeApplicationContext(request);
 
+    if (emergencyStop.isEmergencyStopped()) throw new Error('Model request blocked: STOP MIO is engaged');
     if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled before execution');
     if (taskId) {
       const modelPreflight = resourceGovernor.authorize(taskId, 'MODEL_CALL', mode);
@@ -357,7 +360,7 @@ export class ModelRouter {
       }
       this.recordProvenance(provider, preparedRequest, startedAt, 'FAILED', this.config.model ?? '', estimatedCostUsd, undefined, message);
       this.readinessCache = undefined;
-      if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
+      if (emergencyStop.isEmergencyStopped() || (taskId && taskRuntime.isCancelled(taskId))) throw new Error('Model request cancelled');
       if (!this.config.allowOfflineFallback || provider.id === 'local_heuristic') throw error;
       eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Model provider ${provider.id} unavailable; using explicit offline fallback`, mode: 'CHAT' });
       if (taskId) {
@@ -423,24 +426,28 @@ export class ModelRouter {
     const controller = new AbortController();
     const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
     const unregisterCancellation = taskId ? taskRuntime.registerCancellationHandler(taskId, () => controller.abort()) : () => undefined;
+    // STOP MIO aborts every in-flight model call, including ones that are not bound to a runtime task.
+    const unregisterEmergencyStop = emergencyStop.registerAbortHandler(() => controller.abort());
+    const cancelled = () => emergencyStop.isEmergencyStopped() || Boolean(taskId && taskRuntime.isCancelled(taskId));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     eventBus.emit('CORE_STATE_CHANGE', 'PROCESSING');
     try {
       const result = await provider.generate(request, controller.signal);
-      if (controller.signal.aborted) throw new Error(taskId && taskRuntime.isCancelled(taskId) ? 'Model request cancelled' : `Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
+      if (controller.signal.aborted) throw new Error(cancelled() ? 'Model request cancelled' : `Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
       if (!result.text.trim()) throw new Error(`Model provider '${provider.id}' returned empty text`);
       if (taskId) taskRuntime.bindStepResult(taskId, 'execute', { kind: 'MODEL', operationId: `${provider.id}:${result.model}`, outcome: 'SUCCESS', validationStatus: 'NON_EMPTY_RESPONSE' });
       return result;
     } catch (error) {
       if (taskId) taskRuntime.bindStepResult(taskId, 'execute', { kind: 'MODEL', operationId: provider.id, outcome: controller.signal.aborted ? 'CANCELLED' : 'FAILED', validationStatus: 'FAILED' });
       if (controller.signal.aborted) {
-        if (taskId && taskRuntime.isCancelled(taskId)) throw new Error('Model request cancelled');
+        if (cancelled()) throw new Error('Model request cancelled');
         throw new Error(`Model provider '${provider.id}' timed out after ${timeoutMs}ms`);
       }
       throw error;
     } finally {
       clearTimeout(timer);
       unregisterCancellation();
+      unregisterEmergencyStop();
     }
   }
 }

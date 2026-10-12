@@ -1,3 +1,7 @@
+import { readBoundedJson, redactSecretText } from '../_security';
+
+// 50 messages of up to 50,000 characters plus application context fit well inside this bound.
+const MAX_GENERATE_BODY_BYTES = 4 * 1024 * 1024;
 type CloudProviderId = 'openrouter' | 'openai' | 'gemini' | 'claude';
 
 interface Env {
@@ -175,7 +179,7 @@ async function upstreamError(provider: CloudProviderId, response: Response): Pro
     error: `${PROVIDER_CONFIG[provider].label} request failed`,
     provider,
     upstreamStatus: response.status,
-    detail: detail.slice(0, 700),
+    detail: redactSecretText(detail).slice(0, 700),
   }, response.status >= 400 && response.status <= 599 ? response.status : 502);
 }
 
@@ -331,12 +335,10 @@ function uniqueCitations(citations: Array<{ url: string; title?: string }>): Arr
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
-  let body: ProxyRequest;
-  try {
-    body = (await context.request.json()) as ProxyRequest;
-  } catch {
-    return json({ error: 'Invalid JSON request body' }, 400);
-  }
+  const parsed = await readBoundedJson<ProxyRequest>(context.request, MAX_GENERATE_BODY_BYTES);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const body = parsed.value;
+  if (!body || typeof body !== 'object') return json({ error: 'Invalid JSON request body' }, 400);
 
   if (!isCloudProvider(body.provider)) return json({ error: `Provider '${body.provider ?? 'unknown'}' is not enabled by this Web Lab proxy` }, 501);
   const provider = body.provider;
@@ -353,6 +355,6 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
     if (provider === 'gemini') return await callGemini(context.env, model, prepared, body);
     return await callClaude(context.env, model, prepared, body);
   } catch (error) {
-    return json({ error: `${config.label} proxy request failed`, provider, detail: error instanceof Error ? error.message : 'Unknown upstream error' }, 502);
+    return json({ error: `${config.label} proxy request failed`, provider, detail: error instanceof Error ? redactSecretText(error.message).slice(0, 700) : 'Unknown upstream error' }, 502);
   }
 }

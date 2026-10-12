@@ -1,3 +1,4 @@
+import { emergencyStop } from '../core/EmergencyStop';
 export type MioVoiceProfile = {
   id: string; locale: string; rate: number; pitch: number; volume: number; preferredVoiceHints: string[];
 };
@@ -87,7 +88,7 @@ export class MioVoiceService {
   installRuntime() { if (!this.isAvailable() || this.runtimeInstalled) return false; const synthesis = window.speechSynthesis; this.nativeSpeak = synthesis.speak.bind(synthesis); synthesis.speak = (utterance: SpeechSynthesisUtterance) => { this.nativeSpeak?.(this.bindLifecycle(this.applyProfile(utterance))); }; this.runtimeInstalled = true; return true; }
   stop() { if (!this.isAvailable()) return; window.speechSynthesis.cancel(); this.setState('IDLE'); }
   speak(text: string, locale?: string, prosody?: MioVoiceProsody) {
-    if (!text.trim() || !this.isAvailable()) return false; this.stop();
+    if (!text.trim() || !this.isAvailable() || emergencyStop.isEmergencyStopped()) return false; this.stop();
     const forcedLocale = locale && locale !== 'auto' ? locale : undefined;
     const utterance = this.bindLifecycle(this.applyProfile(new SpeechSynthesisUtterance(text.trim()), text, forcedLocale, prosody));
     if (forcedLocale) this.lastDetectedLocale = forcedLocale;
@@ -99,4 +100,6 @@ export class MioVoiceService {
   }
 }
 export const mioVoice = new MioVoiceService();
+// STOP MIO silences device speech immediately.
+emergencyStop.registerAbortHandler(() => mioVoice.stop());
 export function installMioVoiceRuntime() { return mioVoice.installRuntime(); }

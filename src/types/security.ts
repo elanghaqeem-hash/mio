@@ -94,7 +94,9 @@ export interface SecurityEvent {
     | 'UNTRUSTED_CONTENT'
     | 'RESOURCE_LIMIT'
     | 'TOOL_EXECUTION'
-    | 'TOOL_VALIDATION';
+    | 'TOOL_VALIDATION'
+    | 'EMERGENCY_STOP'
+    | 'AUDIT';
   action: string;
   details: string;
   blocked: boolean;

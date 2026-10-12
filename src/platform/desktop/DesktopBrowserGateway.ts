@@ -70,6 +70,8 @@ export function createDesktopBrowserGateway(bridge: DesktopBrowserBridge): Secur
       const requestedOrigin = normalizedHttpsOrigin(input.url);
       const returnedOrigin = normalizedHttpsOrigin(result.url);
       if (!requestedOrigin || !returnedOrigin) throw new Error('Desktop browser returned an invalid URL');
+      // The user approved one origin; content a redirect fetched from another origin never reaches the model.
+      if (returnedOrigin !== requestedOrigin) throw new Error(`Desktop browser was redirected to ${returnedOrigin}, outside the approved origin ${requestedOrigin}`);
       const text = result.text.slice(0, MAX_TEXT_CHARS);
       return {
         title: String(result.title ?? '').slice(0, 512),
