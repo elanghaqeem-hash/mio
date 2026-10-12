@@ -367,3 +367,14 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | New PR from `claude/mio-runtime-v1-prep-x0bpzv` |
 | Remaining Gaps | S-1 (owner decision on the access model), S-2 to S-10 (assigned to later milestones) |
 | Next Task | Owner decision on S-1; then PRV-05 Unified Capability Protocol |
+
+### 7.12 MIO-PRV-06 S-1 — Shared gateway token (owner decision b)
+
+| Field | Value |
+|---|---|
+| Objective | Close S-1: stop unauthenticated callers from spending the AI and research proxy quota |
+| Implemented | `functions/api/_security.ts` gateway check on `/api/ai/generate` and `/api/research`. It requires `x-mio-gateway-token` = `MIO_API_GATEWAY_TOKEN` (constant-time compare, at least 32 characters), checked before the body is read; a weak or required-but-missing token fails closed. Readiness reports `gatewayProtection` and `gatewayAuthorized`. Client: `src/security/ApiGatewayCredential.ts` (per-device token, same-origin only, outside exported settings), a Settings panel, and the header on the router, research, and MIO Local research calls |
+| Test Results | 2 new regression tests (no token, wrong token, weak token, required-but-missing, and no upstream call before auth; same-origin-only header, not exported) |
+| Acceptance Gate | Code: PASS (local). Production: **owner action**. Set `MIO_API_GATEWAY_TOKEN` (and optionally `MIO_API_REQUIRE_GATEWAY_TOKEN=true`) in Cloudflare Pages, redeploy, and save the token on each device (`docs/AI_PROVIDER_SETUP.md`) |
+| Remaining Gaps | Per-caller rate limiting (not part of option b) |
+| Next Task | PRV-05 Unified Capability Protocol |

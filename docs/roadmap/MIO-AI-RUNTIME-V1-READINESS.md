@@ -18,7 +18,7 @@ Gate values: PASS · FAIL · BLOCKED · NOT VERIFIED · NOT APPLICABLE (with jus
 | G-03 | Unified Context Engine | Ranked, budgeted, provenance-tagged context with project isolation and injection resistance | **PASS (local)** for the live chat path | Engine wired into chat (PRV-03.06), tested end to end; file-intelligence/graph sources follow with PRV-04 |
 | G-04 | Multimodal File Intelligence | Measured reliability/performance benchmarks; engines reachable by the agent | **FAIL** | Engines not integrated (F-4); benchmark synthetic only (F-11) |
 | G-05 | Unified Capability Protocol | Single manifest-based protocol for files, research, memory, model, creative, voice | **FAIL** | PARTIAL (`CapabilityRegistry`, `ToolRouter` without manifests) |
-| G-06 | Security regression freeze | No open critical/high finding affecting V1; regression gate green | **FAIL** | Gate `npm run test:security` green (304/304, 27 suites); 10 findings fixed, including 2 HIGH; open HIGH S-1 (unauthenticated AI/research proxy) needs an owner decision. See [MIO-PRV-06-SECURITY-REGRESSION.md](./MIO-PRV-06-SECURITY-REGRESSION.md) |
+| G-06 | Security regression freeze | No open critical/high finding affecting V1; regression gate green | **PENDING OWNER ACTION** | Gate `npm run test:security` green; 10 findings fixed in #522; S-1 fix (shared gateway token) implemented and active once `MIO_API_GATEWAY_TOKEN` is set on Cloudflare Pages. See [MIO-PRV-06-SECURITY-REGRESSION.md](./MIO-PRV-06-SECURITY-REGRESSION.md) |
 | G-10 | Observability & recovery | Every execution traceable, cancellable, and recoverable within safety limits | **FAIL** | No shared trace model |
 | G-11 | MioBench | All 15 required end-to-end workflows plus negative, concurrency, and performance scenarios green | **FAIL** | NOT STARTED |
 
@@ -61,3 +61,4 @@ The target is minimum recurring cost. It is not a promise that every function is
 | 2026-10-12 | G-03 moves to PARTIAL; boundary-spoofing vulnerability fixed |
 | 2026-10-12 | G-03 passes locally for the live chat path (PRV-03.06) |
 | 2026-10-12 | G-06 evaluated after PRV-06: gate in place; FAIL on open HIGH S-1 |
+| 2026-10-12 | S-1 fix implemented (owner decision b); G-06 passes once the gateway secret is set |

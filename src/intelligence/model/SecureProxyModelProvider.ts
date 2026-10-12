@@ -1,3 +1,4 @@
+import { apiGatewayCredential } from '../../security/ApiGatewayCredential';
 import { ModelProvider, ModelProviderId, ModelRequest, ModelResponse } from '../../types/models';
 
 type CloudModelProviderId = Exclude<ModelProviderId, 'mio_local' | 'local_heuristic' | 'ollama'>;
@@ -29,7 +30,7 @@ export class SecureProxyModelProvider implements ModelProvider {
   public async generate(request: ModelRequest, signal?: AbortSignal): Promise<ModelResponse> {
     const response = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...apiGatewayCredential.headersFor(this.endpoint) },
       credentials: 'same-origin',
       signal,
       body: JSON.stringify({

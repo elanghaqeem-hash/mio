@@ -1,10 +1,10 @@
-import { readBoundedJson } from './_security';
+import { GATEWAY_TOKEN_HEADER, gatewayProtection, gatewayTokenAccepted, readBoundedJson, rejectUnauthorizedGatewayRequest, type GatewayTokenEnv } from './_security';
 
 // A query is at most 500 characters; anything far larger is not a research request.
 const MAX_RESEARCH_BODY_BYTES = 16 * 1024;
 type ResearchSourceType = 'ENCYCLOPEDIA' | 'ACADEMIC' | 'WEB';
 
-interface Env {
+interface Env extends GatewayTokenEnv {
   BRAVE_SEARCH_API_KEY?: string;
 }
 
@@ -197,6 +197,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     ready: true,
     provider: context.env.BRAVE_SEARCH_API_KEY?.trim() ? 'brave-search' : 'wikipedia-crossref',
     fullWeb: Boolean(context.env.BRAVE_SEARCH_API_KEY?.trim()),
+    gatewayProtection: gatewayProtection(context.env),
+    gatewayAuthorized: gatewayTokenAccepted(context.request, context.env),
     detail: context.env.BRAVE_SEARCH_API_KEY?.trim()
       ? 'Same-origin research proxy is ready with Brave Search.'
       : 'Same-origin research proxy is ready with public Wikipedia Indonesia and Crossref sources. Configure BRAVE_SEARCH_API_KEY for broader web coverage.',
@@ -204,6 +206,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
+  const rejected = rejectUnauthorizedGatewayRequest(context.request, context.env);
+  if (rejected) return json({ error: rejected.error, header: GATEWAY_TOKEN_HEADER }, rejected.status);
   const parsed = await readBoundedJson<{ query?: unknown; count?: unknown }>(context.request, MAX_RESEARCH_BODY_BYTES);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
   const body = parsed.value;

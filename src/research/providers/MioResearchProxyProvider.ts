@@ -1,3 +1,4 @@
+import { apiGatewayCredential } from '../../security/ApiGatewayCredential';
 import { SearchProvider, SearchProviderResult } from '../SearchProvider';
 import { RawResearchResult, ResearchQueryPlan } from '../../types/research';
 
@@ -52,7 +53,7 @@ export class MioResearchProxyProvider implements SearchProvider {
   public async searchWithDiagnostics(plan: ResearchQueryPlan, signal?: AbortSignal): Promise<SearchProviderResult> {
     const response = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...apiGatewayCredential.headersFor(this.endpoint) },
       body: JSON.stringify({ query: plan.normalizedQuery, count: Math.min(plan.maxResults, 10) }),
       signal,
     });

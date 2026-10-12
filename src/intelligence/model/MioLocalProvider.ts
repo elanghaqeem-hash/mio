@@ -1,3 +1,4 @@
+import { apiGatewayCredential } from '../../security/ApiGatewayCredential';
 import { LocalInferenceBackendId, ModelCitation, ModelMessage, ModelProvider, ModelRequest, ModelResponse } from '../../types/models';
 import { serializeApplicationContext } from './ApplicationContextSerializer';
 import { createLocalInferenceBackend, LocalInferenceBackend, LocalInferenceChatResult } from './LocalInferenceBackend';
@@ -218,7 +219,7 @@ export class MioLocalProvider implements ModelProvider {
   private async searchWeb(query: string, signal?: AbortSignal): Promise<WebEvidence[]> {
     const response = await fetch(this.researchEndpoint, {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...apiGatewayCredential.headersFor(this.researchEndpoint) },
       body: JSON.stringify({ query, count: MAX_EVIDENCE_ITEMS }),
       credentials: 'same-origin',
       signal,

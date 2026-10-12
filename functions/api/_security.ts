@@ -50,3 +50,48 @@ export function redactSecretText(text: string): string {
     typeof name === 'string' && typeof separator === 'string' ? `${name}${separator}[REDACTED]` : /^bearer/i.test(match) ? 'Bearer [REDACTED]' : '[REDACTED]'
   )), text);
 }
+
+// MIO-PRV-06 S-1 (owner decision: shared gateway token). The token lives only in the Cloudflare Pages
+// environment and on the owner's devices (entered in Settings); it is never part of the web bundle.
+export const GATEWAY_TOKEN_HEADER = 'x-mio-gateway-token';
+const MIN_GATEWAY_TOKEN_LENGTH = 32;
+
+export interface GatewayTokenEnv {
+  MIO_API_GATEWAY_TOKEN?: string;
+  MIO_API_REQUIRE_GATEWAY_TOKEN?: string;
+}
+
+export type GatewayProtection = 'TOKEN' | 'UNPROTECTED' | 'MISCONFIGURED';
+
+/** TOKEN when a strong token is set; MISCONFIGURED when protection is required or set but unusable; UNPROTECTED otherwise. */
+export function gatewayProtection(env: GatewayTokenEnv): GatewayProtection {
+  const token = env.MIO_API_GATEWAY_TOKEN?.trim();
+  if (token) return token.length >= MIN_GATEWAY_TOKEN_LENGTH ? 'TOKEN' : 'MISCONFIGURED';
+  return env.MIO_API_REQUIRE_GATEWAY_TOKEN?.trim().toLowerCase() === 'true' ? 'MISCONFIGURED' : 'UNPROTECTED';
+}
+
+function constantTimeEqual(left: string, right: string): boolean {
+  const encoder = new TextEncoder();
+  const a = encoder.encode(left);
+  const b = encoder.encode(right);
+  let diff = a.length ^ b.length;
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) diff |= (a[index] ?? 0) ^ (b[index] ?? 0);
+  return diff === 0;
+}
+
+/** Whether the request carries the configured gateway token. Always true for an UNPROTECTED (transitional) deployment. */
+export function gatewayTokenAccepted(request: Request, env: GatewayTokenEnv): boolean {
+  const protection = gatewayProtection(env);
+  if (protection === 'UNPROTECTED') return true;
+  if (protection === 'MISCONFIGURED') return false;
+  const supplied = request.headers.get(GATEWAY_TOKEN_HEADER)?.trim();
+  return Boolean(supplied && constantTimeEqual(supplied, env.MIO_API_GATEWAY_TOKEN!.trim()));
+}
+
+/** Fails closed before any body is read or any upstream is called: 503 when misconfigured, 401 without a valid token. */
+export function rejectUnauthorizedGatewayRequest(request: Request, env: GatewayTokenEnv): { status: 401 | 503; error: string } | null {
+  const protection = gatewayProtection(env);
+  if (protection === 'MISCONFIGURED') return { status: 503, error: `Gateway protection is required but MIO_API_GATEWAY_TOKEN is missing or shorter than ${MIN_GATEWAY_TOKEN_LENGTH} characters` };
+  if (!gatewayTokenAccepted(request, env)) return { status: 401, error: 'A valid MIO gateway token is required. Enter it in Settings → Secure proxy access.' };
+  return null;
+}

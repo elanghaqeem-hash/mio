@@ -3,11 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { isBlockedAddress, parseHttpsUrl } from '../../electron/ipc/browserReadSandbox';
 import { WorkspaceSandbox } from '../../electron/ipc/workspaceSandbox';
-import { onRequestPost as generatePost } from '../../functions/api/ai/generate';
+import { onRequestGet as generateGet, onRequestPost as generatePost } from '../../functions/api/ai/generate';
 import { onRequestPost as researchPost } from '../../functions/api/research';
 import { readBoundedJson, redactSecretText as redactFunctionSecretText } from '../../functions/api/_security';
 import { ModelRouter } from '../agents/ModelRouter';
 import { emergencyStop } from '../core/EmergencyStop';
+import { apiGatewayCredential } from '../security/ApiGatewayCredential';
+import { systemPreferences } from '../settings/SystemPreferences';
 import { eventBus } from '../core/EventBus';
 import { buildDesktopBrowserScope, createDesktopBrowserGateway } from '../platform/desktop/DesktopBrowserGateway';
 import { PermissionEngine } from '../security/PermissionEngine';
@@ -187,6 +189,39 @@ export async function runSecurityRegressionTests(): Promise<{ passed: number; to
         globalWithDesktop.mioDesktop = previous;
         emergencyStop.reset();
       }
+    }],
+    ['S-1: the AI and research proxies refuse callers without the shared gateway token, before any upstream call', async () => {
+      const token = 'g'.repeat(40);
+      const originalFetch = globalThis.fetch;
+      let upstreamCalls = 0;
+      globalThis.fetch = (async () => { upstreamCalls++; return new Response('{}', { status: 500 }); }) as typeof fetch;
+      const generate = (headers: Record<string, string>, env: Record<string, string>) => generatePost({ request: new Request('https://mio.test/api/ai/generate', { method: 'POST', headers, body: JSON.stringify({ provider: 'openai', messages: [{ role: 'user', content: 'hi' }] }) }), env });
+      try {
+        const protectedEnv = { OPENAI_API_KEY: 'k', MIO_API_GATEWAY_TOKEN: token };
+        assert((await generate({}, protectedEnv)).status === 401, 'generate ran without a gateway token');
+        assert((await generate({ 'x-mio-gateway-token': 'g'.repeat(39) }, protectedEnv)).status === 401, 'generate accepted a wrong gateway token');
+        assert((await researchPost({ request: new Request('https://mio.test/api/research', { method: 'POST', body: JSON.stringify({ query: 'mio' }) }), env: { MIO_API_GATEWAY_TOKEN: token } })).status === 401, 'research ran without a gateway token');
+        assert(upstreamCalls === 0, 'an unauthenticated request reached an upstream provider');
+        assert((await generate({ 'x-mio-gateway-token': token }, { MIO_API_GATEWAY_TOKEN: token })).status === 503, 'a valid token did not pass the gateway check');
+        assert((await generate({ 'x-mio-gateway-token': 'short' }, { OPENAI_API_KEY: 'k', MIO_API_GATEWAY_TOKEN: 'short' })).status === 503, 'a weak gateway token was accepted instead of failing closed');
+        assert((await generate({}, { OPENAI_API_KEY: 'k', MIO_API_REQUIRE_GATEWAY_TOKEN: 'true' })).status === 503, 'required protection without a token did not fail closed');
+        const readiness = await (await generateGet({ request: new Request('https://mio.test/api/ai/generate?provider=openai', { headers: { 'x-mio-gateway-token': token } }), env: protectedEnv })).json() as { gatewayProtection?: string; gatewayAuthorized?: boolean };
+        assert(readiness.gatewayProtection === 'TOKEN' && readiness.gatewayAuthorized === true, `readiness did not report gateway state: ${JSON.stringify(readiness)}`);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }],
+    ['S-1: the device gateway token is sent only to same-origin proxies and never exported with settings', () => {
+      const token = 'device-token-' + 'x'.repeat(32);
+      apiGatewayCredential.set(token);
+      try {
+        assert(apiGatewayCredential.headersFor('/api/ai/generate')['x-mio-gateway-token'] === token, 'token not attached to the same-origin proxy');
+        assert(Object.keys(apiGatewayCredential.headersFor('https://attacker.example/api/ai/generate')).length === 0, 'token sent to a foreign origin');
+        assert(!JSON.stringify(systemPreferences.getSnapshot()).includes(token), 'gateway token leaked into exported settings');
+      } finally {
+        apiGatewayCredential.clear();
+      }
+      assert(!apiGatewayCredential.isSet() && Object.keys(apiGatewayCredential.headersFor('/api/research')).length === 0, 'cleared token is still sent');
     }],
     ['audit completeness: clearing the audit log leaves a record of the clear', async () => {
       const audit = new SecurityAuditLog();
