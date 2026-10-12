@@ -141,7 +141,7 @@ export const SFXStudioView: React.FC = () => {
   const selectedSampleMetadataMissing=Boolean(selectedSampleRegion&&!selectedSampleAsset);const selectedSampleMissing=Boolean(selectedSampleRegion&&(selectedSampleMetadataMissing||!hasRuntimeSample(selectedSampleRegion.assetId)));
   const relinkSelectedSample=async(file:File)=>{const context=audioCtxRef.current;if(!context||!selectedSampleAsset)return;try{setSampleError(null);if(context.state==='suspended')await context.resume();const entry=await relinkSFXSample(context,file,selectedSampleAsset);setPatch(current=>({...current,sampleAssets:(current.sampleAssets??[]).map(asset=>asset.id===selectedSampleAsset.id?entry.decoded.asset:asset)}));setSampleRuntimeRevision(value=>value+1);}catch(error){setSampleError(error instanceof Error?error.message:'Unable to relink sample');}};
   const updateSampleRegion=(updates:Partial<NonNullable<MioSFXPatch['sampleRegions']>[number]>)=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).map(region=>region.id===selectedSampleRegion.id?normalizeSampleRegion({...region,...updates},asset):region)}));};
-  const splitAtPlayhead=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const safePlayhead=Math.max(.001,Math.min(.999,samplePlayhead));const sourceOffset=safePlayhead*Math.max(.0001,selectedSampleRegion.sourceEnd-selectedSampleRegion.sourceStart);const parts=splitSampleRegion(selectedSampleRegion,asset,sourceOffset,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[1].id);};
+  const splitAtPlayhead=()=>{if(!selectedSampleRegion)return;const asset=patch.sampleAssets?.find(a=>a.id===selectedSampleRegion.assetId);if(!asset)return;const sourceTime=samplePlayhead*assetDuration(asset);const sourceOffset=selectedSampleRegion.reverse?selectedSampleRegion.sourceEnd-sourceTime:sourceTime-selectedSampleRegion.sourceStart;const parts=splitSampleRegion(selectedSampleRegion,asset,sourceOffset,`${selectedSampleRegion.id}_a`,`${selectedSampleRegion.id}_b`);if(!parts)return;setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).flatMap(region=>region.id===selectedSampleRegion.id?parts:[region])}));setSelectedSampleRegionId(parts[1].id);};
   const duplicateSelectedSample=()=>{if(!selectedSampleRegion)return;const id=`${selectedSampleRegion.id}_copy_${globalThis.crypto?.randomUUID?.()??Date.now()}`;const copy={...selectedSampleRegion,id,name:`${selectedSampleRegion.name} Copy`,timelineStart:selectedSampleRegion.timelineStart+regionTimelineDuration(selectedSampleRegion)};setPatch(current=>({...current,duration:Math.max(current.duration,copy.timelineStart+regionTimelineDuration(copy)),sampleRegions:[...(current.sampleRegions??[]),copy]}));setSelectedSampleRegionId(id);setSamplePlayhead(0);};
   const normalizeSelectedSample=()=>{if(!selectedSampleRegion)return;const entry=getRuntimeSample(selectedSampleRegion.assetId);if(!entry){setSampleError('Sample must be relinked before normalization');return;}const buffer=entry.decoded.buffer,start=Math.max(0,Math.floor(selectedSampleRegion.sourceStart*buffer.sampleRate)),end=Math.min(buffer.length,Math.ceil(selectedSampleRegion.sourceEnd*buffer.sampleRate));let peak=0;for(let channel=0;channel<buffer.numberOfChannels;channel++){const data=buffer.getChannelData(channel);for(let i=start;i<end;i++)peak=Math.max(peak,Math.abs(data[i]));}if(peak<1e-6){setSampleError('Cannot normalize a silent sample region');return;}setSampleError(null);updateSampleRegion({gain:Math.min(4,1/peak)});};
   const removeSelectedSample=()=>{if(!selectedSampleRegion)return;const assetId=selectedSampleRegion.assetId,remaining=(patch.sampleRegions??[]).filter(region=>region.id!==selectedSampleRegion.id),stillUsed=remaining.some(region=>region.assetId===assetId);if(!stillUsed)releaseRuntimeSample(assetId);setPatch(current=>({...current,sampleRegions:(current.sampleRegions??[]).filter(region=>region.id!==selectedSampleRegion.id),sampleAssets:stillUsed?current.sampleAssets:(current.sampleAssets??[]).filter(asset=>asset.id!==assetId)}));setSelectedSampleRegionId(remaining[0]?.id??null);setSamplePlayhead(0);setSampleRuntimeRevision(value=>value+1);};
@@ -248,7 +248,7 @@ export const SFXStudioView: React.FC = () => {
     if (!context || !analyser) return;
     if (context.state === 'suspended') await context.resume();
     const normalized=normalizeSFXPatch(patch);
-    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]);
+    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]),layerDuration=Math.min(renderDuration,Math.max(.01,normalized.duration));
     const missing=[...new Set((normalized.sampleRegions??[]).filter(region=>!getRuntimeSample(region.assetId)).map(region=>region.assetId))];
     if(missing.length){setSampleError(`SFX sample relink required before playback: ${missing.join(', ')}`);return;}
     setSampleError(null);
@@ -256,7 +256,7 @@ export const SFXStudioView: React.FC = () => {
     master.gain.setValueAtTime(0.7, context.currentTime);
     master.connect(analyser);
     analyser.connect(context.destination);
-    normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, renderDuration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart);});
+    normalized.layers.forEach((layer) => buildLayerGraph(context, layer, master, context.currentTime, layerDuration)); normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(entry)scheduleSFXSampleRegion(context,entry.decoded,region,master,context.currentTime+region.timelineStart,context.currentTime+renderDuration);});
     eventBus.emit('CORE_STATE_CHANGE', 'SFX MODE');
     window.setTimeout(() => {
       if (!emergencyStop.isEmergencyStopped()) eventBus.emit('CORE_STATE_CHANGE', 'IDLE');
@@ -269,13 +269,13 @@ export const SFXStudioView: React.FC = () => {
     setSampleError(null);
     try {
     const normalized=normalizeSFXPatch(patch);
-    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]);
+    const renderDuration=effectiveSFXDuration(normalized.duration,normalized.sampleRegions??[]),layerDuration=Math.min(renderDuration,Math.max(.01,normalized.duration));
     const offline = new OfflineAudioContext(2, Math.ceil(44100 * renderDuration), 44100);
     const master = offline.createGain();
     master.gain.setValueAtTime(0.8, 0);
     master.connect(offline.destination);
-    normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, renderDuration));
-    const missing:string[]=[];normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(!entry){missing.push(region.assetId);return;}scheduleSFXSampleRegion(offline,entry.decoded,region,master,region.timelineStart);});if(missing.length){const message=`SFX sample relink required before export: ${[...new Set(missing)].join(', ')}`;setSampleError(message);return;}
+    normalized.layers.forEach((layer) => buildLayerGraph(offline, layer, master, 0, layerDuration));
+    const missing:string[]=[];normalized.sampleRegions?.forEach(region=>{const entry=getRuntimeSample(region.assetId);if(!entry){missing.push(region.assetId);return;}scheduleSFXSampleRegion(offline,entry.decoded,region,master,region.timelineStart,renderDuration);});if(missing.length){const message=`SFX sample relink required before export: ${[...new Set(missing)].join(', ')}`;setSampleError(message);return;}
     ExportManager.exportAudioAsWAV(await offline.startRendering(), `${patch.name}.wav`);
     } catch(error) { setSampleError(error instanceof Error?error.message:'Unable to export SFX audio'); }
   };

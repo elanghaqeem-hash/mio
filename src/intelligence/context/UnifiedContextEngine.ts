@@ -33,6 +33,10 @@ export interface UnifiedContextRequest {
   budgetChars: number;
   /** Max share of the budget any single kind may take (default 0.6), so no source starves the others. */
   maxShareByKind?: Partial<Record<MioEvidenceKind, number>>;
+  /** Absolute per-kind caps in chars; when set for a kind they take precedence over maxShareByKind. */
+  maxCharsByKind?: Partial<Record<MioEvidenceKind, number>>;
+  /** Admit the first item of each kind even if it alone exceeds that kind's cap (mirrors the legacy assemblers). */
+  admitFirstOfKind?: boolean;
 }
 
 export type DropReason = 'CROSS_PROJECT' | 'INVALID' | 'DUPLICATE' | 'BUDGET' | 'KIND_SHARE' | 'EMPTY';
@@ -102,10 +106,11 @@ export function selectContext(candidates: readonly MioContextCandidate[], reques
   const items: UnifiedContextItem[] = [];
   let usedChars = 0;
   for (const item of accepted) {
-    const kindCap = Math.floor(request.budgetChars * (request.maxShareByKind?.[item.evidence.kind] ?? DEFAULT_KIND_SHARE));
+    const kindCap = request.maxCharsByKind?.[item.evidence.kind] ?? Math.floor(request.budgetChars * (request.maxShareByKind?.[item.evidence.kind] ?? DEFAULT_KIND_SHARE));
     const kindUsed = usedByKind.get(item.evidence.kind) ?? 0;
-    if (usedChars + item.text.length > request.budgetChars) { dropped.push({ id: item.evidence.id, kind: item.evidence.kind, reason: 'BUDGET' }); continue; }
-    if (kindUsed + item.text.length > kindCap) { dropped.push({ id: item.evidence.id, kind: item.evidence.kind, reason: 'KIND_SHARE' }); continue; }
+    const firstOfKind = request.admitFirstOfKind === true && kindUsed === 0;
+    if (!firstOfKind && usedChars + item.text.length > request.budgetChars) { dropped.push({ id: item.evidence.id, kind: item.evidence.kind, reason: 'BUDGET' }); continue; }
+    if (!firstOfKind && kindUsed + item.text.length > kindCap) { dropped.push({ id: item.evidence.id, kind: item.evidence.kind, reason: 'KIND_SHARE' }); continue; }
     items.push(item);
     usedChars += item.text.length;
     usedByKind.set(item.evidence.kind, kindUsed + item.text.length);

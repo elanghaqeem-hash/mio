@@ -64,12 +64,20 @@ export async function normalizeWorkersAiResult(result: unknown): Promise<Workers
 /** Runs MeloTTS with a hard timeout. The binding has no abort signal, so the race bounds gateway latency. */
 export async function synthesizeWithWorkersAi(ai: WorkersAiBinding, model: string, text: string, lang: string, timeoutMs: number): Promise<WorkersAiAudio> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   const timeout = new Promise<WorkersAiAudio>(resolve => {
-    timer = setTimeout(() => resolve({ kind: 'error', status: 504, error: 'Synthesis request timed out' }), timeoutMs);
+    timer = setTimeout(() => { timedOut = true; resolve({ kind: 'error', status: 504, error: 'Synthesis request timed out' }); }, timeoutMs);
   });
+  // Promise.resolve().then(...) also maps a synchronous throw from the binding to 502.
+  const run = Promise.resolve()
+    .then(() => ai.run(model, { prompt: text, lang }, { returnRawResponse: true }))
+    .then(normalizeWorkersAiResult, () => ({ kind: 'error', status: 502, error: 'Cloudflare Workers AI synthesis request failed' }) as WorkersAiAudio)
+    .then(result => {
+      // A late result after the timeout has nobody to read it: cancel its stream so the upstream is released.
+      if (timedOut && result.kind === 'audio' && result.body instanceof ReadableStream) void result.body.cancel().catch(() => undefined);
+      return result;
+    });
   try {
-    const run = ai.run(model, { prompt: text, lang }, { returnRawResponse: true })
-      .then(normalizeWorkersAiResult, () => ({ kind: 'error', status: 502, error: 'Cloudflare Workers AI synthesis request failed' }) as WorkersAiAudio);
     return await Promise.race([run, timeout]);
   } finally {
     clearTimeout(timer);

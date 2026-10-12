@@ -65,30 +65,40 @@ export class CloudBudgetLedger {
   private loading: Promise<void> | null = null;
   private writes: Promise<void> = Promise.resolve();
   private sequence = 0;
+  private generation = 0;
 
   constructor(private storage: StorageProvider | null, private readonly now: () => number = () => Date.now()) {}
 
   setStorage(storage: StorageProvider | null): void {
+    // A load already in flight belongs to the previous storage: bump the generation so its result is
+    // discarded, and force a reload from the new storage. In-flight reservations are kept so the spend of
+    // calls that are still running is not lost.
+    this.generation += 1;
     this.storage = storage;
     this.month = null;
     this.spentUsd = 0;
-    this.reservations.clear();
     this.loading = null;
   }
 
   private async ensureCurrentMonth(): Promise<string> {
     const current = monthOf(this.now());
-    if (this.month === current) return current;
-    if (!this.loading) {
-      this.loading = (async () => {
-        const stored = this.storage ? await this.storage.get<StoredSpend>('settings', STORAGE_KEY).catch(() => null) : null;
-        const valid = stored && typeof stored.month === 'string' && typeof stored.spentUsd === 'number' && Number.isFinite(stored.spentUsd) && stored.spentUsd >= 0;
-        this.spentUsd = valid && stored.month === current ? stored.spentUsd : 0;
-        this.month = current;
-        this.reservations.clear();
-      })().finally(() => { this.loading = null; });
+    while (this.month !== current) {
+      if (!this.loading) {
+        const generation = this.generation;
+        const storage = this.storage;
+        const load = (async () => {
+          const stored = storage ? await storage.get<StoredSpend>('settings', STORAGE_KEY).catch(() => null) : null;
+          if (generation !== this.generation) return; // storage changed while loading: ignore this result
+          const valid = stored && typeof stored.month === 'string' && typeof stored.spentUsd === 'number' && Number.isFinite(stored.spentUsd) && stored.spentUsd >= 0;
+          this.spentUsd = valid && stored.month === current ? stored.spentUsd : 0;
+          for (const [id, reservation] of this.reservations) if (reservation.month !== current) this.reservations.delete(id);
+          this.month = current;
+        })();
+        const pending: Promise<void> = load.finally(() => { if (this.loading === pending) this.loading = null; });
+        this.loading = pending;
+      }
+      await this.loading;
     }
-    await this.loading;
     return current;
   }
 

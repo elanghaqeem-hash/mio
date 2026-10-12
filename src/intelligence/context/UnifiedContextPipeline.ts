@@ -8,7 +8,7 @@ import type { RuntimeTask } from '../../types/tasks';
 import type { MioEvidenceKind } from '../../contracts/MioContracts';
 import type { ModelContextAssembly } from './ModelContextAssembler';
 import {
-  MAX_CONTEXT_BUDGET, candidateFromPermissionState, candidateFromTask, candidatesFromModelContextAssembly, selectContext, serializeUnifiedContext,
+  candidateFromPermissionState, candidateFromTask, candidatesFromModelContextAssembly, selectContext, serializeUnifiedContext,
   type UnifiedContextBundle,
 } from './UnifiedContextEngine';
 
@@ -36,24 +36,29 @@ export function governAssembledContext(
     ...(input.task ? [candidateFromTask(input.task, now)] : []),
     candidateFromPermissionState(input.projectId, input.taskId, input.grants ?? [], now),
   ];
-  const budgetChars = Math.min(MAX_CONTEXT_BUDGET, knowledgeBudget + memoryBudget + RUNTIME_STATE_BUDGET);
-  // Each kind keeps exactly the budget it had before, so context that used to fit still fits.
-  const share = (chars: number): number => (budgetChars > 0 ? Math.min(1, chars / budgetChars) : 0);
+  // The assemblers already applied their budgets (admitting a first item even when it is oversized), so
+  // the governor re-applies exactly those absolute caps: legitimate context that was sent before is
+  // never dropped for budget reasons here. Governance (isolation, dedup, injection) is what changes.
+  const sentChars = (texts: readonly string[]): number => texts.reduce((sum, text) => sum + text.trim().length, 0);
+  const knowledgeCap = Math.max(knowledgeBudget, sentChars((application?.sources ?? []).map(source => source.text)));
+  const memoryCap = Math.max(memoryBudget, sentChars(assembly.memorySources.map(source => source.content)));
   const bundle = selectContext([...candidatesFromModelContextAssembly(assembly, input.projectId, now), ...runtimeCandidates], {
     projectId: input.projectId,
     taskId: input.taskId,
     query: input.query,
-    budgetChars,
-    maxShareByKind: { PROJECT_KNOWLEDGE: share(knowledgeBudget), MEMORY: share(memoryBudget), TASK_STATE: share(RUNTIME_STATE_BUDGET), PERMISSION_STATE: share(RUNTIME_STATE_BUDGET) },
+    budgetChars: knowledgeCap + memoryCap + 2 * RUNTIME_STATE_BUDGET,
+    maxCharsByKind: { PROJECT_KNOWLEDGE: knowledgeCap, MEMORY: memoryCap, TASK_STATE: RUNTIME_STATE_BUDGET, PERMISSION_STATE: RUNTIME_STATE_BUDGET },
+    admitFirstOfKind: true,
   });
 
   const kept = new Map(bundle.items.map(item => [key(item.evidence.kind, item.evidence.id), item]));
   const knowledgeSources = (application?.sources ?? [])
     .filter(source => kept.has(key('PROJECT_KNOWLEDGE', source.id)))
     .map(source => (kept.get(key('PROJECT_KNOWLEDGE', source.id))?.injectionFlagged ? { ...source, trust: 'QUARANTINED' as const } : source));
+  // Memory has no quarantine trust label, and relabelling a flagged item as SYSTEM_DERIVED would make
+  // injected text look system-originated. Flagged memory is therefore withheld from the model entirely.
   const memorySources = (assembly.memoryContext?.sources ?? [])
-    .filter(source => kept.has(key('MEMORY', source.id)))
-    .map(source => (kept.get(key('MEMORY', source.id))?.injectionFlagged ? { ...source, trust: 'SYSTEM_DERIVED' as const } : source));
+    .filter(source => kept.has(key('MEMORY', source.id)) && !kept.get(key('MEMORY', source.id))?.injectionFlagged);
   const runtimeItems = bundle.items.filter(item => item.evidence.kind === 'TASK_STATE' || item.evidence.kind === 'PERMISSION_STATE');
 
   return {

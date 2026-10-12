@@ -340,7 +340,9 @@ export class ModelRouter {
       const response = await this.executeProvider(provider, preparedRequest, timeoutMs);
       circuit?.success();
       const actualCostUsd = reservation ? actualCloudCallUsd(response.usage, estimatedCostUsd) : 0;
-      if (reservation) await this.cloudBudget.settle(reservation, actualCostUsd);
+      // Spend is recorded in memory before persisting; a storage failure must never turn a delivered,
+      // already-billed response into a failure (or count against the provider's circuit).
+      if (reservation) await this.cloudBudget.settle(reservation, actualCostUsd).catch(() => eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: 'Cloud spend could not be persisted; it is still counted for this session', mode: 'CHAT' }));
       this.recordProvenance(provider, preparedRequest, startedAt, 'SUCCEEDED', response.model, estimatedCostUsd, actualCostUsd);
       return response;
     } catch (error) {

@@ -85,6 +85,28 @@ export async function runModelRouterBudgetTests(): Promise<{ passed: number; tot
       assert(receipt?.status === 'SUCCEEDED' && receipt.locality === 'REMOTE' && receipt.providerId === 'openai' && receipt.actualCostUsd !== undefined, 'provenance missing');
       assert(!/api.?key|bearer|secret|authorization/i.test(JSON.stringify(ModelRouter.getRecentProvenance())), 'provenance leaks secrets');
     }],
+    ['a spend-persistence failure never discards a delivered paid response', async () => {
+      reset(); ModelRouter.setNetworkState('ONLINE'); configure(5);
+      const failingWrites = new InMemoryStorageProvider();
+      failingWrites.set = async () => { throw new Error('quota exceeded'); };
+      ModelRouter.setCostStorage(failingWrites);
+      const response = await ModelRouter.generate(prompt, 2000);
+      assert(response.text === 'cloud answer' && ModelRouter.getRecentProvenance().at(-1)?.status === 'SUCCEEDED', 'storage failure turned a delivered response into a failure');
+      assert((await ModelRouter.getCloudBudget()).spentUsd > 0, 'spend was not kept in memory');
+    }],
+    ['switching storage mid-load reads the new storage, never the stale one', async () => {
+      const slow = new InMemoryStorageProvider();
+      await slow.set('settings', 'cloud-spend-v1', { month: new Date().toISOString().slice(0, 7), spentUsd: 0.9 });
+      const originalGet = slow.get.bind(slow);
+      slow.get = async <T,>(namespace: Parameters<typeof originalGet>[0], key: string) => { await new Promise(resolve => setTimeout(resolve, 30)); return originalGet<T>(namespace, key); };
+      const fresh = new InMemoryStorageProvider();
+      await fresh.set('settings', 'cloud-spend-v1', { month: new Date().toISOString().slice(0, 7), spentUsd: 0.2 });
+      const ledger = new CloudBudgetLedger(slow);
+      const stale = ledger.snapshot(5);
+      ledger.setStorage(fresh);
+      const [first, second] = await Promise.all([stale, ledger.snapshot(5)]);
+      assert(Math.abs(first.spentUsd - 0.2) < 1e-12 && Math.abs(second.spentUsd - 0.2) < 1e-12, `stale storage won (${first.spentUsd}, ${second.spentUsd})`);
+    }],
     ['exhausted budget falls back locally before any prompt', async () => {
       reset(); ModelRouter.setNetworkState('ONLINE'); configure(0.01);
       const response = await ModelRouter.generate({ ...prompt, maxOutputTokens: 8192 }, 2000);

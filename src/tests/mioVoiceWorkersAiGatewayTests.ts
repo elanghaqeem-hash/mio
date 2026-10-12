@@ -59,6 +59,15 @@ export async function runMioVoiceWorkersAiGatewayTests(): Promise<{ passed: numb
       const text = await thrown.text();
       assert(thrown.status === 502 && !text.includes('secret-detail'), 'binding error leaked or wrong status');
     }],
+    ['a synchronous binding throw maps to 502, and a late stream after timeout is cancelled', async () => {
+      const thrown = await synthesizeWithWorkersAi(binding(() => { throw new Error('bad input'); }), MELOTTS_MODEL, 'hi', 'en', 1000);
+      assert(thrown.kind === 'error' && thrown.status === 502, 'synchronous throw was not mapped to 502');
+      let cancelled = false;
+      const late = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+      const slow = await synthesizeWithWorkersAi(binding(() => new Promise(resolve => setTimeout(() => resolve(late), 30))), MELOTTS_MODEL, 'hi', 'en', 5);
+      await new Promise(resolve => setTimeout(resolve, 60));
+      assert(slow.kind === 'error' && slow.status === 504 && cancelled, 'late stream after timeout was not cancelled');
+    }],
     ['a hung model call times out with 504', async () => {
       const hung = await synthesizeWithWorkersAi(binding(() => new Promise(() => undefined)), MELOTTS_MODEL, 'hi', 'en', 20);
       assert(hung.kind === 'error' && hung.status === 504, 'hung call did not time out');
