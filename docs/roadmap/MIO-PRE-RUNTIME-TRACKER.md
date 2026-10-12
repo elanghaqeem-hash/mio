@@ -121,7 +121,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | **DONE**: [plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md); phases tracked as MIO-PRV-08.M1–M4 |
 | 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
 | 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
-| 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | **PARTIAL**: Node pinned in all 4 workflows (F-7 fixed). Open: lazy-load workspace modes to split the 511 kB app chunk (three.js is already split); lint warning burn-down |
+| 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | **PARTIAL**: Node pinned in all 4 workflows (F-7 fixed). The app entry chunk is split: React is now its own `react-vendor` chunk, taking the entry from 518 kB, over the release-smoke 500 KiB budget after PRV-02, down to 308 kB. Workspace modes were already lazy. Open: lint warning burn-down |
 
 ### MIO-PRV-01 — Core runtime contract freeze
 Exit gate: core contracts usable without depending on any subsystem's UI.

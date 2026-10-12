@@ -13,6 +13,13 @@ export default defineConfig(({ mode }) => ({
         codeSplitting: {
           groups: [
             {
+              // React runtime in its own long-cacheable chunk keeps the app entry under the
+              // release-smoke chunk budget (MIO-PRV-00.10) without changing load behavior.
+              name: 'react-vendor',
+              test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              priority: 40,
+            },
+            {
               name: 'three-vendor',
               test: /node_modules[\\/]three[\\/]/,
               maxSize: 280000,
