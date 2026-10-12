@@ -84,7 +84,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | Music / SFX | `src/creative/AudioWorkspace.ts`, `src/modes/music`, `src/modes/sfx` | IMPLEMENTED · VERIFIED · INTEGRATED | SFX 10.18 sample/waveform and 10.19 timeline ported in 00.05 |
 | Photo | `src/creative/photo/*` | IMPLEMENTED (domain contract) · PARTIAL | editing features pending |
 | Core runtime contracts (`MioCapabilityRequest` etc.) | `src/contracts/*` | IMPLEMENTED · VERIFIED · not yet emitted natively | v1 contracts, validators, adapters (PRV-01); native emission in PRV-05/10 |
-| Unified capability protocol | `CapabilityRegistry`, `ToolRegistry`, `ToolRouter` | PARTIAL | No per-capability manifest with I/O schema, limits, cancellation |
+| Unified capability protocol | `src/capabilities/*`, `CapabilityRegistry`, `ToolRouter`, `SecureServiceGateway` | IMPLEMENTED · VERIFIED · INTEGRATED | PRV-05: manifests with I/O schema, limits, cancellation, and audit for six domains; the agent invokes through the protocol |
 | Computer Use | `DesktopBrowserGateway` (governed read only), `workspaceSandbox` | NOT STARTED | F-9 |
 | Observability / tracing | `ExecutionLedger`, `SecurityAuditLog`, `MutationAuditLog`, `AIProvenance` | PARTIAL | No shared trace ID or cost/latency model |
 | MioBench integration suite | `src/tests/*` (unit + contract) | NOT STARTED | 1610 unit/contract assertions; no end-to-end workflows |
@@ -378,3 +378,17 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Acceptance Gate | Code: PASS (local). Production: **owner action**. Set `MIO_API_GATEWAY_TOKEN` (and optionally `MIO_API_REQUIRE_GATEWAY_TOKEN=true`) in Cloudflare Pages, redeploy, and save the token on each device (`docs/AI_PROVIDER_SETUP.md`) |
 | Remaining Gaps | Per-caller rate limiting (not part of option b) |
 | Next Task | PRV-05 Unified Capability Protocol |
+
+### 7.13 MIO-PRV-05 — Unified Capability Protocol
+
+| Field | Value |
+|---|---|
+| Objective | The agent discovers and invokes capabilities through one controlled protocol |
+| Baseline | `main` @ `5f36c54`; tools and services had descriptors without I/O schema, limits, cancellation, or audit policy; the agent called ToolRouter directly |
+| Implemented | `CapabilityManifest` (schema subset, governance rules), `CapabilityProtocol` (contract, manifest, admission, declared permission, STOP, size/schema bounds, timeout/abort, output validation, contract result with trace, audit), manifests and executors for FILES, RESEARCH, MEMORY, MODEL, CREATIVE, VOICE, PROJECT; agent research/project/creative calls go through it. Details: [MIO-PRV-05-CAPABILITY-PROTOCOL.md](./MIO-PRV-05-CAPABILITY-PROTOCOL.md) |
+| Files Changed | `src/capabilities/{CapabilityManifest,CapabilityProtocol,defaultCapabilityProtocol}.ts` (new), `src/agents/AgentOrchestrator.ts`, `src/tests/capabilityProtocolTests.ts` (new), `src/tests/securityGate.ts` |
+| Test Results | 14 new tests. The existing agent, tool, and integration suites pass unchanged on the new path |
+| Security Impact | Positive. One front door adds schema/size bounds, a declared-permission check, STOP, and output validation in front of the existing gates. A failed mutating call can never be marked retryable |
+| Acceptance Gate | PRV-05 exit gate **PASS** locally |
+| Remaining Gaps | Chat model path still direct (PRV-10); context-type duplication; free-text legacy failures; desktop FILES wiring in Electron |
+| Next Task | PRV-10 Observability & recovery (shared trace model) |
