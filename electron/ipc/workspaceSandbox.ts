@@ -268,13 +268,17 @@ export class WorkspaceSandbox {
   public async mutate(workspaceId: string, operation: { kind: 'MKDIR' | 'RENAME' | 'MOVE' | 'COPY' | 'TRASH'; source?: string; target?: string }): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new Error('Unknown or revoked workspace authority');
-    const resolveTarget = (relativePath: string): string => {
+    // The target does not exist yet, so its parent is canonicalized instead: a symlinked directory inside
+    // the workspace must not let a mutation write outside the authorized root.
+    const resolveTarget = async (relativePath: string): Promise<string> => {
       this.validateRelativePath(relativePath);
       const target = path.resolve(workspace.rootPath, relativePath);
       this.assertContained(workspace.rootPath, target, 'Mutation target escapes authorized workspace root');
-      return target;
+      const canonicalParent = await fs.promises.realpath(path.dirname(target));
+      this.assertContained(workspace.rootPath, canonicalParent, 'Resolved mutation target escapes authorized workspace root');
+      return path.join(canonicalParent, path.basename(target));
     };
-    const target = operation.target ? resolveTarget(operation.target) : undefined;
+    const target = operation.target ? await resolveTarget(operation.target) : undefined;
     if (target) {
       try { await fs.promises.lstat(target); throw new Error('Mutation target already exists'); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }

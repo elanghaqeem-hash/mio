@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { SECURITY_GATE_SUITES, SECURITY_THREATS } from './securityGate';
 
 const assert = (value: unknown, message: string): void => { if (!value) throw new Error(message); };
 
@@ -25,6 +26,16 @@ export function runTestHarnessIntegrityTests(): { passed: number; total: number 
     ['no runner is registered twice', () => {
       const duplicates = registeredEntries.filter((name, index) => registeredEntries.indexOf(name) !== index);
       assert(duplicates.length === 0, `Duplicate runners: ${duplicates.join(', ')}`);
+    }],
+    // MIO-PRV-06.01: the named security gate stays a subset of CI and keeps covering every threat class.
+    ['every security gate suite is a registered runner under its own name', () => {
+      const misnamed = SECURITY_GATE_SUITES.filter(suite => suite.run.name !== suite.name).map(suite => suite.name);
+      const unregistered = SECURITY_GATE_SUITES.filter(suite => !registered.has(suite.name)).map(suite => suite.name);
+      assert(misnamed.length === 0 && unregistered.length === 0, `Security gate drift: misnamed=${misnamed.join(', ')} unregistered=${unregistered.join(', ')}`);
+    }],
+    ['the security gate covers every threat class', () => {
+      const uncovered = SECURITY_THREATS.filter(threat => !SECURITY_GATE_SUITES.some(suite => suite.threats.includes(threat)));
+      assert(uncovered.length === 0, `Threats without a gate suite: ${uncovered.join(', ')}`);
     }],
   ];
   let passed = 0;

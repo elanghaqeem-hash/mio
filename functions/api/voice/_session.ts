@@ -76,7 +76,7 @@ function audienceMatches(payloadAud: AccessJwtPayload['aud'], expected: string):
   return Array.isArray(payloadAud) && payloadAud.includes(expected);
 }
 
-function constantTimeEqual(left: string, right: string): boolean {
+export function constantTimeEqual(left: string, right: string): boolean {
   const encoder = new TextEncoder();
   const a = encoder.encode(left);
   const b = encoder.encode(right);

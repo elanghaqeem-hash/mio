@@ -1,3 +1,4 @@
+import { emergencyStop } from '../../core/EmergencyStop';
 import { mioVoice } from '../MioVoiceService';
 import type { MioTranscriptionResult, MioVoiceProsodyHint } from './MioVoiceProvider';
 import { mioVoiceProviders } from './MioVoiceProviderRegistry';
@@ -41,6 +42,7 @@ export class MioChatVoiceController {
   async disableAutomaticBargeIn(): Promise<void> { const detach = this.detachVad; this.detachVad = null; if (detach) await detach(); }
 
   async startListening(onResult: (result: MioTranscriptionResult) => void, preferredProviderId?: string): Promise<void> {
+    if (emergencyStop.isEmergencyStopped()) throw new Error('Voice input is blocked while STOP MIO is engaged');
     this.lastResultHandler = onResult; this.lastPreferredProviderId = preferredProviderId;
     const locale = this.getLocale();
     await this.turns.beginUserTurn(locale, (result) => { if (result.text) mioVoice.resolveLocale(result.text); onResult(result); }, { preferredProviderId });
@@ -50,6 +52,7 @@ export class MioChatVoiceController {
   markThinking(): void { this.turns.markThinking(); }
 
   async speak(text: string, preferredProviderId?: string, prosody?: MioVoiceProsodyHint): Promise<void> {
+    if (emergencyStop.isEmergencyStopped()) return;
     const locale = this.getLocale(text);
     await this.turns.beginMioTurn(text, locale, { preferredProviderId, prosody, autoInterruptOnVoiceActivity: Boolean(this.detachVad) });
   }
@@ -68,3 +71,5 @@ export class MioChatVoiceController {
 }
 
 export const mioChatVoice = new MioChatVoiceController();
+// STOP MIO ends playback, listening, and automatic barge-in.
+emergencyStop.registerAbortHandler(() => { void mioChatVoice.dispose().catch((error) => console.error('[Mio Voice] STOP could not end the voice session:', error)); });
