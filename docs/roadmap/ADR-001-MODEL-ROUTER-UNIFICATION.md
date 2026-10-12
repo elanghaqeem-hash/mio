@@ -1,6 +1,6 @@
 # ADR-001 — Model Router Unification (MIO-PRV-02.01)
 
-Status: **PROPOSED**. Awaiting owner decision on §5 before implementation.
+Status: **ACCEPTED** (2026-10-12). Owner decisions: **D-1 = (a)**, **D-2 = (a)**. Implemented in MIO-PRV-02; see §6.
 Date: 2026-10-11 · Resolves tracker finding F-3 · Unblocks MIO-PRV-00.08 (T-18, #520)
 
 ## 1. Context
@@ -52,3 +52,20 @@ Neither one satisfies PRV-02 alone. The live router has the safety integration b
 |---|---|---|---|
 | D-1 | **Default spending limit for paid cloud providers.** Today, selecting a cloud provider in Settings lets it run with no USD cap. | (a) $0 by default: paid cloud runs only after a monthly budget is set explicitly. (b) Selecting a cloud provider counts as consent, with a default monthly cap (e.g. US$5) that is shown and editable. | (a) matches "never activate paid APIs without approval" most strictly but is a visible change for anyone already using cloud. (b) keeps current behavior working, adds a cap, and makes the consent explicit in the UI. |
 | D-2 | **Cloud-to-cloud fallback.** If the chosen cloud provider fails, may the router try another configured cloud provider? | (a) No: fall back only to local routes. (b) Yes, but only for requests without project or memory context. | (a). Sending a prompt to a provider the user didn't pick is a privacy surprise; local fallback is always safe. |
+
+## 6. Implementation record (MIO-PRV-02)
+
+| ADR item | Implemented as | Evidence |
+|---|---|---|
+| D-1 (a): paid cloud off at $0 | `ModelRouterConfig.monthlyCloudBudgetUsd` (default 0, normalized 0–1000). `ModelRouter` refuses `PAID_CLOUD` routes, both in readiness (`NOT_CONFIGURED`, the provider is never contacted) and in `generate()` (before any permission prompt). | `modelRouterTests`, `modelRouterBudgetTests` |
+| Free tiers stay usable | `classifyModelCost`: `LOCAL` (heuristic, Ollama, MIO Local); `FREE_CLOUD` (OpenRouter `openrouter/free` or a `:free` model, web search off); everything else, including an unset model, is `PAID_CLOUD` | `modelRouterBudgetTests` |
+| Cost ledger | `CloudBudgetLedger` (persistent per UTC month in `settings/cloud-spend-v1`, built on `AICostLedger`). An affordability check runs before the permission prompt; the atomic reservation happens after it. Spend is settled from reported token usage at conservative price ceilings; on timeout or cancel the estimate is kept; on an explicit provider failure the reservation is released. `AICostLedger.settle` now always records spend past the limit instead of throwing and losing it. | `modelRouterBudgetTests` |
+| D-2 (a): local-only fallback | `ModelRouter.localFallback`: the only fallback target is `LocalHeuristicProvider`, and only when `allowOfflineFallback` is on | test: 3 failing cloud calls never contact any other provider |
+| Circuit breaker | per provider (`AIProviderCircuitBreaker`, 3 failures, 30 s); when open, the provider is neither contacted nor prompted | `modelRouterBudgetTests` |
+| Provenance | bounded log (100) of secret-free `AIProvenanceReceipt`s via `ModelRouter.getRecentProvenance()`, mappable to `MioTraceSpan` (PRV-01 adapter) | `modelRouterBudgetTests` |
+| Non-throwing selection | `trySelectAIRoute` | `aiOrchestrationTests` |
+| Owner control | Settings → Monthly cloud budget panel (cloud providers only): budget input committed on blur or Enter, cost-class hint, month-to-date estimated spend | Playwright check: budget persists across reload; `openrouter/free` shows as free; no page errors |
+
+Behavior change, intended by D-1a: anyone using a paid cloud provider today must set a monthly budget in Settings. Until then, readiness reports why, and requests use the local fallback if enabled.
+
+Not done in this step: multi-route selection across several configured local runtimes (needs readiness probing per route), and per-model price overrides. Both are tracked as PRV-02.02.

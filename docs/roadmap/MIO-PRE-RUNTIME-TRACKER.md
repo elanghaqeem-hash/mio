@@ -33,7 +33,7 @@ Commands were run in a clean checkout with Node 22.22.0 and `npm ci`.
 |---|---|---|---|---|
 | F-1 | **High (gate integrity)** | 13 test suites never ran in CI. 8 were imported into `src/tests/runAllTests.ts` but missing from the `runners` array (incl. **T-15 AI orchestration, T-16 privacy/security, T-17 performance**, drawing runtime/commit/renderer, FABRIK, IK authoring); 5 were never imported (mesh transform/gizmo/preview, animation gesture controller). | `grep` of the imports against the `runners` array; each suite was then run directly. | **Fixed in MIO-PRV-00.02**: all registered, plus a harness self-check. |
 | F-2 | Medium (data integrity) | `DrawingRuntime.commitStroke()` claimed to keep a recovery session after a failed commit, but left it in `COMMITTED` state, so it could neither be retried nor cancelled (`DRAWING_STROKE_NOT_ACTIVE`). Hidden by F-1. | `runCreativeDrawingCommitRuntimeTests` threw when run directly. | **Fixed in MIO-PRV-00.02**, with a retry regression test. |
-| F-3 | High (architecture) | Two model-routing systems. The live app routes through `src/agents/ModelRouter.ts` (local heuristic, Ollama, MIO Local, secure proxy). The T-15 `src/ai-orchestration/*` layer (cost ledger, circuit breaker, bounded fallback, provenance) is referenced only by its own tests. T-16's `RemoteProcessingPolicy` and `SecretRedaction` are only used by that unintegrated layer. | Import graph: `selectAIRoute`, `AICostLedger`, `executeWithBoundedFallback` have no non-test importers outside `src/ai-orchestration`. | MIO-PRV-02.01 must pick one router and fold the other in. |
+| F-3 | High (architecture) — **resolved by ADR-001 / PRV-02** | Two model-routing systems. The live app routes through `src/agents/ModelRouter.ts` (local heuristic, Ollama, MIO Local, secure proxy). The T-15 `src/ai-orchestration/*` layer (cost ledger, circuit breaker, bounded fallback, provenance) is referenced only by its own tests. T-16's `RemoteProcessingPolicy` and `SecretRedaction` are only used by that unintegrated layer. | Import graph: `selectAIRoute`, `AICostLedger`, `executeWithBoundedFallback` have no non-test importers outside `src/ai-orchestration`. | MIO-PRV-02.01 must pick one router and fold the other in. |
 | F-4 | Medium (integration) | File Intelligence T-3 to T-11 engines (image, video, audio, document, 3D, semantic, relationship graph, smart search, organizer) are not consumed by the app or the agent. Only `LexicalSearch` and the safe-mutation flow are used, from `src/modes/files/FileOrganizationView.tsx`. | Import graph of `src/file-intelligence/*`. | MIO-PRV-04 / MIO-PRV-00.08 (T-18). |
 | F-5 | Medium (repository) | `main` history starts 2026-09-26; PRs created earlier share no ancestor with `main`. 70 open PRs, of which 55 are superseded or duplicate. 540 remote branches. | See the PR audit. | MIO-PRV-00.03 to 00.09. |
 | F-6 | Medium (traceability) | The T-15, T-16, and T-17 checkpoint docs state "COMPLETE" and "passed all CI", but their suites never executed (F-1). They do pass when run directly (7/7, 8/8, 7/7). | Direct runs on 2026-10-11. | Errata added to those checkpoint docs. Status recorded here as VERIFIED (2026-10-11), NOT INTEGRATED. |
@@ -65,8 +65,8 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | Subsystem | Key modules | Status | Evidence / gap |
 |---|---|---|---|
 | Agent orchestrator | `src/agents/AgentOrchestrator.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Used by the chat path; uses `ModelContextAssembler` |
-| Model routing (live) | `src/agents/ModelRouter.ts`, `src/intelligence/model/*`, `functions/api/ai/generate.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · **PARTIAL** vs PRV-02 | No cost budget, circuit breaker, or capability registry on the live path (F-3) |
-| AI orchestration & cost (T-15) | `src/ai-orchestration/*` | IMPLEMENTED · VERIFIED (2026-10-11) · **NOT INTEGRATED** | F-3, F-6 |
+| Model routing (live) | `src/agents/ModelRouter.ts`, `src/intelligence/model/*`, `functions/api/ai/generate.ts` | IMPLEMENTED · VERIFIED · INTEGRATED · PARTIAL vs PRV-02 | Monthly paid-cloud budget, circuit breaker, local-only fallback, provenance now live (ADR-001). Open: capability registry, multi-local routes |
+| AI orchestration & cost (T-15) | `src/ai-orchestration/*` | IMPLEMENTED · VERIFIED · **INTEGRATED** (ledger, circuit breaker, provenance via `ModelRouter`) | F-3 resolved by ADR-001 |
 | Task runtime / scheduler / integrity | `src/orchestrator/*` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.7/0.8 suites registered |
 | Permission / capability / gateway | `PermissionEngine`, `CapabilityRegistry`, `SecureServiceGateway`, `PolicyEngine` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.10/0.11 suites |
 | Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · INTEGRATED | 13 non-test importers; cancellation coverage to be confirmed in PRV-06 |
@@ -138,11 +138,11 @@ Exit gate: local/cloud routing follows policy, cost limits, and test results.
 
 | Task | Name | Acceptance criteria |
 |---|---|---|
-| 02.01 | Router unification decision (F-3) | ADR choosing one router; the other folded in; no duplicate routing logic — **ADR PROPOSED**: [ADR-001](./ADR-001-MODEL-ROUTER-UNIFICATION.md), awaiting owner decisions D-1 (default paid budget) and D-2 (cloud→cloud fallback) |
+| 02.01 | Router unification decision (F-3) | ADR choosing one router; the other folded in; no duplicate routing logic — **DONE on branch**: [ADR-001](./ADR-001-MODEL-ROUTER-UNIFICATION.md) ACCEPTED (D-1a, D-2a) and implemented (§7.7) |
 | 02.02 | Model capability registry | Capabilities, context limits, locality, and cost per provider/model, sourced from configured providers only |
-| 02.03 | Cost governance on the live path | Per-task and monthly budgets enforced fail-closed; paid routes off unless explicitly enabled |
-| 02.04 | Resilience | Provider timeout, circuit breaker, deterministic fallback order, provider health |
-| 02.05 | Privacy-safe fallback | Tests prove no cloud fallback for `LOCAL_ONLY` / private data |
+| 02.03 | Cost governance on the live path | Per-task and monthly budgets enforced fail-closed; paid routes off unless explicitly enabled — **DONE on branch** (monthly; §7.7). Per-task USD caps remain open. |
+| 02.04 | Resilience | Provider timeout, circuit breaker, deterministic fallback order, provider health — **PARTIAL**: circuit breaker + local-only fallback done (§7.7); multi-local-route order open |
+| 02.05 | Privacy-safe fallback | Tests prove no cloud fallback for `LOCAL_ONLY` / private data — **DONE on branch**: fallback never targets any cloud provider (D-2a, tested) |
 
 ### MIO-PRV-03 — Unified Context Engine
 Exit gate: relevant context without cross-project leakage, and external content never gains authority.
@@ -282,3 +282,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | Subsystems are adapted, not yet native producers (PRV-05/10). `ToolExecutionContext`/`CapabilityExecutionContext` duplication to retire in PRV-05. |
 | Next Task | MIO-PRV-02.01 router unification decision (ADR), which also unblocks 00.08 (T-18) |
+
+### 7.7 MIO-PRV-02 — Model Router V2 (ADR-001 implementation)
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-02 — Model Router V2 |
+| Objective | One router with cost and privacy governance on the live path |
+| Baseline | Live `ModelRouter` had no USD budget, circuit breaker, or provenance; the T-15 layer that had them was unintegrated (F-3) |
+| Implemented | See [ADR-001 §6](./ADR-001-MODEL-ROUTER-UNIFICATION.md). Paid cloud off at $0 budget (D-1a), with free OpenRouter tiers still usable. Persistent monthly ledger. Budget and circuit checks run before any permission prompt. Local-only fallback (D-2a). Per-provider circuit breaker. Secret-free provenance. `trySelectAIRoute`. Budget panel in Settings. Fix: `AICostLedger.settle` no longer drops spend past the limit. |
+| Files Changed | `src/agents/ModelRouter.ts`, `src/ai-orchestration/{CloudBudget.ts (new),AICostLedger.ts,AIOrchestration.ts}`, `src/types/models.ts`, `src/settings/SystemPreferences.ts`, `src/modes/settings/SettingsView.tsx`, `src/tests/{modelRouterBudgetTests.ts (new),modelRouterTests.ts,aiOrchestrationTests.ts,runAllTests.ts}` |
+| Test Results | `tsc -b` PASS · `oxlint` 0 errors · `npm test` **1695/1695** (9 new router budget/resilience tests). Browser check (Playwright, dev server): budget panel renders, budget persists across reload, free model is labelled free, no page errors. |
+| Security Impact | Positive: no paid or unapproved cloud spend; a failing or over-budget provider is never prompted for; fallback never sends data to an unselected provider |
+| Dependencies | 01, ADR-001 decisions |
+| Acceptance Gate | **PASS** locally for 02.01/02.03/02.05; 02.04 PARTIAL; CI via #521 |
+| Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | **Intended behavior change:** existing paid-cloud users must set a budget. Spend is an upper-bound estimate (conservative price ceilings), not billing data. Open: per-task USD caps, per-model price overrides, multi-local-route fallback ordering (02.02/02.04). |
+| Next Task | MIO-PRV-00.08 (T-18 bridge, now unblocked) |

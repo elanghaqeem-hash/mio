@@ -66,7 +66,10 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
 
   try {
     ModelRouter.setNetworkState('ONLINE');
-    ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate' });
+    ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate', monthlyCloudBudgetUsd: 0 });
+    const unbudgeted = await ModelRouter.checkProviderReadiness(8000, true);
+    assert(unbudgeted.ready === false && unbudgeted.status === 'NOT_CONFIGURED' && unbudgeted.detail.includes('monthly cloud budget is $0') && readinessGetCalls === 0, 'Paid cloud provider is not ready, and is never contacted, while the monthly cloud budget is $0 (ADR-001 D-1a)');
+    ModelRouter.configure({ provider: 'gemini', model: 'gemini-test', proxyEndpoint: '/api/ai/generate', monthlyCloudBudgetUsd: 5 });
     const cloudReadiness = await ModelRouter.checkProviderReadiness();
     assert(cloudReadiness.ready === true && capturedUrl.includes('provider=gemini') && capturedUrl.includes('model=gemini-test'), 'Cloud readiness targets the currently selected provider and model');
     const callsAfterFirstReadiness = readinessGetCalls;
@@ -86,7 +89,7 @@ export async function runModelRouterTests(): Promise<{ passed: number; total: nu
     assert(!/api.?key|bearer|secret/i.test(capturedBody), 'Browser-side proxy request contains no API key, bearer token, or secret field');
   } finally {
     globalThis.fetch = originalFetch;
-    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true, enableWebSearch: false });
+    ModelRouter.configure({ provider: 'local_heuristic', allowOfflineFallback: true, enableWebSearch: false, monthlyCloudBudgetUsd: 0 });
     ModelRouter.setNetworkState('OFFLINE');
   }
 
