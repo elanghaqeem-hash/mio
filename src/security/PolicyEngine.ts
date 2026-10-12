@@ -1,5 +1,6 @@
 import { SecurityEvent } from '../types/security';
 import { eventBus } from '../core/EventBus';
+import { escapeContextAttribute, neutralizeContextBoundaries } from '../intelligence/context/ContextBoundary';
 
 export class PolicyEngine {
   private static suspiciousPatterns = [
@@ -49,7 +50,7 @@ export class PolicyEngine {
     }
 
     // Wrap external content in strict untrusted data boundaries
-    const sanitized = `[UNTRUSTED_EXTERNAL_DATA source="${source}"]\n${rawContent.replace(/<\/?script>/gi, '[SCRIPT_BLOCKED]')}\n[/UNTRUSTED_EXTERNAL_DATA]`;
+    const sanitized = `[UNTRUSTED_EXTERNAL_DATA source="${escapeContextAttribute(source)}"]\n${neutralizeContextBoundaries(rawContent.replace(/<\/?script>/gi, '[SCRIPT_BLOCKED]'))}\n[/UNTRUSTED_EXTERNAL_DATA]`;
 
     return { sanitized, suspicious, detectedThreats };
   }

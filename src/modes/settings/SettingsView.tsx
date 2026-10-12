@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Settings, Cpu, Wifi, Sliders, ShieldCheck, Server, RefreshCw, BrainCircuit, Search } from 'lucide-react';
 import { AutonomyLevel, NetworkState } from '../../types/core';
 import { ModelRouter } from '../../agents/ModelRouter';
+import { classifyModelCost, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot } from '../../ai-orchestration/CloudBudget';
 import { LocalInferenceBackendId, ModelProviderId, ProviderReadiness } from '../../types/models';
 import { MioSystemPreferences, systemPreferences } from '../../settings/SystemPreferences';
 import { GovernedTrainingRunnerPanel } from './GovernedTrainingRunnerPanel';
@@ -33,6 +34,8 @@ export const SettingsView: React.FC = () => {
   const [preferences, setPreferences] = useState<MioSystemPreferences>(() => systemPreferences.getSnapshot());
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [checkingProvider, setCheckingProvider] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState(() => String(systemPreferences.getSnapshot().modelRouter.monthlyCloudBudgetUsd ?? 0));
+  const [cloudSpend, setCloudSpend] = useState<CloudBudgetSnapshot | null>(null);
   const { autonomyLevel: autonomy, networkState: network, modelRouter } = preferences;
   const {
     provider,
@@ -49,6 +52,17 @@ export const SettingsView: React.FC = () => {
   const localModelProvider = provider === 'mio_local' || provider === 'ollama';
 
   useEffect(() => systemPreferences.subscribe(setPreferences), []);
+  useEffect(() => {
+    let active = true;
+    void ModelRouter.getCloudBudget().then(snapshot => { if (active) setCloudSpend(snapshot); });
+    return () => { active = false; };
+  }, [preferences]);
+  const costClass = classifyModelCost(modelRouter);
+  const commitBudget = () => {
+    const next = normalizeMonthlyCloudBudget(Number(budgetDraft));
+    setBudgetDraft(String(next));
+    if (next !== (modelRouter.monthlyCloudBudgetUsd ?? 0)) updateRouter({ monthlyCloudBudgetUsd: next });
+  };
 
   const handleNetworkToggle = (newNet: NetworkState) => {
     setReadiness(null);
@@ -168,6 +182,19 @@ export const SettingsView: React.FC = () => {
             <input type="checkbox" checked={enableWebSearch} onChange={(e) => updateRouter({ enableWebSearch: e.target.checked })} className="accent-cyan-400" />
             <span className="text-gray-300">{provider === 'mio_local' ? 'Enable governed live web grounding through MIO Research Proxy (active only in ONLINE mode; local inference still works offline)' : `Enable ${cloudConfig?.label ?? 'provider'} live web search / grounding (may require provider credits; internet access remains L4 permission-gated)`}</span>
           </label>
+        )}
+
+        {cloudConfig && (
+          <div data-testid="cloud-budget-panel" className="rounded-lg border border-gray-800 bg-[#111726] p-3 space-y-2">
+            <div className="font-bold text-gray-200">MONTHLY CLOUD BUDGET (USD)</div>
+            <div className="text-[10px] text-gray-500">
+              {costClass === 'FREE_CLOUD'
+                ? 'This model is a free OpenRouter tier: it runs without a budget, within the provider\'s free quota.'
+                : 'Paid cloud models stay off while this is 0. Calls are refused once the month\'s estimated spend reaches the budget; the selected local fallback is used instead.'}
+            </div>
+            <input type="number" min={0} max={1000} step={0.5} inputMode="decimal" value={budgetDraft} onChange={(e) => setBudgetDraft(e.target.value)} onBlur={commitBudget} onKeyDown={(e) => { if (e.key === 'Enter') commitBudget(); }} aria-label="Monthly cloud budget in USD" className="w-full bg-[#141b2b] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs" />
+            {cloudSpend && <div className="text-[10px] text-gray-400">{cloudSpend.month}: estimated spend ${cloudSpend.spentUsd.toFixed(4)} of ${cloudSpend.limitUsd.toFixed(2)}. Estimates use conservative price ceilings, not billing data; check the provider dashboard for actual charges.</div>}
+          </div>
         )}
 
         {provider === 'mio_local' && (

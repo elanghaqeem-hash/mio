@@ -1,5 +1,6 @@
 import { resolveMioVoiceSession, voiceSessionRequired, voiceSessionVerificationConfigured, type MioVoiceSessionEnv } from './_session';
 import { enforceMioVoiceRateLimit, mioVoiceRateLimitRequired, type MioVoiceRateLimitBinding } from './_rateLimit';
+import { synthesizeWithWorkersAi, workersAiLanguage, workersAiModelSupported, type WorkersAiBinding } from './_workersAi';
 
 interface Env extends MioVoiceSessionEnv {
   MIO_TTS_ENDPOINT?: string;
@@ -7,6 +8,7 @@ interface Env extends MioVoiceSessionEnv {
   MIO_TTS_VOICE_ID?: string;
   MIO_TTS_MODEL?: string;
   MIO_TTS_PROVIDER?: string;
+  AI?: WorkersAiBinding;
   MIO_VOICE_GATEWAY_TOKEN?: string;
   MIO_VOICE_ALLOWED_ORIGINS?: string;
   MIO_VOICE_REQUIRE_RATE_LIMIT?: string;
@@ -25,7 +27,7 @@ const MAX_BODY_BYTES = 32_000;
 const UPSTREAM_TIMEOUT_MS = 30_000;
 const RETRYABLE_UPSTREAM_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_UPSTREAM_ATTEMPTS = 2;
-type ProviderKind = 'generic' | 'openai-compatible';
+type ProviderKind = 'generic' | 'openai-compatible' | 'cloudflare-workers-ai';
 
 const ALLOWED_EMOTIONS = new Set(['neutral', 'warm', 'confident', 'gentle', 'focused', 'playful']);
 
@@ -44,15 +46,21 @@ const json = (payload: unknown, status = 200, extra: HeadersInit = {}) =>
   new Response(JSON.stringify(payload), { status, headers: { ...securityHeaders('application/json; charset=utf-8'), ...extra } });
 
 function providerKind(env: Env): ProviderKind {
-  return env.MIO_TTS_PROVIDER?.trim().toLowerCase() === 'openai-compatible' ? 'openai-compatible' : 'generic';
+  const kind = env.MIO_TTS_PROVIDER?.trim().toLowerCase();
+  if (kind === 'cloudflare-workers-ai') return 'cloudflare-workers-ai';
+  return kind === 'openai-compatible' ? 'openai-compatible' : 'generic';
 }
 
-const configured = (env: Env) => Boolean(
-  env.MIO_TTS_ENDPOINT?.trim()
-    && env.MIO_TTS_API_KEY?.trim()
-    && env.MIO_TTS_VOICE_ID?.trim()
-    && (providerKind(env) === 'generic' || env.MIO_TTS_MODEL?.trim()),
-);
+const configured = (env: Env) => {
+  const kind = providerKind(env);
+  if (kind === 'cloudflare-workers-ai') return Boolean(env.AI) && workersAiModelSupported(env.MIO_TTS_MODEL);
+  return Boolean(
+    env.MIO_TTS_ENDPOINT?.trim()
+      && env.MIO_TTS_API_KEY?.trim()
+      && env.MIO_TTS_VOICE_ID?.trim()
+      && (kind === 'generic' || env.MIO_TTS_MODEL?.trim()),
+  );
+};
 const clamp = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 
@@ -166,7 +174,8 @@ async function readJsonBody(request: Request): Promise<SynthesisRequest | Respon
 }
 
 function gatewayReady(env: Env): boolean {
-  const providerReady = configured(env) && Boolean(safeProviderEndpoint(env));
+  const kind = providerKind(env);
+  const providerReady = configured(env) && (kind === 'cloudflare-workers-ai' || Boolean(safeProviderEndpoint(env)));
   const sessionReady = !voiceSessionRequired(env) || voiceSessionVerificationConfigured(env);
   const rateLimitReady = !mioVoiceRateLimitRequired(env.MIO_VOICE_REQUIRE_RATE_LIMIT) || Boolean(env.MIO_VOICE_RATE_LIMIT);
   return providerReady && sessionReady && rateLimitReady;
@@ -183,7 +192,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     engine: 'v4.7',
     ready,
     provider: providerKind(context.env),
-    voiceConfigured: Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
+    voiceConfigured: providerKind(context.env) === 'cloudflare-workers-ai'
+      ? Boolean(context.env.AI)
+      : Boolean(context.env.MIO_TTS_VOICE_ID?.trim()),
     modelConfigured: Boolean(context.env.MIO_TTS_MODEL?.trim()),
     accessProtectionConfigured: Boolean(context.env.MIO_VOICE_GATEWAY_TOKEN?.trim()),
     allowedOriginsConfigured: Boolean(context.env.MIO_VOICE_ALLOWED_ORIGINS?.trim()),
@@ -204,8 +215,9 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   const rateLimit = await enforceMioVoiceRateLimit(context.env.MIO_VOICE_RATE_LIMIT, mioVoiceRateLimitRequired(context.env.MIO_VOICE_REQUIRE_RATE_LIMIT), session?.subject ?? 'anonymous');
   if (rateLimit === 'limited') return json({ error: 'Mio Voice synthesis rate limit exceeded.' }, 429, { 'Retry-After': '60' });
   if (rateLimit === 'unavailable') return json({ error: 'Mio Voice rate-limit enforcement is unavailable.' }, 503);
+  const kind = providerKind(context.env);
   const endpoint = safeProviderEndpoint(context.env);
-  if (!configured(context.env) || !endpoint) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
+  if (!configured(context.env) || (kind !== 'cloudflare-workers-ai' && !endpoint)) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
   if ((context.request.headers.get('content-type') ?? '').split(';')[0].trim() !== 'application/json') return json({ error: 'Content-Type must be application/json' }, 415);
 
   const body = await readJsonBody(context.request);
@@ -213,6 +225,24 @@ export async function onRequestPost(context: PagesContext): Promise<Response> {
   const normalized = normalize(body);
   if (normalized instanceof Response) return normalized;
 
+  if (kind === 'cloudflare-workers-ai') {
+    // Unsupported locales (including id-ID) return 422 so the client falls back to device voice
+    // instead of producing misleading pronunciation.
+    const lang = workersAiLanguage(normalized.locale);
+    if (!lang) return json({
+      error: 'Configured Cloudflare TTS model does not have a verified mapping for this locale.',
+      locale: normalized.locale,
+      fallback: 'device-voice',
+    }, 422);
+    const audio = await synthesizeWithWorkersAi(context.env.AI!, context.env.MIO_TTS_MODEL!.trim(), normalized.text, lang, UPSTREAM_TIMEOUT_MS);
+    if (audio.kind === 'error') return json({ error: audio.error, ...(audio.upstreamStatus ? { upstreamStatus: audio.upstreamStatus } : {}) }, audio.status);
+    return new Response(audio.body, {
+      status: 200,
+      headers: { ...securityHeaders(audio.contentType), 'X-Mio-Voice-Engine': 'v4.7', 'X-Mio-Voice-Provider': 'cloudflare-workers-ai', 'X-Mio-Voice-Streaming': 'workers-ai-binding', ...(session ? { 'X-Mio-Voice-Session': 'authenticated' } : {}) },
+    });
+  }
+
+  if (!endpoint) return json({ error: 'Mio production synthesis is not configured on the server.' }, 503);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort('timeout'), UPSTREAM_TIMEOUT_MS);
   const downstreamAbort = () => controller.abort('client-disconnected');

@@ -106,6 +106,8 @@ export interface ModelRouterConfig {
   allowOfflineFallback: boolean;
   enableWebSearch: boolean;
   enableBrowserRead?: boolean;
+  /** Monthly USD cap for paid cloud models. 0 or unset disables paid cloud (ADR-001 D-1a). */
+  monthlyCloudBudgetUsd?: number;
 }
 
 export interface ProviderReadiness {

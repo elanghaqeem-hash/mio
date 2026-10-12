@@ -1,4 +1,5 @@
 import { ModelRouter } from '../agents/ModelRouter';
+import { normalizeMonthlyCloudBudget } from '../ai-orchestration/CloudBudget';
 import { defaultStorageProvider } from '../storage/StorageRuntime';
 import { StorageProvider } from '../storage/StorageProvider';
 import { AutonomyLevel, NetworkState } from '../types/core';
@@ -29,6 +30,7 @@ const defaults = (): MioSystemPreferences => ({
     allowOfflineFallback: false,
     enableWebSearch: false,
     enableBrowserRead: false,
+    monthlyCloudBudgetUsd: 0,
   },
 });
 
@@ -65,6 +67,7 @@ function normalize(value: unknown): MioSystemPreferences {
       allowOfflineFallback: router.allowOfflineFallback === true,
       enableWebSearch: router.enableWebSearch === true,
       enableBrowserRead: router.enableBrowserRead === true,
+      monthlyCloudBudgetUsd: normalizeMonthlyCloudBudget(router.monthlyCloudBudgetUsd),
     },
   };
 }
@@ -76,6 +79,7 @@ class SystemPreferencesStore {
   private writeQueue: Promise<void> = Promise.resolve();
 
   public async initialize(): Promise<void> {
+    ModelRouter.setCostStorage(this.storage);
     this.preferences = normalize(await this.storage.get<MioSystemPreferences>('settings', STORAGE_KEY));
     this.applyRuntime();
     this.notify();
@@ -83,6 +87,7 @@ class SystemPreferencesStore {
 
   public setStorageProvider(storage: StorageProvider): void {
     this.storage = storage;
+    ModelRouter.setCostStorage(storage);
     this.preferences = defaults();
     this.writeQueue = Promise.resolve();
     this.applyRuntime();

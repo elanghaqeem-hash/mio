@@ -70,6 +70,12 @@ export class DrawingStrokeSession {
     }
   }
 
+  /** Reopens a finalized stroke whose downstream commit plan failed, so it can be retried or cancelled. */
+  public reopenAfterFailedCommit(): void {
+    if (this.statusValue !== 'COMMITTED') throw new Error('DRAWING_STROKE_NOT_COMMITTED');
+    this.statusValue = 'ACTIVE';
+  }
+
   public cancel(): void {
     if (this.statusValue !== 'ACTIVE') throw new Error('DRAWING_STROKE_NOT_ACTIVE');
     this.statusValue = 'CANCELLED';

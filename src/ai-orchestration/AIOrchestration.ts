@@ -6,6 +6,8 @@ export interface AIOrchestrationRequest{id:string;workload:AIWorkload;privacy:'L
 export interface AIRouteDecision{requestId:string;route:AIModelRoute;estimatedCostUsd:number;reason:string;fallbacks:AIModelRoute[];}
 const supports=(r:AIModelRoute,w:AIWorkload)=>r.enabled&&r.capabilities.includes(w);
 export function estimateRouteCost(r:AIModelRoute,input:number,output=0):number{return ((r.estimatedInputCostPerMillion??0)*input+(r.estimatedOutputCostPerMillion??0)*output)/1_000_000;}
+/** Non-throwing variant (ADR-001): null when no enabled route satisfies capability, privacy, and cost. */
+export function trySelectAIRoute(request:AIOrchestrationRequest,routes:readonly AIModelRoute[],remotePolicy?:RemoteProcessingPolicy):AIRouteDecision|null{try{return selectAIRoute(request,routes,remotePolicy);}catch{return null;}}
 export function selectAIRoute(request:AIOrchestrationRequest,routes:readonly AIModelRoute[],remotePolicy?:RemoteProcessingPolicy):AIRouteDecision{
  const candidates=routes.filter(r=>supports(r,request.workload)&&!(request.privacy==='LOCAL_ONLY'&&r.locality!=='LOCAL')&&(r.locality!=='REMOTE'||authorizeRemoteProcessing({privacy:request.privacy,sensitive:false},remotePolicy??{remoteEnabled:false,explicitConsent:false,allowSensitiveContent:false}).allowed)).map(route=>({route,cost:estimateRouteCost(route,request.estimatedInputUnits,request.estimatedOutputUnits)})).filter(x=>x.cost<=request.maxCostUsd);
  if(!candidates.length)throw new Error('No enabled AI route satisfies capability, privacy, and cost budget');
