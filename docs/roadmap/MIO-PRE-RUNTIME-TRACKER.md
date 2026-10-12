@@ -119,7 +119,7 @@ Exit gate: stable baseline; each open PR has a clear purpose; every important ch
 | 00.05 | SFX 10.18/10.19 consolidation (#427 → #431) | 00.02 | Conflict resolved, SFX suites registered and green | **DONE on branch** (§7.4) |
 | 00.06 | Review conflicted creative PRs (#182, #198, #214, #287, #368) | 00.02 | Each ported or closed with a written reason | **DONE on branch** (§7.5) |
 | 00.07 | Motion V2 re-port plan (#265/#356) | 00.02 | Written plan: which files to port, in what order, with what test parity | **DONE**: [plan](./MIO-PRV-00.07-MOTION-V2-REPORT-PLAN.md); phases tracked as MIO-PRV-08.M1–M4 |
-| 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | BLOCKED on 02.01 |
+| 00.08 | T-18 agent bridge (#520) | 00.02, 02.01 | Failing test fixed; bridge targets the router chosen in 02.01 | **DONE on branch**: bridge ported into `src/agents/`, AI_ROUTE via `ModelRouter.describeRoute()`, invalid input returns `REJECTED`, 3 tests registered. T-18.02+ (dispatcher wiring) remain in the T-18 checkpoint. |
 | 00.09 | Stale branch triage | 00.03 | Each branch tip tagged `archive/<name>` before any deletion; deletion only with approval | NOT STARTED — **needs owner approval** |
 | 00.10 | CI hygiene | — | One Node version across workflows (pin to `.node-version`); lint warning burn-down plan; bundle split for the >500 kB chunk | **PARTIAL**: Node pinned in all 4 workflows (F-7 fixed). The app entry chunk is split: React is now its own `react-vendor` chunk, taking the entry from 518 kB, over the release-smoke 500 KiB budget after PRV-02, down to 308 kB. Workspace modes were already lazy. Open: lint warning burn-down |
 

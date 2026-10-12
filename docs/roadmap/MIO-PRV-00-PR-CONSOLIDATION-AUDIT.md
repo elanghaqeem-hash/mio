@@ -131,6 +131,8 @@ Columns: PR files changed · conflicted files on 3-way apply · net files `main`
 
 ### 5.6 BLOCKED (1)
 
+> Update 2026-10-12: unblocked by ADR-001 and ported in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) (MIO-PRV-00.08), with the failing assertion fixed and the suite registered. #520 becomes superseded once #521 merges.
+
 | PR | Branch | Finding |
 |---|---|---|
 | #520 | feat/mio-agent-integration-t18 | **Fails its own test.** `agentFileIntegrationTests` case 4 calls `selectAIRoute` with a `LOCAL_ONLY` request and only a `REMOTE` route; `selectAIRoute` throws `No enabled AI route satisfies capability, privacy, and cost budget`, which the test does not catch. CI is green only because the suite is imported but **not registered** in the `runners` array (see tracker finding F-1). The bridge also builds on the `ai-orchestration` router, which the live app does not use (finding F-3), so it should wait for the MIO-PRV-02.01 router decision. |

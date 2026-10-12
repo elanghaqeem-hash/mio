@@ -1,6 +1,6 @@
 import { AIProviderCircuitBreaker } from '../ai-orchestration/AIFallback';
 import { createAIProvenanceReceipt, type AIProvenanceReceipt } from '../ai-orchestration/AIProvenance';
-import { CloudBudgetLedger, actualCloudCallUsd, classifyModelCost, estimateCloudCallUsd, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot, type CloudReservation } from '../ai-orchestration/CloudBudget';
+import { CloudBudgetLedger, actualCloudCallUsd, classifyModelCost, estimateCloudCallUsd, normalizeMonthlyCloudBudget, type CloudBudgetSnapshot, type CloudCostClass, type CloudReservation } from '../ai-orchestration/CloudBudget';
 import { eventBus } from '../core/EventBus';
 import type { StorageProvider } from '../storage/StorageProvider';
 import { createLocalInferenceBackend } from '../intelligence/model/LocalInferenceBackend';
@@ -64,6 +64,16 @@ export class ModelRouter {
   public static async getCloudBudget(): Promise<CloudBudgetSnapshot> { return this.cloudBudget.snapshot(this.config.monthlyCloudBudgetUsd ?? 0); }
   public static getRecentProvenance(): AIProvenanceReceipt[] { return this.provenance.map(receipt => ({ ...receipt })); }
   public static resetResilienceState(): void { this.circuits.clear(); this.provenance = []; }
+
+  /** Read-only description of where a request would go right now, without contacting any provider. */
+  public static describeRoute(): { provider: ModelRouterConfig['provider']; costClass: CloudCostClass; blockedReason: string | null } {
+    const provider = this.createProvider();
+    const remote = provider.requiresNetwork || provider.requiresProxy;
+    let blockedReason = remote ? this.paidCloudBlockReason() : null;
+    if (!blockedReason && remote && this.networkState !== 'ONLINE') blockedReason = `${provider.displayName} requires ONLINE mode`;
+    if (!blockedReason && remote && !this.circuitFor(provider.id).canAttempt()) blockedReason = `${provider.displayName} failed repeatedly and is paused for 30 seconds`;
+    return { provider: this.config.provider, costClass: classifyModelCost(this.config), blockedReason };
+  }
 
   /** Why the configured paid cloud route may not run, or null when it may (D-1a: $0 budget means no paid cloud). */
   private static paidCloudBlockReason(): string | null {
