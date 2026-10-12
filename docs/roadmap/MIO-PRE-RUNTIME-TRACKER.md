@@ -70,7 +70,7 @@ None of these targets is removed by this program. MIO-PRV adds the cross-cutting
 | Task runtime / scheduler / integrity | `src/orchestrator/*` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.7/0.8 suites registered |
 | Permission / capability / gateway | `PermissionEngine`, `CapabilityRegistry`, `SecureServiceGateway`, `PolicyEngine` | IMPLEMENTED · VERIFIED · INTEGRATED | TP-0.10/0.11 suites |
 | Emergency Stop | `src/core/EmergencyStop.ts` | IMPLEMENTED · INTEGRATED | 13 non-test importers; cancellation coverage to be confirmed in PRV-06 |
-| Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · PARTIAL vs PRV-03 | `UnifiedContextEngine` + adapters + boundary hardening done; live chat still uses the TP-0.45 assembler until 03.06 |
+| Context assembly | `src/intelligence/context/*` | IMPLEMENTED · VERIFIED · **INTEGRATED** | Live chat goes through `UnifiedContextEngine` (PRV-03.06); file-intelligence/graph sources pending PRV-04 |
 | Memory | `src/memory/*`, `src/security/MemoryManager.ts`, `GovernedMemoryActions.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | Governance suites registered |
 | Research / evidence | `src/research/*`, `EvidenceGrounding.ts`, `src/project/EvidencePackage.ts` | IMPLEMENTED · VERIFIED · INTEGRATED | — |
 | File Intelligence T-1…T-14 | `src/file-intelligence/*` | IMPLEMENTED · VERIFIED · **PARTIAL integration** | F-4 |
@@ -154,7 +154,7 @@ Exit gate: relevant context without cross-project leakage, and external content 
 | 03.03 | Provenance (`MioEvidence` per item, drop reasons) + trust classification | **DONE on branch** |
 | 03.04 | Project-isolation tests | **DONE on branch** |
 | 03.05 | Prompt-injection regression set | **DONE on branch**, including a fix for a real boundary-spoofing vulnerability |
-| 03.06 | Wire the engine into the live chat path (`AgentOrchestrator`), keeping `EvidenceGrounding` working | NOT STARTED: changes the prompt shape, so it gets its own verified step |
+| 03.06 | Wire the engine into the live chat path (`AgentOrchestrator`), keeping `EvidenceGrounding` working | **DONE on branch** (§7.9) |
 
 ### MIO-PRV-04 — Multimodal File Intelligence hardening
 Exit gate: ingestion, indexing, search, and relationship retrieval meet measured benchmarks.
@@ -323,3 +323,20 @@ Exit gate: no open critical/high finding affecting Runtime V1; regression gate p
 | Commit/PR | `36aec8d` + this commit in [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
 | Remaining Gaps | 03.06 live wiring. File-intelligence and relationship-graph sources (PRV-04). The injection pattern list is heuristic: it flags and contains attacks rather than detecting all of them, and the real defense is the trust plus boundary framing. |
 | Next Task | 03.06, or PRV-06 security regression freeze |
+
+### 7.9 MIO-PRV-03.06 — Unified Context Engine on the live chat path
+
+| Field | Detail |
+|---|---|
+| Milestone | MIO-PRV-03 — Unified Context Engine |
+| Objective | Make the live chat path use the engine without breaking evidence grounding or the existing context formats |
+| Baseline | Chat sent the TP-0.45 assembler output to the model directly |
+| Implemented | `governAssembledContext()` (`UnifiedContextPipeline.ts`) runs the assembled project knowledge and memory, plus task and permission state, through `selectContext`. The existing envelopes stay the transport. Only surviving sources are sent; flagged knowledge becomes `QUARANTINED`; flagged memory becomes `SYSTEM_DERIVED`. Each kind keeps exactly its previous budget, so legitimate context that used to fit still fits. Task and permission state go to the model as a separate boundary-safe `MIO_CONTEXT` block before the user prompt. `AgentOrchestrator` uses the governed envelopes for the model request, `EvidenceGrounding`, and the source counts and lists reported to the UI (so the UI shows what the model actually received). |
+| Files Changed | `src/intelligence/context/UnifiedContextPipeline.ts` (new), `src/agents/AgentOrchestrator.ts`, `src/contracts/MioContractAdapters.ts` (label fallback), `src/tests/unifiedContextPipelineTests.ts` (new) |
+| Test Results | `npm test` **1716/1716**. All existing chat/context tests unchanged and green, plus 5 new tests, including an end-to-end spy on the real chat path showing the governed context and runtime-state block reach the model and the user prompt stays last. |
+| Security Impact | Positive: cross-project, duplicate, and injection-flagged context is now governed on the path users actually hit |
+| Dependencies | 03.01–03.05 |
+| Acceptance Gate | PRV-03 exit gate **PASS** locally for the live chat path; CI via #521 |
+| Commit/PR | [#521](https://github.com/elanghaqeem-hash/mio/pull/521) |
+| Remaining Gaps | File-intelligence and relationship-graph context sources (PRV-04); research evidence and the active creative document are not yet passed into chat (adapters exist) |
+| Next Task | MIO-PRV-06 security regression freeze |

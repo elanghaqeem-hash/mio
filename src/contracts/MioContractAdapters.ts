@@ -47,7 +47,7 @@ export function evidenceFromContextSource(source: ApplicationContextSource, retr
   return {
     id: source.id,
     kind: 'PROJECT_KNOWLEDGE',
-    label: clip(source.label, MIO_CONTRACT_LIMITS.shortText),
+    label: clip(source.label.trim() || source.assetId, MIO_CONTRACT_LIMITS.shortText),
     status: verified ? 'VERIFIED' : 'UNVERIFIED',
     trust: verified ? 'TRUSTED' : 'UNTRUSTED',
     sourceUri: clip(source.sourceUri, MIO_CONTRACT_LIMITS.longText),
