@@ -9,7 +9,7 @@ import { CapabilityRegistry } from '../security/CapabilityRegistry';
 import type { SecureServiceGateway } from '../services/SecureServiceGateway';
 import { mioChatVoice } from '../services/voice/MioChatVoiceController';
 import type { CapabilityDescriptor } from '../types/capabilities';
-import type { MioRuntimeErrorCode } from '../contracts/MioContracts';
+import type { MioCapabilityRequest, MioCapabilityResult, MioRuntimeErrorCode } from '../contracts/MioContracts';
 import { MIO_CAPABILITY_MANIFEST_VERSION, type MioCapabilityManifest, type MioJsonSchema } from './CapabilityManifest';
 import { CapabilityProtocol, type MioCapabilityExecutor, type MioCapabilityOutcome } from './CapabilityProtocol';
 
@@ -230,10 +230,12 @@ export interface DefaultCapabilityProtocolOptions {
   workspaceGateway?: SecureServiceGateway;
   /** Test seam: replaces native executors by capability id. */
   executors?: Partial<Record<string, MioCapabilityExecutor<any, any>>>;
+  /** Optional, non-blocking observer of completed capability calls. */
+  onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void;
 }
 
 export function createDefaultCapabilityProtocol(options: DefaultCapabilityProtocolOptions): CapabilityProtocol {
-  const protocol = new CapabilityProtocol(options.registry);
+  const protocol = new CapabilityProtocol(options.registry, options.onResult);
   for (const [id, extras] of Object.entries(EXISTING_CAPABILITY_EXTRAS)) {
     const descriptor = options.registry.get(id);
     if (!descriptor) continue;
