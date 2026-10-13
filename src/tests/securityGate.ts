@@ -5,6 +5,7 @@ import { runAdapterIntegrityTests } from './adapterIntegrityTests';
 import { runAiProxyTests } from './aiProxyTests';
 import { runBoundedZipReaderTests } from './boundedZipReaderTests';
 import { runCapabilityGatewayTests } from './capabilityGatewayTests';
+import { runCapabilityProtocolTests } from './capabilityProtocolTests';
 import { runContextBoundaryTests } from './contextBoundaryTests';
 import { runCreativePipelineTests } from './creativePipelineTests';
 import { runDesktopBrowserBridgeTests } from './desktopBrowserBridgeTests';
@@ -53,6 +54,7 @@ export const SECURITY_GATE_SUITES: ReadonlyArray<{ name: string; threats: readon
   { name: 'runContextBoundaryTests', threats: ['PROMPT_INJECTION'], run: runContextBoundaryTests },
   { name: 'runScopedAuthorizationTests', threats: ['PERMISSION', 'CROSS_PROJECT', 'EMERGENCY_STOP'], run: runScopedAuthorizationTests },
   { name: 'runCapabilityGatewayTests', threats: ['PERMISSION'], run: runCapabilityGatewayTests },
+  { name: 'runCapabilityProtocolTests', threats: ['PERMISSION', 'SECRET_EXPOSURE', 'RESOURCE_EXHAUSTION', 'EMERGENCY_STOP', 'AUDIT'], run: runCapabilityProtocolTests },
   { name: 'runSecurityPermissionCompletionTests', threats: ['PERMISSION', 'AUDIT'], run: runSecurityPermissionCompletionTests },
   { name: 'runResourceGovernanceTests', threats: ['RESOURCE_EXHAUSTION', 'AUDIT'], run: runResourceGovernanceTests },
   { name: 'runModelRouterBudgetTests', threats: ['RESOURCE_EXHAUSTION', 'PERMISSION'], run: runModelRouterBudgetTests },

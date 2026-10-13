@@ -25,12 +25,18 @@ import { KnowledgeFreshness } from '../types/project';
 import { ResearchReport } from '../types/research';
 import { detectMioLocale } from '../services/MioVoiceService';
 import { ModelRouter } from './ModelRouter';
+import { createDefaultCapabilityProtocol } from '../capabilities/defaultCapabilityProtocol';
+import { MIO_CONTRACT_SCHEMA_VERSION } from '../contracts/MioContracts';
 
 export interface AgentPromptOptions { projectKnowledgeEnabled?: boolean; memoryEnabled?: boolean; excludedAssetIds?: string[]; contextBudgetChars?: number; memoryContextBudgetChars?: number; sessionId?: string; }
 export interface AgentKnowledgeSource { assetId: string; name: string; sourceUri: string; trust: KnowledgeTrustState; freshness: KnowledgeFreshness; score: number; /** Knowledge chunk actually sent to the model (PRV-03.06). */ chunkId?: string; }
 export interface StructuredAgentResponse { understanding: string; plan: string[]; permissionStatus: string; executionSummary: string; validationStatus: string; resultText: string; nextSteps: string[]; suggestedMode?: MioSystemMode; emotionalContext?: string; emotionalState?: EmotionalAssessment; companionStrategy?: EmotionalAssessment['strategy']; voiceProsody?: CompanionPreparedContext['voiceProsody']; toolId?: string; modelProvider?: string; modelName?: string; modelSource?: string; webSearchUsed?: boolean; citations?: ModelCitation[]; runtimeTaskId?: string; projectContextSources?: number; projectContextEnabled?: boolean; memoryContextSources?: number; memoryContextEnabled?: boolean; knowledgeSources?: AgentKnowledgeSource[]; evidenceAudit?: EvidenceAudit; }
 
 const defaultToolRouter = new ToolRouter(createDefaultToolRegistry());
+// MIO-PRV-05: the agent reaches every capability through one protocol (manifest admission, schema and size
+// bounds, timeout/STOP, output validation, audit); ToolRouter/SecureServiceGateway gates still apply beneath it.
+export const agentCapabilityProtocol = createDefaultCapabilityProtocol({ registry: defaultCapabilityRegistry, toolRouter: defaultToolRouter });
+let capabilityRequestSequence = 0;
 const CREATIVE_EXECUTION_MODES = new Set<MioSystemMode>(['3D', 'ANIMATION', 'MOTION_2D', 'GRAPHIC', 'DRAWING', 'PHOTO', 'SFX', 'MUSIC']);
 const LOCALE_NAMES: Record<string, string> = { 'id-ID': 'Bahasa Indonesia', 'en-US': 'English', 'ms-MY': 'Bahasa Melayu', 'ja-JP': 'Japanese', 'ko-KR': 'Korean', 'zh-CN': 'Simplified Chinese', 'th-TH': 'Thai', 'vi-VN': 'Vietnamese', 'es-ES': 'Spanish', 'fr-FR': 'French', 'de-DE': 'German', 'it-IT': 'Italian', 'pt-BR': 'Portuguese', 'nl-NL': 'Dutch', 'tr-TR': 'Turkish', 'ru-RU': 'Russian', 'ar-SA': 'Arabic', 'hi-IN': 'Hindi' };
 
@@ -72,19 +78,19 @@ export class AgentOrchestrator {
     }
     const executionContext = { taskId, mode, projectId: project.id, requestedBy: 'AGENT' as const };
     if (mode === 'RESEARCH') {
-      taskRuntime.startStep(taskId, 'execute'); const result = await defaultToolRouter.execute<ResearchReport>('research.search', { query: normalizedInput }, executionContext);
+      taskRuntime.startStep(taskId, 'execute'); const result = await this.invokeCapability<ResearchReport>('research.search', { query: normalizedInput }, executionContext);
       if (!result.success || !result.data) { if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId); taskRuntime.fail(taskId, result.error ?? 'Research tool failed'); return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'research.search', result.error), taskId); }
       taskRuntime.completeStep(taskId, 'execute'); await taskScheduler.waitUntilRunnable(taskId); taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId); eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
       return this.withTask({ ...this.response(`Research directive analyzed: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', `research.search executed with ${result.data.sources.length} source(s).`, result.validation, `Research completed with ${result.data.sources.length} source(s), ${result.data.conflicts.length} conflict(s), and ${result.data.providerErrors.length} provider error(s).`, ['Review citations in Research workspace', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'research.search' }, taskId);
     }
     if (mode === 'PROJECT') {
-      taskRuntime.startStep(taskId, 'execute'); const result = await defaultToolRouter.execute<{ id: string; name: string; activeMode: MioSystemMode; assetCount: number }>('project.inspect', {}, executionContext);
+      taskRuntime.startStep(taskId, 'execute'); const result = await this.invokeCapability<{ id: string; name: string; activeMode: MioSystemMode; assetCount: number }>('project.inspect', {}, executionContext);
       if (!result.success || !result.data) { if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId); taskRuntime.fail(taskId, result.error ?? 'Project inspection failed'); return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'project.inspect', result.error), taskId); }
       taskRuntime.completeStep(taskId, 'execute'); await taskScheduler.waitUntilRunnable(taskId); taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId); eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS');
-      return this.withTask({ ...this.response(`Project inspection requested: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', 'project.inspect executed through ToolRouter.', result.validation, `Current project: ${result.data.name}. Active mode: ${result.data.activeMode}. Assets: ${result.data.assetCount}.`, ['Open Project workspace for details', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'project.inspect' }, taskId);
+      return this.withTask({ ...this.response(`Project inspection requested: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', 'project.inspect executed through the capability protocol.', result.validation, `Current project: ${result.data.name}. Active mode: ${result.data.activeMode}. Assets: ${result.data.assetCount}.`, ['Open Project workspace for details', 'Inspect queue/runtime lifecycle in Task Monitor'], mode, emotionalContext), toolId: 'project.inspect' }, taskId);
     }
     if (CREATIVE_EXECUTION_MODES.has(mode)) {
-      taskRuntime.startStep(taskId, 'execute'); const result = await defaultToolRouter.execute<{ mode: MioSystemMode; completed: boolean; outputAssetIds: string[]; steps: Array<{ id: string; mode: string; status: string; outputAssetId?: string }> }>('creative.execute', { prompt: normalizedInput, requestedMode: mode }, executionContext);
+      taskRuntime.startStep(taskId, 'execute'); const result = await this.invokeCapability<{ mode: MioSystemMode; completed: boolean; outputAssetIds: string[]; steps: Array<{ id: string; mode: string; status: string; outputAssetId?: string }> }>('creative.execute', { prompt: normalizedInput, requestedMode: mode }, executionContext);
       if (!result.success || !result.data) { if (taskRuntime.isCancelled(taskId)) return this.cancelledResponse(prompt, plan, mode, emotionalContext, taskId); taskRuntime.fail(taskId, result.error ?? `${mode} Creative Engine execution failed`); return this.withTask(this.toolFailure(prompt, plan, mode, emotionalContext, 'creative.execute', result.error), taskId); }
       taskRuntime.completeStep(taskId, 'execute'); await taskScheduler.waitUntilRunnable(taskId); taskRuntime.startStep(taskId, 'validate'); taskRuntime.completeStep(taskId, 'validate'); taskRuntime.complete(taskId); eventBus.emit('CORE_STATE_CHANGE', 'SUCCESS'); eventBus.emit('ACTIVITY_LOG', { timestamp: Date.now(), message: `Task ${taskId}: creative.execute produced ${result.data.outputAssetIds.length} validated asset(s) in ${mode}`, mode });
       return this.withTask({ ...this.response(`Creative directive analyzed: "${normalizedInput}"`, plan, 'AUTHORIZED_BY_TOOL_GATE', `creative.execute completed ${result.data.steps.length} native Creative Engine step(s).`, result.validation, `${mode} Creative Engine execution completed and persisted ${result.data.outputAssetIds.length} validated project asset(s).`, [`Open ${mode} workspace to inspect or refine the generated asset`, 'Inspect execution lineage in Task Monitor'], mode, emotionalContext), toolId: 'creative.execute' }, taskId);
@@ -115,6 +121,20 @@ export class AgentOrchestrator {
     taskRuntime.startStep(taskId, 'execute'); taskRuntime.fail(taskId, `No executable tool registered for ${mode}`); eventBus.emit('CORE_STATE_CHANGE', 'WARNING'); return this.withTask(this.response(`Analyzed directive: "${normalizedInput}"`, plan, sensitive ? 'AUTHORIZED_BY_USER' : 'AUTHORIZED', 'No registered executable tool is available; action was not simulated.', 'NO_TOOL_EXECUTED', `Task mapped to [${mode}], but no executable tool is registered for this capability in the current Technology Preview.`, [`Continue in ${mode} workspace`, 'Inspect failed-safe state in Task Monitor'], mode, emotionalContext), taskId);
   }
 
+  /** Invokes a capability through the protocol and returns the ToolResult-shaped outcome the task flow expects. */
+  private static async invokeCapability<O>(capabilityId: string, input: unknown, context: { taskId: string; mode: MioSystemMode; projectId: string; requestedBy: 'AGENT' }): Promise<{ success: boolean; data?: O; error?: string; validation: string }> {
+    const manifest = agentCapabilityProtocol.manifest(capabilityId);
+    const result = await agentCapabilityProtocol.invoke<O>({
+      schemaVersion: MIO_CONTRACT_SCHEMA_VERSION,
+      requestId: `${context.taskId}:${capabilityId}:${++capabilityRequestSequence}`,
+      capabilityId,
+      input,
+      context: { taskId: context.taskId, traceId: context.taskId, mode: context.mode, requestedBy: context.requestedBy, privacy: manifest?.networkAccess ? 'REMOTE_ALLOWED' : 'LOCAL_ONLY', projectId: context.projectId },
+      permission: { level: manifest?.permissionLevel ?? 'L0_OBSERVE', action: `CAPABILITY:${capabilityId}`, target: `Project ${context.projectId}` },
+      createdAt: Date.now(),
+    });
+    return result.status === 'SUCCEEDED' ? { success: true, data: result.output, validation: result.validation } : { success: false, error: result.error.message, validation: 'FAILED' };
+  }
   private static toolFailure(prompt: string, plan: string[], mode: MioSystemMode, emotionalContext: string | undefined, toolId: string, error?: string): StructuredAgentResponse { eventBus.emit('CORE_STATE_CHANGE', 'WARNING'); return { ...this.response(`Understood directive: "${prompt}"`, plan, error === 'Permission denied' ? 'REJECTED_BY_USER' : 'TOOL_BLOCKED', `${toolId} did not complete. No result was fabricated.`, 'FAILED', error ?? `Tool ${toolId} failed safely.`, ['Review permission, scope, provider availability, or validation logs'], mode, emotionalContext), toolId }; }
   private static cancelledResponse(prompt: string, plan: string[], mode: MioSystemMode, emotionalContext: string | undefined, taskId: string): StructuredAgentResponse { eventBus.emit('CORE_STATE_CHANGE', 'WARNING'); return this.withTask(this.response(`Directive cancelled: "${prompt}"`, plan, 'CANCELLED', 'Task execution was cancelled and in-flight operations were aborted where supported.', 'CANCELLED', 'Task cancelled. No post-cancellation result was accepted.', ['Review Task Monitor before retrying'], mode, emotionalContext), taskId); }
   private static withTask(response: StructuredAgentResponse, taskId: string): StructuredAgentResponse { return { ...response, runtimeTaskId: taskId }; }
