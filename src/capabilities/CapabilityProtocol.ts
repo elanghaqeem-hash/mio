@@ -28,7 +28,7 @@ export class CapabilityProtocol {
   private readonly entries = new Map<string, { manifest: MioCapabilityManifest; executor: MioCapabilityExecutor<any, any> }>();
   private sequence = 0;
 
-  constructor(private readonly registry: CapabilityRegistry = defaultCapabilityRegistry) {}
+  constructor(private readonly registry: CapabilityRegistry = defaultCapabilityRegistry, private readonly onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void) {}
 
   /**
    * Declares a capability. Its manifest must be structurally valid, and the CapabilityRegistry entry (registered
@@ -167,6 +167,7 @@ export class CapabilityProtocol {
       : { ...base, status: failure!.status, evidence: [], artifacts: [], error: { code: failure!.code, message, retryable: RETRYABLE.has(failure!.code) && mutationState === 'NONE', mutationState, capabilityId } };
     if (!manifest || manifest.audit === 'ALWAYS' || !success) this.audit(result, manifest);
     eventBus.emit('CAPABILITY_PROTOCOL_RESULT', { requestId, capabilityId, status: result.status, taskId: trace.taskId, durationMs: finishedAt - startedAt });
+    try { this.onResult?.(request, result); } catch { /* tracing must not alter the capability outcome */ }
     return result;
   }
 
