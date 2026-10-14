@@ -27,6 +27,7 @@ import { detectMioLocale } from '../services/MioVoiceService';
 import { ModelRouter } from './ModelRouter';
 import { createDefaultCapabilityProtocol } from '../capabilities/defaultCapabilityProtocol';
 import { MIO_CONTRACT_SCHEMA_VERSION } from '../contracts/MioContracts';
+import { MioCapabilityTraceRecorder } from '../observability/MioCapabilityTraceRecorder';
 
 export interface AgentPromptOptions { projectKnowledgeEnabled?: boolean; memoryEnabled?: boolean; excludedAssetIds?: string[]; contextBudgetChars?: number; memoryContextBudgetChars?: number; sessionId?: string; }
 export interface AgentKnowledgeSource { assetId: string; name: string; sourceUri: string; trust: KnowledgeTrustState; freshness: KnowledgeFreshness; score: number; /** Knowledge chunk actually sent to the model (PRV-03.06). */ chunkId?: string; }
@@ -35,7 +36,8 @@ export interface StructuredAgentResponse { understanding: string; plan: string[]
 const defaultToolRouter = new ToolRouter(createDefaultToolRegistry());
 // MIO-PRV-05: the agent reaches every capability through one protocol (manifest admission, schema and size
 // bounds, timeout/STOP, output validation, audit); ToolRouter/SecureServiceGateway gates still apply beneath it.
-export const agentCapabilityProtocol = createDefaultCapabilityProtocol({ registry: defaultCapabilityRegistry, toolRouter: defaultToolRouter });
+export const agentCapabilityTraceRecorder = new MioCapabilityTraceRecorder();
+export const agentCapabilityProtocol = createDefaultCapabilityProtocol({ registry: defaultCapabilityRegistry, toolRouter: defaultToolRouter, onResult: (request, result) => agentCapabilityTraceRecorder.observe(request, result) });
 let capabilityRequestSequence = 0;
 const CREATIVE_EXECUTION_MODES = new Set<MioSystemMode>(['3D', 'ANIMATION', 'MOTION_2D', 'GRAPHIC', 'DRAWING', 'PHOTO', 'SFX', 'MUSIC']);
 const LOCALE_NAMES: Record<string, string> = { 'id-ID': 'Bahasa Indonesia', 'en-US': 'English', 'ms-MY': 'Bahasa Melayu', 'ja-JP': 'Japanese', 'ko-KR': 'Korean', 'zh-CN': 'Simplified Chinese', 'th-TH': 'Thai', 'vi-VN': 'Vietnamese', 'es-ES': 'Spanish', 'fr-FR': 'French', 'de-DE': 'German', 'it-IT': 'Italian', 'pt-BR': 'Portuguese', 'nl-NL': 'Dutch', 'tr-TR': 'Turkish', 'ru-RU': 'Russian', 'ar-SA': 'Arabic', 'hi-IN': 'Hindi' };
