@@ -62,6 +62,8 @@ export class MioRecoveryCheckpointStore {
       COMMITTED: [], FAILED: [], UNCERTAIN: [],
     };
     if (!allowed[row.state].includes(next)) throw new Error('CHECKPOINT_TRANSITION_DENIED');
+    // Once a mutating executor has started, a generic failure cannot prove no side effects.
+    if (row.mutates && row.state === 'EXECUTING' && next === 'FAILED') throw new Error('CHECKPOINT_MUTATION_UNCERTAIN');
     row.state = next;
     row.updatedAt = now;
     return clone(row);
