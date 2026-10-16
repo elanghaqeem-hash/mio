@@ -9,6 +9,15 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 export type DesktopCheckpointState = 'PREPARED' | 'EXECUTING' | 'COMMITTED' | 'UNCERTAIN';
+export type DesktopRecoveryDecision = 'NO_ACTION' | 'MANUAL_REVIEW_REQUIRED' | 'NOT_STARTED_REVIEW';
+export interface DesktopRecoveryInspection {
+  schemaVersion: 1;
+  workspaceId: string;
+  checkpoints: Array<DesktopCheckpoint & { recoveryDecision: DesktopRecoveryDecision }>;
+  summary: { total: number; needsReview: number; completed: number; notStarted: number };
+  disclosure: 'READ_ONLY_NO_AUTOMATIC_REPLAY';
+}
+
 export interface DesktopCheckpoint {
   transactionId: string;
   operationId: string;
@@ -105,5 +114,25 @@ export class DesktopDurableMutationCheckpoints {
   /** Returns a detached copy; EXECUTING checkpoints are treated as uncertain on process restart. */
   inspect(workspaceId: string): DesktopCheckpoint[] {
     return this.load(workspaceId).records.map(x => ({ ...x, state: x.state === 'EXECUTING' ? 'UNCERTAIN' : x.state }));
+  }
+  /** A read-only reconciliation view; never assumes that a PREPARED action can be replayed. */
+  inspectRecovery(workspaceId: string): DesktopRecoveryInspection {
+    const checkpoints = this.inspect(workspaceId).map(record => ({
+      ...record,
+      recoveryDecision: (record.state === 'COMMITTED' ? 'NO_ACTION' :
+        record.state === 'PREPARED' ? 'NOT_STARTED_REVIEW' : 'MANUAL_REVIEW_REQUIRED') as DesktopRecoveryDecision,
+    }));
+    return {
+      schemaVersion: 1,
+      workspaceId,
+      checkpoints,
+      summary: {
+        total: checkpoints.length,
+        needsReview: checkpoints.filter(x => x.recoveryDecision === 'MANUAL_REVIEW_REQUIRED').length,
+        completed: checkpoints.filter(x => x.recoveryDecision === 'NO_ACTION').length,
+        notStarted: checkpoints.filter(x => x.recoveryDecision === 'NOT_STARTED_REVIEW').length,
+      },
+      disclosure: 'READ_ONLY_NO_AUTOMATIC_REPLAY',
+    };
   }
 }
