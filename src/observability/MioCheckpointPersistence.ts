@@ -45,11 +45,12 @@ export function recoverCheckpointArchive(raw: string, projectId: string): MioRec
   if (!identity(projectId) || typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > MAX_BYTES) refuse();
   let decoded: unknown;
   try { decoded = JSON.parse(raw); } catch { refuse(); }
-  if (!object(decoded)) refuse();
-  if (!exactKeys(decoded, TOP_KEYS) || decoded.version !== MIO_CHECKPOINT_ARCHIVE_VERSION || decoded.projectId !== projectId ||
-      !Array.isArray(decoded.checkpoints) || decoded.checkpoints.length > MAX_ROWS) refuse();
+  if (!object(decoded)) throw new Error('CHECKPOINT_ARCHIVE_INVALID');
+  const archive: Record<string, unknown> = decoded;
+  if (!exactKeys(archive, TOP_KEYS) || archive.version !== MIO_CHECKPOINT_ARCHIVE_VERSION || archive.projectId !== projectId ||
+      !Array.isArray(archive.checkpoints) || archive.checkpoints.length > MAX_ROWS) throw new Error('CHECKPOINT_ARCHIVE_INVALID');
   const store = new MioRecoveryCheckpointStore(MAX_ROWS);
-  for (const value of decoded.checkpoints) {
+  for (const value of archive.checkpoints) {
     if (!object(value) || !exactKeys(value, ROW_KEYS) ||
         !identity(value.projectId) || value.projectId !== projectId ||
         !identity(value.taskId) || !identity(value.actionId) || !identity(value.idempotencyKey) ||
