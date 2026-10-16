@@ -9,6 +9,7 @@ import { CapabilityRegistry } from '../security/CapabilityRegistry';
 import type { SecureServiceGateway } from '../services/SecureServiceGateway';
 import { mioChatVoice } from '../services/voice/MioChatVoiceController';
 import type { CapabilityDescriptor } from '../types/capabilities';
+import type { MioMutationCheckpointGate } from '../observability/PersistentMutationCheckpointGate';
 import type { MioCapabilityRequest, MioCapabilityResult, MioRuntimeErrorCode } from '../contracts/MioContracts';
 import { MIO_CAPABILITY_MANIFEST_VERSION, type MioCapabilityManifest, type MioJsonSchema } from './CapabilityManifest';
 import { CapabilityProtocol, type MioCapabilityExecutor, type MioCapabilityOutcome } from './CapabilityProtocol';
@@ -232,10 +233,12 @@ export interface DefaultCapabilityProtocolOptions {
   executors?: Partial<Record<string, MioCapabilityExecutor<any, any>>>;
   /** Optional, non-blocking observer of completed capability calls. */
   onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void;
+  /** Requires runtime-supplied durable storage; leave unset if not configured. */
+  checkpointGate?: MioMutationCheckpointGate;
 }
 
 export function createDefaultCapabilityProtocol(options: DefaultCapabilityProtocolOptions): CapabilityProtocol {
-  const protocol = new CapabilityProtocol(options.registry, options.onResult);
+  const protocol = new CapabilityProtocol(options.registry, options.onResult, options.checkpointGate);
   for (const [id, extras] of Object.entries(EXISTING_CAPABILITY_EXTRAS)) {
     const descriptor = options.registry.get(id);
     if (!descriptor) continue;
