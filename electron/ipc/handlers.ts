@@ -233,6 +233,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
     },
 
+    handleInspectWorkspaceRecovery: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
+      if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace recovery request' };
+      // Renderer is restricted to workspaces explicitly authorized in this desktop session.
+      if (!workspaceSandbox.listAuthorized().some(workspace => workspace.id === workspaceId)) {
+        return { success: false, error: 'Workspace authorization required' };
+      }
+      try { return { success: true, inspection: durableCheckpoints.inspectRecovery(workspaceId) }; }
+      catch { return { success: false, error: 'Recovery checkpoint unavailable or invalid; mutation remains blocked' }; }
+    },
+
     handleListWorkspaceMutationAudit: (_event:IpcMainInvokeEvent, workspaceId:unknown) => {if(!validateWorkspaceId(workspaceId))return {success:false,error:'Invalid workspace audit request'};try{return {success:true,events:mutationJournal.list(workspaceId,200)};}catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}},
 
     handleRequestWorkspaceMutationApproval: async (_event:IpcMainInvokeEvent, request:unknown) => {
