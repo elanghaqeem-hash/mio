@@ -43,6 +43,25 @@ export function runDesktopDurableCheckpointTests(): { passed: number; total: num
         rejects(() => s.inspect('ws_1'), 'corruption silently reset');
       } finally { fs.rmSync(home, { recursive: true, force: true }); }
     }],
+    ['read-only recovery assessment distinguishes committed, uncertain, and prepared operations', () => {
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mio-recovery-'));
+      try {
+        const store = new DesktopDurableMutationCheckpoints(home);
+        store.reserve('ws_1', 'tx_1', ['one', 'two', 'three']);
+        store.transition('ws_1', 'tx_1', 'one', 'EXECUTING');
+        store.transition('ws_1', 'tx_1', 'one', 'COMMITTED');
+        store.transition('ws_1', 'tx_1', 'two', 'EXECUTING');
+        const inspection = new DesktopDurableMutationCheckpoints(home).inspectRecovery('ws_1');
+        assert(inspection.summary.total === 3 && inspection.summary.completed === 1 &&
+          inspection.summary.needsReview === 1 && inspection.summary.notStarted === 1, 'recovery categories are wrong');
+        assert(inspection.checkpoints[1].state === 'UNCERTAIN' &&
+          inspection.checkpoints[1].recoveryDecision === 'MANUAL_REVIEW_REQUIRED', 'in-flight mutation could auto-replay');
+        assert(inspection.checkpoints[2].recoveryDecision === 'NOT_STARTED_REVIEW', 'prepared action was auto-approved');
+        assert(inspection.disclosure === 'READ_ONLY_NO_AUTOMATIC_REPLAY', 'read-only disclosure missing');
+        assert(!JSON.stringify(inspection).includes('source'), 'sensitive path exposed');
+        assert(store.inspect('ws_1')[1].state === 'UNCERTAIN', 'inspection changed saved record');
+      } finally { fs.rmSync(home, { recursive: true, force: true }); }
+    }],
     ['checkpoint files contain only opaque metadata and no operation paths', () => {
       const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mio-ckpt-'));
       try {
