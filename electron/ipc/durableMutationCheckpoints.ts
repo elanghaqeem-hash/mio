@@ -54,7 +54,7 @@ export class DesktopDurableMutationCheckpoints {
     const records = archive.records as unknown[];
     const used = new Set<string>();
     for (const record of records) {
-      if (!validRecord(record)) fail();
+      if (!validRecord(record)) throw new Error('DURABLE_CHECKPOINT_INVALID');
       if (used.has(key(record))) fail();
       used.add(key(record));
     }
