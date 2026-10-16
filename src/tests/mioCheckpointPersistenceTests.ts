@@ -47,7 +47,9 @@ export async function runMioCheckpointPersistenceTests(): Promise<{ passed: numb
       store.prepare(id('mutate'), 1);
       const snapshot = JSON.parse(serializeCheckpointArchive(store, 'project_A'));
       snapshot.checkpoints[0].state = 'UNCERTAIN';
-      reject(() => recoverCheckpointArchive(JSON.stringify(snapshot), 'project_A'), 'impossible state accepted');
+      snapshot.checkpoints[0].mutates = false;
+      reject(() => recoverCheckpointArchive(JSON.stringify(snapshot), 'project_A'), 'read-only uncertain state accepted');
+      snapshot.checkpoints[0].mutates = true;
       snapshot.checkpoints[0].state = 'PREPARED';
       snapshot.checkpoints[0].updatedAt = 0;
       reject(() => recoverCheckpointArchive(JSON.stringify(snapshot), 'project_A'), 'invalid time accepted');
