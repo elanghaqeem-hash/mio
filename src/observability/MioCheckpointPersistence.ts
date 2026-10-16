@@ -45,7 +45,8 @@ export function recoverCheckpointArchive(raw: string, projectId: string): MioRec
   if (!identity(projectId) || typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > MAX_BYTES) refuse();
   let decoded: unknown;
   try { decoded = JSON.parse(raw); } catch { refuse(); }
-  if (!object(decoded) || !exactKeys(decoded, TOP_KEYS) || decoded.version !== MIO_CHECKPOINT_ARCHIVE_VERSION || decoded.projectId !== projectId ||
+  if (!object(decoded)) refuse();
+  if (!exactKeys(decoded, TOP_KEYS) || decoded.version !== MIO_CHECKPOINT_ARCHIVE_VERSION || decoded.projectId !== projectId ||
       !Array.isArray(decoded.checkpoints) || decoded.checkpoints.length > MAX_ROWS) refuse();
   const store = new MioRecoveryCheckpointStore(MAX_ROWS);
   for (const value of decoded.checkpoints) {
