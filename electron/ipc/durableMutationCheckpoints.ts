@@ -51,8 +51,9 @@ export class DesktopDurableMutationCheckpoints {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail();
     const archive = raw as Record<string, unknown>;
     if (Object.keys(archive).length !== 3 || archive.version !== 1 || archive.workspaceId !== workspaceId || !Array.isArray(archive.records) || archive.records.length > MAX_RECORDS) fail();
+    const records = archive.records as unknown[];
     const used = new Set<string>();
-    for (const record of archive.records) {
+    for (const record of records) {
       if (!validRecord(record)) fail();
       if (used.has(key(record))) fail();
       used.add(key(record));
