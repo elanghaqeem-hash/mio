@@ -20,6 +20,7 @@ export interface MioMutationCheckpointGate {
 export class PersistentMutationCheckpointGate implements MioMutationCheckpointGate {
   private readonly locks = new Map<string, Promise<void>>();
   private readonly active = new Map<string, MioRecoveryCheckpointStore>();
+  private readonly compromised = new Set<string>();
   constructor(private readonly persistence: MioCheckpointPersistence) {}
   private async exclusive<T>(projectId: string, action: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(projectId) ?? Promise.resolve();
@@ -28,8 +29,11 @@ export class PersistentMutationCheckpointGate implements MioMutationCheckpointGa
     const pending = previous.then(() => current);
     this.locks.set(projectId, pending);
     await previous;
-    try { return await action(); }
-    finally { release(); if (this.locks.get(projectId) === pending) this.locks.delete(projectId); }
+    try {
+      if (this.compromised.has(projectId)) throw new Error('MUTATION_CHECKPOINT_RECONCILIATION_REQUIRED');
+      try { return await action(); }
+      catch (error) { this.compromised.add(projectId); throw error; }
+    } finally { release(); if (this.locks.get(projectId) === pending) this.locks.delete(projectId); }
   }
   private async activeStore(projectId: string): Promise<MioRecoveryCheckpointStore> {
     const existing = this.active.get(projectId);
