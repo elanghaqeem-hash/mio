@@ -9,6 +9,7 @@ import { readBoundedZipEntries } from './boundedZipReader';
 import { type DesktopMutationTransaction } from './mutationApproval';
 import { MutationApprovalStore } from './mutationApprovalStore';
 import { DesktopMutationJournalStore } from './mutationJournalStore';
+import { DesktopDurableMutationCheckpoints } from './durableMutationCheckpoints';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -29,6 +30,7 @@ const MAX_TRAINING_PATH = 4096;
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
   const mutationJournal = DesktopMutationJournalStore.atUserData(app.getPath('userData'));
+  const durableCheckpoints = new DesktopDurableMutationCheckpoints(app.getPath('userData'));
   const mutationApprovals = new MutationApprovalStore();
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
@@ -245,8 +247,31 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
       try {
         mutationApprovals.consume(value.transaction,value.approvalToken);
-        const completedOperationIds:string[]=[];mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'STARTED'});
-        for(const operation of value.transaction.operations){try{await workspaceSandbox.mutate(value.transaction.workspaceId,operation);completedOperationIds.push(operation.id);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_COMPLETED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target});}catch(error){const message=error instanceof Error?error.message:String(error);mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'OPERATION_FAILED',operationId:operation.id,operationKind:operation.kind,source:operation.source,target:operation.target,error:message});mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',error:message});return {success:false,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'FAILED',completedOperationIds,failedOperationId:operation.id,error:message},error:message};}}
+        const transaction = value.transaction;
+        // Reserve the complete transaction before the first side effect. Disk failure rejects execution.
+        durableCheckpoints.reserve(transaction.workspaceId, transaction.id, transaction.operations.map(operation => operation.id));
+        const completedOperationIds: string[] = [];
+        mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'STARTED' });
+        for (const operation of transaction.operations) {
+          // Persist EXECUTING before invoking the mutating tool. No tool runs if the write fails.
+          durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'EXECUTING');
+          try {
+            await workspaceSandbox.mutate(transaction.workspaceId, operation);
+            mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_COMPLETED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target });
+            // A commit confirmation must also reach stable storage before reporting success.
+            durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'COMMITTED');
+            completedOperationIds.push(operation.id);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            // Never retry automatically: the mutation might already have occurred.
+            try { durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'UNCERTAIN'); } catch { /* retain EXECUTING, which is uncertain on restart */ }
+            try {
+              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_FAILED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target, error: message });
+              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: message });
+            } catch { /* journal failure must never trigger a replay */ }
+            return { success: false, receipt: { transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'UNCERTAIN', completedOperationIds, failedOperationId: operation.id, error: message }, error: message };
+          }
+        }
         mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
       } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
     },
