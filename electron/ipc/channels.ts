@@ -33,6 +33,7 @@ export const IPC_CHANNELS = {
   DESKTOP_INVOKE_READ_CAPABILITY: 'mio:capability:desktopReadOnly',
   DESKTOP_INVOKE_APPROVED_MUTATION: 'mio:capability:executeApprovedMutation',
   DESKTOP_CREATE_TRUSTED_CUBE: 'mio:creative:createTrustedCube',
+  DESKTOP_INSPECT_TRUSTED_CUBE: 'mio:creative:inspectTrustedCube',
 
   // Governed read-only browser bridge.
   BROWSER_READ_PAGE: 'mio:browser:readPage',
