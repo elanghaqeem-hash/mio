@@ -25,11 +25,14 @@ const RETRYABLE: ReadonlySet<MioRuntimeErrorCode> = new Set(['TIMEOUT', 'PROVIDE
 const rank = (level: string) => (MIO_PERMISSION_LEVELS as readonly string[]).indexOf(level);
 const safeId = (value: unknown, fallback: string) => (typeof value === 'string' && /^\S{1,200}$/.test(value) ? value : fallback);
 
+/** REQUIRED is intended for trusted runtimes: mutating capabilities fail closed without a durable gate. */
+export type MioMutationDurabilityPolicy = 'OPTIONAL' | 'REQUIRED';
+
 export class CapabilityProtocol {
   private readonly entries = new Map<string, { manifest: MioCapabilityManifest; executor: MioCapabilityExecutor<any, any> }>();
   private sequence = 0;
 
-  constructor(private readonly registry: CapabilityRegistry = defaultCapabilityRegistry, private readonly onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void, private readonly checkpointGate?: MioMutationCheckpointGate) {}
+  constructor(private readonly registry: CapabilityRegistry = defaultCapabilityRegistry, private readonly onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void, private readonly checkpointGate?: MioMutationCheckpointGate, private readonly mutationDurability: MioMutationDurabilityPolicy = 'OPTIONAL') {}
 
   /**
    * Declares a capability. Its manifest must be structurally valid, and the CapabilityRegistry entry (registered
@@ -102,6 +105,10 @@ export class CapabilityProtocol {
     const inputErrors = validateAgainstSchema(request.input, manifest.inputSchema, 'input');
     if (inputErrors.length) return this.finish(request, requestId, capabilityId, startedAt, manifest, { code: 'VALIDATION_FAILED', message: `Input does not match the ${manifest.id} schema: ${inputErrors.slice(0, 3).join('; ')}`, status: 'FAILED' });
 
+    if (manifest.mutates && this.mutationDurability === 'REQUIRED' && !this.checkpointGate) {
+      return this.finish(request, requestId, capabilityId, startedAt, manifest,
+        { code: 'POLICY_BLOCKED', message: 'Trusted mutation runtime requires a durable checkpoint gate', status: 'DENIED' });
+    }
     // Mutations crossing domains are allowed only after durable pre-execution checkpoints succeed.
     // This gate is explicitly injected by a runtime with a verified durable backend.
     const checkpoint: MutationCheckpointIdentity | undefined = manifest.mutates && this.checkpointGate
@@ -122,6 +129,15 @@ export class CapabilityProtocol {
     const unknownCheckpointFailure = () => this.finish<O>(request, requestId, capabilityId, startedAt, manifest,
       { code: 'PROVIDER_FAILED', message: 'Mutation status uncertain: checkpoint confirmation failed; manual review required', status: 'FAILED', executed: true, mutationState: 'UNKNOWN' });
 
+    // STOP or task cancellation may happen while the durable BEGIN write is awaited.
+    // Never start the executor after that boundary. The checkpoint is finalized
+    // conservatively as UNCERTAIN rather than discarded or automatically replayed.
+    if (emergencyStop.isEmergencyStopped() || taskRuntime.isCancelled(context.taskId)) {
+      if (!(await settle(false))) return unknownCheckpointFailure();
+      return this.finish(request, requestId, capabilityId, startedAt, manifest,
+        { code: 'CANCELLED', message: 'Capability was cancelled during checkpoint admission', status: 'CANCELLED', executed: Boolean(checkpoint), mutationState: checkpoint ? 'UNKNOWN' : 'NONE' });
+    }
+
     const timeoutMs = Math.max(1, Math.min(manifest.timeoutMs, request.budget?.maxDurationMs ?? manifest.timeoutMs));
     const controller = new AbortController();
     let stopReason: 'TIMEOUT' | 'CANCELLED' | undefined;
@@ -136,7 +152,9 @@ export class CapabilityProtocol {
     let outcome: MioCapabilityOutcome<O>;
     try {
       outcome = await Promise.race([
-        Promise.resolve().then(() => executor(request.input, { ...context, signal: controller.signal, requestId })).catch((error: unknown): MioCapabilityOutcome<O> => ({ ok: false, code: 'PROVIDER_FAILED', message: error instanceof Error ? error.message : String(error) })),
+        Promise.resolve().then(() => controller.signal.aborted || emergencyStop.isEmergencyStopped() || taskRuntime.isCancelled(context.taskId)
+          ? ({ ok: false, code: 'CANCELLED', message: 'Capability cancelled before executor dispatch' } as MioCapabilityOutcome<O>)
+          : executor(request.input, { ...context, signal: controller.signal, requestId })).catch((error: unknown): MioCapabilityOutcome<O> => ({ ok: false, code: 'PROVIDER_FAILED', message: error instanceof Error ? error.message : String(error) })),
         interrupted,
       ]);
     } finally {

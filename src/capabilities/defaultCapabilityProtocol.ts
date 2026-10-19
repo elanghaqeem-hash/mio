@@ -12,7 +12,7 @@ import type { CapabilityDescriptor } from '../types/capabilities';
 import type { MioMutationCheckpointGate } from '../observability/PersistentMutationCheckpointGate';
 import type { MioCapabilityRequest, MioCapabilityResult, MioRuntimeErrorCode } from '../contracts/MioContracts';
 import { MIO_CAPABILITY_MANIFEST_VERSION, type MioCapabilityManifest, type MioJsonSchema } from './CapabilityManifest';
-import { CapabilityProtocol, type MioCapabilityExecutor, type MioCapabilityOutcome } from './CapabilityProtocol';
+import { CapabilityProtocol, type MioCapabilityExecutor, type MioCapabilityOutcome, type MioMutationDurabilityPolicy } from './CapabilityProtocol';
 
 type ManifestExtras = Omit<MioCapabilityManifest, keyof CapabilityDescriptor | 'manifestVersion'>;
 
@@ -235,10 +235,12 @@ export interface DefaultCapabilityProtocolOptions {
   onResult?: (request: MioCapabilityRequest, result: MioCapabilityResult) => void;
   /** Requires runtime-supplied durable storage; leave unset if not configured. */
   checkpointGate?: MioMutationCheckpointGate;
+  /** Trusted runtimes should select REQUIRED; no fake in-memory durability fallback. */
+  mutationDurability?: MioMutationDurabilityPolicy;
 }
 
 export function createDefaultCapabilityProtocol(options: DefaultCapabilityProtocolOptions): CapabilityProtocol {
-  const protocol = new CapabilityProtocol(options.registry, options.onResult, options.checkpointGate);
+  const protocol = new CapabilityProtocol(options.registry, options.onResult, options.checkpointGate, options.mutationDurability);
   for (const [id, extras] of Object.entries(EXISTING_CAPABILITY_EXTRAS)) {
     const descriptor = options.registry.get(id);
     if (!descriptor) continue;
