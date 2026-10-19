@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createLocalInferenceBackend } from '../src/intelligence/model/LocalInferenceBackend';
 
+async function main(): Promise<void> {
 const originalFetch = globalThis.fetch;
 const backend = createLocalInferenceBackend('gateway', 'http://127.0.0.1:4318', 'qwen2.5:3b');
 let calls = 0;
@@ -39,3 +40,6 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+
+}
+void main().catch(error => { console.error(error); process.exitCode = 1; });
