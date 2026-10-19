@@ -16,7 +16,7 @@ const ALLOWED_ROLES = new Set(['system', 'user', 'assistant']);
 const UPSTREAM = 'http://127.0.0.1:11434';
 
 function reply(res, code, obj) {
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'access-control-allow-origin': 'http://localhost:5173', 'vary': 'Origin' });
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'access-control-allow-origin': req.headers.origin === 'http://127.0.0.1:5173' ? 'http://127.0.0.1:5173' : 'http://localhost:5173', 'vary': 'Origin' });
   res.end(JSON.stringify(obj));
 }
 async function ollama(path, body) {
