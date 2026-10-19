@@ -10,6 +10,7 @@ import { type DesktopMutationTransaction } from './mutationApproval';
 import { MutationApprovalStore } from './mutationApprovalStore';
 import { DesktopMutationJournalStore } from './mutationJournalStore';
 import { DesktopDurableMutationCheckpoints } from './durableMutationCheckpoints';
+import { DesktopWorkspaceMutationLease } from './workspaceMutationLease';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -32,6 +33,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const mutationJournal = DesktopMutationJournalStore.atUserData(app.getPath('userData'));
   const durableCheckpoints = new DesktopDurableMutationCheckpoints(app.getPath('userData'));
   const mutationApprovals = new MutationApprovalStore();
+  const workspaceMutationLease = new DesktopWorkspaceMutationLease();
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
@@ -153,6 +155,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     handleRevokeWorkspace: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
       if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace authority id' };
+      if (workspaceMutationLease.isActive(workspaceId)) return { success: false, error: 'Active workspace mutation must finish before authority can be revoked' };
       if (trainingJobManager.hasRunningForWorkspace(workspaceId)) {
         trainingJobManager.cancelWorkspace(workspaceId);
         return { success: false, error: 'Active governed training used this workspace. Cancellation was requested; retry revocation after the job reaches a terminal state.' };
@@ -259,6 +262,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
       if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
       if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
+      // Acquire synchronously before any async mutation. Reject overlap rather than queueing.
+      let releaseWorkspace: () => void;
+      try { releaseWorkspace = workspaceMutationLease.acquire(value.transaction.workspaceId); }
+      catch { return { success: false, error: 'WORKSPACE_MUTATION_ALREADY_ACTIVE' }; }
       try {
         mutationApprovals.consume(value.transaction,value.approvalToken);
         const transaction = value.transaction;
@@ -288,6 +295,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
         }
         mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
       } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
+      finally { releaseWorkspace(); }
     },
 
     handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
