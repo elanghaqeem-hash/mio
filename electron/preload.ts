@@ -139,6 +139,7 @@ export interface MioDesktopAPI {
   listWorkspaceMutationAudit: (workspaceId:string) => Promise<{success:boolean;events?:Array<{sequence:number;transactionId:string;state:string;operationKind?:string;source?:string;target?:string;recordedAt:string}>;error?:string}>;
   requestWorkspaceMutationApproval: (request: unknown) => Promise<{ success:boolean; cancelled?:boolean; approval?:{token:string;transactionId:string;workspaceId:string;expiresAt:number}; error?:string }>;
   executeWorkspaceMutation: (request: unknown) => Promise<{ success: boolean; receipt?: unknown; error?: string }>;
+  createTrustedCube: (request: { schemaVersion: 1; requestId: string; taskId: string; projectId: string; mode: '3D'; templateId: 'primitive_cube_v1' }) => Promise<{success: boolean; status?: string; assetId?: string; error?: string}>;
   invokeApprovedDesktopMutation: (request: { schemaVersion: 1; capabilityId: 'desktop.workspace.execute-approved-mutation'; permissionLevel: 'L3_MODIFY' | 'L5_DESTRUCTIVE'; transaction: { id: string; workspaceId: string; operations: Array<{ id: string; kind: 'MKDIR' | 'RENAME' | 'MOVE' | 'COPY' | 'TRASH'; source?: string; target?: string; collisionPolicy: 'BLOCK' }> }; approvalToken: string }) => Promise<{ success: boolean; receipt?: unknown; error?: string }>;
   invokeDesktopReadCapability: (request: { schemaVersion: 1; capabilityId: 'desktop.workspace.list' | 'desktop.workspace.read-text' | 'desktop.recovery.inspect'; workspaceId: string; permissionLevel: 'L0_OBSERVE'; relativePath?: string }) => Promise<{ success: boolean; capabilityId?: string; output?: unknown; error?: string }>;
   browserReadPage: (request: { url: string }) => Promise<MioBrowserReadResult>;
@@ -177,6 +178,7 @@ const desktopAPI: MioDesktopAPI = {
   inspectWorkspaceRecovery: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.FS_INSPECT_WORKSPACE_RECOVERY, workspaceId),
   requestWorkspaceMutationApproval: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_REQUEST_WORKSPACE_MUTATION_APPROVAL, request),
   executeWorkspaceMutation: (request) => ipcRenderer.invoke(IPC_CHANNELS.FS_EXECUTE_WORKSPACE_MUTATION, request),
+  createTrustedCube: (request) => ipcRenderer.invoke(IPC_CHANNELS.DESKTOP_CREATE_TRUSTED_CUBE, request),
   invokeApprovedDesktopMutation: (request) => ipcRenderer.invoke(IPC_CHANNELS.DESKTOP_INVOKE_APPROVED_MUTATION, request),
   invokeDesktopReadCapability: (request) => ipcRenderer.invoke(IPC_CHANNELS.DESKTOP_INVOKE_READ_CAPABILITY, request),
   browserReadPage: (request) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_READ_PAGE, request),

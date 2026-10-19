@@ -13,6 +13,8 @@ import { DesktopDurableMutationCheckpoints } from './durableMutationCheckpoints'
 import { DesktopWorkspaceMutationLease } from './workspaceMutationLease';
 import { DesktopReadOnlyCapabilityBridge } from './readOnlyCapabilityBridge';
 import { GovernedDesktopMutationDispatcher } from './governedMutationDispatcher';
+import { createTrustedNodeCreativeExecutor, type TrustedNodeCreativeExecutor, type TrustedCreativeCommand } from '../../src/observability/TrustedNodeCreativeExecutor';
+import { TrustedCubeSceneAdapter } from '../../src/observability/TrustedCubeSceneAdapter';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -38,6 +40,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceMutationLease = new DesktopWorkspaceMutationLease();
   // Sticky STOP: a running operation may finish, but no subsequent file mutation is admitted.
   let desktopMutationStopped = false;
+  let creativeRuntime: TrustedNodeCreativeExecutor | undefined;
+  let cubeApprovalPending = false;
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
@@ -156,7 +160,52 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     execute: (transaction, approvalToken) => handleExecuteMutation({ transaction, approvalToken }),
   });
 
+  const validCubeRequest = (raw: unknown): raw is TrustedCreativeCommand => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.getPrototypeOf(raw) !== Object.prototype) return false;
+    const value = raw as Record<string, unknown>;
+    const keys = Object.keys(value);
+    return keys.length === 6 && ['schemaVersion', 'requestId', 'taskId', 'projectId', 'mode', 'templateId'].every(key => Object.hasOwn(value, key)) &&
+      value.schemaVersion === 1 && value.mode === '3D' && value.templateId === 'primitive_cube_v1' &&
+      typeof value.requestId === 'string' && /^[A-Za-z0-9_.:-]{1,120}$/.test(value.requestId) &&
+      typeof value.taskId === 'string' && /^[A-Za-z0-9_.:-]{1,120}$/.test(value.taskId) &&
+      validateWorkspaceId(value.projectId);
+  };
+  const stopCreative = () => { creativeRuntime?.stop(); };
+  const creativeBusy = () => cubeApprovalPending || Boolean(creativeRuntime?.activeCount());
+  const cubeApproval = async (command: TrustedCreativeCommand): Promise<boolean> => {
+    if (desktopMutationStopped || !isAuthorizedWorkspace(command.projectId)) return false;
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', title: 'Approve trusted MIO 3D scene',
+      message: 'Create one validated 3D cube asset?',
+      detail: 'Template: primitive_cube_v1. This writes one new project-scoped scene to local application data. Project: ' +
+        command.projectId + '. Request: ' + command.requestId + '. No automatic rollback or retry.',
+      buttons: ['Cancel', 'Create 3D Scene'], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    return choice.response === 1 && !desktopMutationStopped && isAuthorizedWorkspace(command.projectId);
+  };
+  const invokeTrustedCube = async (request: unknown) => {
+    if (!validCubeRequest(request)) return { success: false, status: 'DENIED', error: 'CREATIVE_COMMAND_INVALID_OR_WORKSPACE_MISMATCH' };
+    if (desktopMutationStopped || !isAuthorizedWorkspace(request.projectId))
+      return { success: false, status: 'DENIED', error: 'CREATIVE_STOPPED_OR_WORKSPACE_UNAUTHORIZED' };
+    // A single global approval slot avoids competing modeless desktop dialogs.
+    if (cubeApprovalPending) return { success: false, status: 'DENIED', error: 'CREATIVE_APPROVAL_ALREADY_PENDING' };
+    cubeApprovalPending = true;
+    try {
+      if (!creativeRuntime) {
+        const root = app.getPath('userData');
+        creativeRuntime = createTrustedNodeCreativeExecutor(root, new TrustedCubeSceneAdapter(root, cubeApproval));
+      }
+      return await creativeRuntime.invoke(request);
+    } catch {
+      creativeRuntime?.stop();
+      return { success: false, status: 'UNCERTAIN', error: 'CREATIVE_RUNTIME_UNAVAILABLE_REVIEW_REQUIRED' };
+    } finally {
+      cubeApprovalPending = false;
+    }
+  };
+
   return {
+    handleCreateTrustedCube: (_event: IpcMainInvokeEvent, request: unknown) => invokeTrustedCube(request),
     handleInvokeDesktopReadCapability: (_event: IpcMainInvokeEvent, request: unknown) => desktopReadCapabilities.invoke(request),
     handleMinimize: () => {
       if (mainWindow) mainWindow.minimize();
@@ -171,7 +220,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return true;
     },
     handleClose: () => {
-      if (workspaceMutationLease.hasActive()) return { success: false, error: 'WORKSPACE_MUTATION_DRAIN_REQUIRED' };
+      if (workspaceMutationLease.hasActive() || creativeBusy()) return { success: false, error: 'WORKSPACE_MUTATION_DRAIN_REQUIRED' };
       if (mainWindow) mainWindow.close();
       return { success: true };
     },
@@ -202,6 +251,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
       console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
       desktopMutationStopped = true;
+      stopCreative();
       mutationApprovals.clear();
       trainingJobManager.cancelAll();
       if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', safeReason);
@@ -224,7 +274,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     handleRevokeWorkspace: (_event: IpcMainInvokeEvent, workspaceId: unknown) => {
       if (!validateWorkspaceId(workspaceId)) return { success: false, error: 'Invalid workspace authority id' };
-      if (workspaceMutationLease.isActive(workspaceId)) return { success: false, error: 'Active workspace mutation must finish before authority can be revoked' };
+      if (workspaceMutationLease.isActive(workspaceId) || creativeBusy()) return { success: false, error: 'Active workspace or creative mutation must finish before authority can be revoked' };
       if (trainingJobManager.hasRunningForWorkspace(workspaceId)) {
         trainingJobManager.cancelWorkspace(workspaceId);
         return { success: false, error: 'Active governed training used this workspace. Cancellation was requested; retry revocation after the job reaches a terminal state.' };
@@ -394,10 +444,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
 
-    hasActiveWorkspaceMutations: () => workspaceMutationLease.hasActive(),
-    requestStopWorkspaceMutations: () => { desktopMutationStopped = true; mutationApprovals.clear(); },
+    hasActiveWorkspaceMutations: () => workspaceMutationLease.hasActive() || creativeBusy(),
+    requestStopWorkspaceMutations: () => { desktopMutationStopped = true; stopCreative(); mutationApprovals.clear(); },
     revokeAllWorkspaceAuthority: () => {
       desktopMutationStopped = true;
+      stopCreative();
+      if (!creativeBusy()) { try { creativeRuntime?.close(); } catch { /* preserve lock for manual checkpoint review */ } }
       trainingJobManager.forceStopAll();
       mutationApprovals.clear();
       workspaceSandbox.revokeAll();

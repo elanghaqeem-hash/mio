@@ -105,6 +105,7 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.FS_REQUEST_WORKSPACE_MUTATION_APPROVAL, (event, args) => handlers.handleRequestWorkspaceMutationApproval(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_INSPECT_WORKSPACE_RECOVERY, (event, args) => handlers.handleInspectWorkspaceRecovery(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_EXECUTE_WORKSPACE_MUTATION, (event, args) => handlers.handleExecuteWorkspaceMutation(event, args[0]));
+  secureHandle(IPC_CHANNELS.DESKTOP_CREATE_TRUSTED_CUBE, (event, args) => handlers.handleCreateTrustedCube(event, args[0]));
   secureHandle(IPC_CHANNELS.DESKTOP_INVOKE_APPROVED_MUTATION, (event, args) => handlers.handleInvokeApprovedMutation(event, args[0]));
   secureHandle(IPC_CHANNELS.DESKTOP_INVOKE_READ_CAPABILITY, (event, args) => handlers.handleInvokeDesktopReadCapability(event, args[0]));
   secureHandle(IPC_CHANNELS.BROWSER_READ_PAGE, (event, args) => handlers.handleBrowserReadPage(event, args[0]));
