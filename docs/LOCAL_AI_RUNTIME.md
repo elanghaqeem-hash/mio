@@ -129,3 +129,17 @@ The first desktop-adapter CI run failed at TypeScript script transformation beca
 The CI dependency install also reported **14 advisories (9 moderate, 3 high, 2 critical)**. These are dependency audit findings, not proof of reachable production exploits. Classify the actual packages and reachable paths using `npm audit --json` and prioritize fixable runtime vulnerabilities. Avoid blind `npm audit fix --force` because it may introduce breaking changes.
 
 **Release must stay blocked until** current-head CI passes, real local-model inference is witnessed on intended desktop hardware, STOP MIO is tested while generation is active, and relevant critical/high dependency advisories are triaged. Do not mistake green mock tests for production readiness.
+
+
+## LAR-09 — Security release gate
+
+The previous PR head passed all seven workflows, including gateway smoke tests, mocked inference/cancellation, desktop adapter and build. CI logs continue to report 14 total npm vulnerabilities (9 moderate, 3 high, 2 critical). Do not infer exact affected packages from the summary alone.
+
+A separate `MIO Dependency Security Audit` GitHub Action now:
+- gates high/critical vulnerabilities in production dependencies with `npm audit --omit=dev --audit-level=high`;
+- saves the full dependency audit inventory as a seven-day workflow artifact for triage;
+- avoids auto-upgrading transitive dependencies without assessing compatibility.
+
+Passing the production-dependency gate alone does not clear development/build-tool advisories or prove production security. Review the full inventory and remediate reachable high/critical paths prior to release. This workflow is **new and must pass on the current head**.
+
+Model weights must be installed and a real local inference + STOP MIO test run on target hardware before merge and deployment.
