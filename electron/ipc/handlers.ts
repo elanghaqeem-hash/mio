@@ -11,6 +11,7 @@ import { MutationApprovalStore } from './mutationApprovalStore';
 import { DesktopMutationJournalStore } from './mutationJournalStore';
 import { DesktopDurableMutationCheckpoints } from './durableMutationCheckpoints';
 import { DesktopWorkspaceMutationLease } from './workspaceMutationLease';
+import { DesktopReadOnlyCapabilityBridge } from './readOnlyCapabilityBridge';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -94,7 +95,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   const isAuthorizedWorkspace = (workspaceId: string): boolean => workspaceSandbox.listAuthorized().some(item => item.id === workspaceId);
 
+  const desktopReadCapabilities = new DesktopReadOnlyCapabilityBridge({
+    authorized: isAuthorizedWorkspace,
+    stopped: () => desktopMutationStopped,
+    list: (workspaceId, relativePath) => workspaceSandbox.listDirectory(workspaceId, relativePath),
+    readText: (workspaceId, relativePath) => workspaceSandbox.readText(workspaceId, relativePath),
+    inspectRecovery: workspaceId => durableCheckpoints.inspectRecovery(workspaceId),
+  });
+
   return {
+    handleInvokeDesktopReadCapability: (_event: IpcMainInvokeEvent, request: unknown) => desktopReadCapabilities.invoke(request),
     handleMinimize: () => {
       if (mainWindow) mainWindow.minimize();
     },
