@@ -48,9 +48,10 @@ export class NodeCheckpointWriterLease {
 
   assertActive(): void {
     if (this.closed) fail('CHECKPOINT_LEASE_CLOSED');
-    let fd: number;
+    let fd = -1;
     try { fd = fs.openSync(this.filename, fs.constants.O_RDONLY | NOFOLLOW); }
     catch { fail('CHECKPOINT_LEASE_LOST'); }
+    if (fd < 0) fail('CHECKPOINT_LEASE_LOST');
     try {
       const stat = fs.fstatSync(fd);
       if (!stat.isFile() || stat.size > 256 || stat.size === 0) fail('CHECKPOINT_LEASE_INVALID');
