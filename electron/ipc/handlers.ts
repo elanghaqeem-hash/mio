@@ -88,6 +88,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     return validateTrainingJobId(value.jobId) && validateWorkspaceId(value.workspaceId);
   };
 
+  const isAuthorizedWorkspace = (workspaceId: string): boolean => workspaceSandbox.listAuthorized().some(item => item.id === workspaceId);
+
   return {
     handleMinimize: () => {
       if (mainWindow) mainWindow.minimize();
@@ -243,10 +245,11 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       catch { return { success: false, error: 'Recovery checkpoint unavailable or invalid; mutation remains blocked' }; }
     },
 
-    handleListWorkspaceMutationAudit: (_event:IpcMainInvokeEvent, workspaceId:unknown) => {if(!validateWorkspaceId(workspaceId))return {success:false,error:'Invalid workspace audit request'};try{return {success:true,events:mutationJournal.list(workspaceId,200)};}catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}},
+    handleListWorkspaceMutationAudit: (_event:IpcMainInvokeEvent, workspaceId:unknown) => {if(!validateWorkspaceId(workspaceId))return {success:false,error:'Invalid workspace audit request'};if(!isAuthorizedWorkspace(workspaceId))return {success:false,error:'Workspace authorization required'};try{return {success:true,events:mutationJournal.list(workspaceId,200)};}catch(error){return {success:false,error:error instanceof Error?error.message:String(error)};}},
 
     handleRequestWorkspaceMutationApproval: async (_event:IpcMainInvokeEvent, request:unknown) => {
       const value=request as {transaction?:DesktopMutationTransaction};if(!value?.transaction||!validateWorkspaceId(value.transaction.workspaceId))return {success:false,error:'Invalid mutation approval request'};
+      if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
       const choice=await dialog.showMessageBox(mainWindow,{type:'warning',title:'Approve Mio file changes',message:`Approve ${value.transaction.operations.length} file operation(s)?`,detail:'Mio will execute only this exact workspace transaction. Approval expires in 5 minutes and can be used once.',buttons:['Cancel','Approve'],defaultId:0,cancelId:0,noLink:true});
       if(choice.response!==1)return {success:false,cancelled:true};return {success:true,approval:mutationApprovals.issue(value.transaction)};
     },
@@ -255,6 +258,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       if (!request || typeof request !== 'object') return { success: false, error: 'Invalid mutation request' };
       const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
       if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
+      if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
       try {
         mutationApprovals.consume(value.transaction,value.approvalToken);
         const transaction = value.transaction;
