@@ -100,6 +100,18 @@ try {
   }
   assert.equal(upstreamCalls - beforeStress, 20, 'all repeated requests must reach local Ollama');
 
+  // Verify concurrent requests do not leak state between local chat requests.
+  const concurrentStart = upstreamCalls;
+  const concurrent = await Promise.all(Array.from({ length: 5 }, (_, i) => realFetch(base + '/v1/chat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'Concurrent ' + i }] }),
+  })));
+  for (const response of concurrent) {
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).message.content, 'Halo! Saya MIO lokal.');
+  }
+  assert.equal(upstreamCalls - concurrentStart, 5);
+
   const controller = new AbortController();
   const pending = realFetch(base + '/v1/chat', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -107,8 +119,8 @@ try {
     signal: controller.signal,
   });
   // Wait until mock upstream sees the chat request; bounded polling.
-  for (let i = 0; i < 80 && upstreamCalls < 24; i++) await new Promise(r => setTimeout(r, 10));
-  assert.equal(upstreamCalls, 24, 'slow request must reach local inference');
+  for (let i = 0; i < 80 && upstreamCalls < 29; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(upstreamCalls, 29, 'slow request must reach local inference');
   controller.abort();
   await assert.rejects(pending, e => e.name === 'AbortError');
   for (let i = 0; i < 80 && !aborted; i++) await new Promise(r => setTimeout(r, 10));
