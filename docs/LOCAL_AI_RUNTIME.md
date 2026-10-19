@@ -120,3 +120,12 @@ For the complete desktop test, separately verify (1) Settings selects the `gatew
 The test `node --import tsx scripts/local-ai-desktop-adapter.test.ts` exercises the actual TypeScript local inference adapter used by MIO Settings and ModelRouter. The test substitutes the HTTP fetch transport (not a real model), and verifies readiness, chat message output, configured model identity, AbortSignal propagation, and rejection of non-loopback hosts.
 
 This test has been wired into GitHub Actions. It is not proof of GUI clicks, desktop installer behavior, or a real Ollama generation; these remain separate manual acceptance gates. Keep PR in draft until all current-head CI checks pass and the local device can demonstrate inference plus STOP MIO.
+
+
+## LAR-08 — CI remediation and release gate
+
+The first desktop-adapter CI run failed at TypeScript script transformation because `tsx` ran with CJS output where top-level `await` was unsupported. This is a test harness failure, not evidence that the desktop adapter itself failed. The test now executes under an async `main()` wrapper; verify the new workflow run is green before merging.
+
+The CI dependency install also reported **14 advisories (9 moderate, 3 high, 2 critical)**. These are dependency audit findings, not proof of reachable production exploits. Classify the actual packages and reachable paths using `npm audit --json` and prioritize fixable runtime vulnerabilities. Avoid blind `npm audit fix --force` because it may introduce breaking changes.
+
+**Release must stay blocked until** current-head CI passes, real local-model inference is witnessed on intended desktop hardware, STOP MIO is tested while generation is active, and relevant critical/high dependency advisories are triaged. Do not mistake green mock tests for production readiness.
