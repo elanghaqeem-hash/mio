@@ -40,7 +40,7 @@ export function createMioLocalGateway() {
   return http.createServer(async (req, res) => {
     const host = req.headers.host || '';
     // Reject DNS-rebinding and unexpected Host headers even for non-browser callers.
-    if (!/^((127\\.0\\.0\\.1)|(localhost)):[0-9]{1,5}$/.test(host)) {
+    if (!/^((127\.0\.0\.1)|(localhost)):[0-9]{1,5}$/.test(host)) {
       return reply(res, 403, { error: 'Host not allowed' });
     }
     const origin = req.headers.origin;
