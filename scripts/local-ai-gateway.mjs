@@ -19,9 +19,12 @@ function reply(res, code, obj, origin) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...(origin ? { 'access-control-allow-origin': origin } : {}), 'vary': 'Origin' });
   res.end(JSON.stringify(obj));
 }
-async function ollama(path, body) {
+async function ollama(path, body, clientSignal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const cancel = () => controller.abort();
+  clientSignal?.addEventListener('abort', cancel, { once: true });
+  if (clientSignal?.aborted) controller.abort();
   try {
     const response = await fetch(UPSTREAM + path, {
       method: body ? 'POST' : 'GET',
@@ -31,7 +34,7 @@ async function ollama(path, body) {
     });
     if (!response.ok) throw new Error('Local inference backend returned HTTP ' + response.status);
     return await response.json();
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); clientSignal?.removeEventListener('abort', cancel); }
 }
 export function createMioLocalGateway() {
   return http.createServer(async (req, res) => {
@@ -70,13 +73,22 @@ export function createMioLocalGateway() {
             !data.messages.every(m => m && ALLOWED_ROLES.has(m.role) && typeof m.content === 'string' && m.content.length <= 16000)) {
           return respond( 400, { error: 'Invalid messages' });
         }
-        const output = await ollama('/api/chat', { model: MODEL, messages: data.messages, stream: false, options: { num_predict: 1024 } });
+        const inferenceAbort = new AbortController();
+        const onClose = () => { if (!res.writableFinished) inferenceAbort.abort(); };
+        res.once('close', onClose);
+        let output;
+        try {
+          output = await ollama('/api/chat', { model: MODEL, messages: data.messages, stream: false, options: { num_predict: 1024 } }, inferenceAbort.signal);
+        } finally {
+          res.removeListener('close', onClose);
+        }
         if (typeof output?.message?.content !== 'string') throw new Error('Invalid inference response');
         return respond( 200, { provider: 'local-ollama', model: MODEL, message: { role: 'assistant', content: output.message.content }, done: true });
       }
       return respond( 404, { error: 'Not found' });
     } catch (error) {
-      return respond( 503, { error: error?.name === 'AbortError' ? 'Local model timed out' : 'Local model unavailable; check Ollama and the configured model' });
+      if (res.destroyed) return;
+      return respond(503, { error: error?.name === 'AbortError' ? 'Local model timed out or request cancelled' : 'Local model unavailable; check Ollama and the configured model' });
     }
   });
 }
