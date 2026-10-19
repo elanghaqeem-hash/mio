@@ -1,5 +1,5 @@
 export type ModelProviderId = 'mio_local' | 'local_heuristic' | 'openrouter' | 'openai' | 'gemini' | 'claude' | 'ollama';
-export type LocalInferenceBackendId = 'ollama' | 'vllm' | 'llamacpp';
+export type LocalInferenceBackendId = 'ollama' | 'vllm' | 'llamacpp' | 'gateway';
 
 export interface ModelMessage {
   role: 'system' | 'user' | 'assistant';
