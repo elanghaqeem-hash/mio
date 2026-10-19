@@ -31,4 +31,4 @@ async function run() {
   if (mode === 'approval-denied' && result.success) process.exit(82);
   runtime.close();
 }
-run().catch(() => { process.exitCode = 90; });
+run().catch(error => { console.error('MIO_BENCH_CRASH_CHILD_ERROR', error instanceof Error ? error.stack : String(error)); process.exitCode = 90; });
