@@ -29,7 +29,7 @@ export async function runDesktopStopDrainTests(): Promise<{ passed: number; tota
     ['window close and IPC quit cannot revoke active writer', () => {
       check(main.includes("mainWindow.on('close', event =>") &&
         main.includes("WORKSPACE_MUTATION_DRAIN_REQUIRED") &&
-        handlers.includes("handleClose: () => {\n      if (workspaceMutationLease.hasActive())"), 'window close bypasses workspace mutation lease');
+        handlers.includes("handleClose: () => {\n      if (workspaceMutationLease.hasActive() || creativeBusy())"), 'window close bypasses workspace mutation lease');
     }],
   ];
   let passed = 0;
