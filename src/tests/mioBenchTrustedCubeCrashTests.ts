@@ -19,6 +19,9 @@ function fork(root: string, mode: CrashMode): number | null {
     cwd: process.cwd(), env: { ...process.env }, encoding: 'utf8', timeout: 20000,
   });
   if (child.error) throw new Error('Child fault-injection runner unavailable: ' + child.error.message);
+  if (child.status !== 0 && child.status !== 73 && child.status !== 74) {
+    console.error('MIO_BENCH_CHILD_FAILURE', JSON.stringify({ mode, platform: process.platform, status: child.status, signal: child.signal, stderr: child.stderr?.slice(-2500) }));
+  }
   return child.status;
 }
 
