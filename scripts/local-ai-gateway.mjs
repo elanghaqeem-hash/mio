@@ -36,9 +36,10 @@ async function ollama(path, body) {
 export function createMioLocalGateway() {
   return http.createServer(async (req, res) => {
     const origin = req.headers.origin;
+    const respond = (status, body) => reply(res, status, body, origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173' ? origin : undefined);
     // Browser callers must come from the local dev application; no wildcard CORS.
     if (origin && origin !== 'http://localhost:5173' && origin !== 'http://127.0.0.1:5173') {
-      return reply(res, 403, { error: 'Origin not allowed' });
+      return respond( 403, { error: 'Origin not allowed' });
     }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -52,30 +53,30 @@ export function createMioLocalGateway() {
       if (req.url === '/health' && req.method === 'GET') {
         const tags = await ollama('/api/tags');
         const models = (tags.models || []).map(m => m.name);
-        return reply(res, 200, { status: models.includes(MODEL) ? 'ready' : 'model_missing', provider: 'local-ollama', model: MODEL, installed: models.includes(MODEL) });
+        return respond( 200, { status: models.includes(MODEL) ? 'ready' : 'model_missing', provider: 'local-ollama', model: MODEL, installed: models.includes(MODEL) });
       }
       if (req.url === '/v1/chat' && req.method === 'POST') {
         const chunks = [];
         let size = 0;
         for await (const chunk of req) {
           size += chunk.length;
-          if (size > MAX_BYTES) return reply(res, 413, { error: 'Payload too large' });
+          if (size > MAX_BYTES) return respond( 413, { error: 'Payload too large' });
           chunks.push(chunk);
         }
         let data;
         try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-        catch { return reply(res, 400, { error: 'Invalid JSON' }); }
+        catch { return respond( 400, { error: 'Invalid JSON' }); }
         if (!Array.isArray(data.messages) || data.messages.length < 1 || data.messages.length > 32 ||
             !data.messages.every(m => m && ALLOWED_ROLES.has(m.role) && typeof m.content === 'string' && m.content.length <= 16000)) {
-          return reply(res, 400, { error: 'Invalid messages' });
+          return respond( 400, { error: 'Invalid messages' });
         }
         const output = await ollama('/api/chat', { model: MODEL, messages: data.messages, stream: false, options: { num_predict: 1024 } });
         if (typeof output?.message?.content !== 'string') throw new Error('Invalid inference response');
-        return reply(res, 200, { provider: 'local-ollama', model: MODEL, message: { role: 'assistant', content: output.message.content }, done: true });
+        return respond( 200, { provider: 'local-ollama', model: MODEL, message: { role: 'assistant', content: output.message.content }, done: true });
       }
-      return reply(res, 404, { error: 'Not found' });
+      return respond( 404, { error: 'Not found' });
     } catch (error) {
-      return reply(res, 503, { error: error?.name === 'AbortError' ? 'Local model timed out' : 'Local model unavailable; check Ollama and the configured model' });
+      return respond( 503, { error: error?.name === 'AbortError' ? 'Local model timed out' : 'Local model unavailable; check Ollama and the configured model' });
     }
   });
 }
