@@ -73,3 +73,23 @@ curl -X POST http://127.0.0.1:4318/v1/chat -H 'Content-Type: application/json' -
 ## Next planned stage: LAR-02
 
 Wire local provider into MioModelRouter with explicit provider priority, health state, abort propagation, error telemetry, and fail-closed tool permissions. Preserve existing production behavior until build, integration, and security tests pass.
+
+
+## Stage LAR-02 integration (committed, not yet runtime-verified)
+
+MIO already had a native `ModelRouter` and a `mio_local` provider supporting Ollama, vLLM and llama.cpp. LAR-02 adds **gateway** as a fourth local backend, rather than creating a second router.
+
+In MIO Settings select:
+- Provider: `mio_local`
+- Local backend: `gateway` (if UI exposes the backend options; otherwise set it in saved preferences)
+- Model: `qwen2.5:3b` (must equal `MIO_LOCAL_MODEL`)
+- Local endpoint: `http://127.0.0.1:4318`
+- Network state: `OFFLINE`
+- Web search: off
+- Browser read: off
+
+Run the negative-path smoke suite with `node scripts/local-ai-gateway.test.mjs`. It checks blocked origins, invalid JSON, unsupported roles, oversized payloads and unknown routes. It does **not** verify real LLM inference.
+
+**Important:** The gateway accepts a maximum 32 messages of 16,000 characters each and 64 KiB combined. Large project context can exceed these bounds. The frontend must handle HTTP 413 without substituting a fabricated answer.
+
+The gateway is designed for desktop/local development only. Its loopback binding and CORS checks are **not authentication**, and it must not be publicly exposed. Additional security hardening, an explicit UI option, automated build/test verification, abort propagation and end-to-end testing remain acceptance gates before merge.
