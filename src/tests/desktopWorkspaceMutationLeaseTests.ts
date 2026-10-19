@@ -37,7 +37,7 @@ export async function runDesktopWorkspaceMutationLeaseTests(): Promise<{ passed:
     }],
     ['Electron execution holds lease with finally and revocation guard', async () => {
       const handler = fs.readFileSync(path.resolve('electron/ipc/handlers.ts'), 'utf8');
-      const execution = handler.slice(handler.indexOf('handleExecuteWorkspaceMutation:'));
+      const execution = handler.slice(handler.indexOf('const handleExecuteMutation ='), handler.indexOf('const mutationDispatcher ='));
       const revoke = handler.slice(handler.indexOf('handleRevokeWorkspace:'), handler.indexOf('handleReadWorkspaceText:'));
       assert(execution.includes('workspaceMutationLease.acquire(value.transaction.workspaceId)'), 'execution not protected');
       assert(execution.includes('finally { releaseWorkspace(); }'), 'lease not released on error');
