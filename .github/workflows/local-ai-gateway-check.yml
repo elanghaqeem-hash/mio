@@ -1,0 +1,32 @@
+name: MIO Local AI Gateway Check
+on:
+  pull_request:
+    paths:
+      - 'scripts/local-ai-gateway.mjs'
+      - 'scripts/local-ai-gateway.test.mjs'
+      - 'src/intelligence/model/LocalInferenceBackend.ts'
+      - 'src/settings/SystemPreferences.ts'
+      - 'src/modes/settings/SettingsView.tsx'
+      - 'src/types/models.ts'
+      - 'package.json'
+      - '.github/workflows/local-ai-gateway-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Gateway security smoke tests
+        run: node scripts/local-ai-gateway.test.mjs
+      - name: TypeScript and web build
+        run: npm run build:web
