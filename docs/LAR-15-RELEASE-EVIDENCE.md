@@ -28,3 +28,14 @@ Date: 2026-10-19. Scope: MIO local inference feature PR #561, not the whole MIO 
 **NO-GO**. Do not merge PR #561 or claim desktop production readiness until the above evidence is recorded. CI mock tests and Windows compile probes are not substitutes for real deployment and device testing.
 
 The Windows installer workflow now uploads generated evidence even if later steps fail, allowing diagnosis of partial packaging results.
+
+
+## LAR-18 — Newly verified packaging evidence (2026-10-19)
+
+Previously outstanding Windows Installer Acceptance runs have now **completed successfully**:
+- [Run #8 / 39227214614](https://github.com/elanghaqeem-hash/mio/actions/runs/39227214614), commit `773886831d7f4189b5ae719a0c1022fce129d3b0`. Artifact `mio-windows-installer-validation` ID `12174521575` (234,672,258 bytes archive), expires 2026-10-26.
+- [Run #6 / 39227013949](https://github.com/elanghaqeem-hash/mio/actions/runs/39227013949), commit `11b5ec7f82a743531d17ccd4e5ae28a5d076798c`. Artifact ID `12175435317` (234,672,188 bytes archive), expires 2026-10-26.
+
+These workflows include Windows build, NSIS + portable packaging, an EXE count check, SHA-256 manifest generation and artifact upload. The artifact ZIP digest is recorded by GitHub; the individual EXE SHA-256 values have **not** been independently inspected in this review. The workflows succeeded on earlier commits, **not yet on the latest PR head**.
+
+The Windows packaging compilation gate is now supported by CI evidence, but Windows installer user acceptance, installation/uninstallation, code signing, local hardware Ollama inference, desktop STOP MIO and checked-in dependency remediation remain unverified. **Release remains NO-GO.**
