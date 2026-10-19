@@ -99,6 +99,56 @@ export const Studio3DView: React.FC = () => {
   const workspace = useCreativeStudioDocument<Mio3DScene>('MIO_Local_Scene.mio3d', INITIAL_SCENE);
   const { state: sceneData, setState: setSceneData } = workspace;
   const [selectedId, setSelectedId] = useState('obj_core_1');
+  const [trustedImportBusy, setTrustedImportBusy] = useState(false);
+  const [trustedImportMessage, setTrustedImportMessage] = useState<string | null>(null);
+  const importTrustedCube = useCallback(async () => {
+    type TrustedDesktop = {
+      authorizeWorkspace: () => Promise<{ success: boolean; cancelled?: boolean; workspace?: { id: string; name: string }; error?: string }>;
+      createTrustedCube: (request: { schemaVersion: 1; requestId: string; taskId: string; projectId: string; mode: '3D'; templateId: 'primitive_cube_v1' }) => Promise<{success: boolean; status?: string; assetId?: string; error?: string}>;
+      inspectTrustedCube: (request: { projectId: string; taskId: string; requestId: string }) => Promise<{ success: boolean; error?: string; assetId?: string; verified?: boolean; scene?: Mio3DScene }>;
+    };
+    const desktop = (globalThis as { mioDesktop?: TrustedDesktop }).mioDesktop;
+    if (!desktop?.authorizeWorkspace || !desktop?.createTrustedCube || !desktop?.inspectTrustedCube) {
+      setTrustedImportMessage('Trusted 3D import requires the MIO Electron desktop app.');
+      return;
+    }
+    setTrustedImportBusy(true);
+    setTrustedImportMessage(null);
+    try {
+      const authorization = await desktop.authorizeWorkspace();
+      if (!authorization.success || !authorization.workspace?.id) {
+        setTrustedImportMessage(authorization.cancelled ? 'Workspace selection cancelled.' : 'Workspace authorization required.');
+        return;
+      }
+      const projectId = authorization.workspace.id;
+      const requestId = 'cube_' + crypto.randomUUID().replace(/-/g, '');
+      const taskId = 'studio_import_' + requestId;
+      const created = await desktop.createTrustedCube({ schemaVersion: 1, requestId, taskId, projectId, mode: '3D', templateId: 'primitive_cube_v1' });
+      if (!created.success || !created.assetId) {
+        setTrustedImportMessage(created.error ?? 'Trusted cube creation was not committed. Inspect recovery before retrying.');
+        return;
+      }
+      const inspected = await desktop.inspectTrustedCube({ projectId, taskId, requestId });
+      if (!inspected.success || !inspected.verified || inspected.assetId !== created.assetId ||
+          !inspected.scene || inspected.scene.objects.length !== 1 || !inspected.scene.objects[0]?.mesh) {
+        setTrustedImportMessage(inspected.error ?? 'The created scene could not be verified; import blocked.');
+        return;
+      }
+      const object = structuredClone(inspected.scene.objects[0]);
+      object.id = inspected.assetId;
+      object.name = 'Trusted Cube ' + inspected.assetId.slice(-6);
+      setSceneData(previous => ({
+        ...previous,
+        objects: previous.objects.some(existing => existing.id === object.id) ? previous.objects : [...previous.objects, object],
+      }));
+      setSelectedId(object.id);
+      setWorkspaceMode('object');
+      setTrustedImportMessage('Verified cube imported into this Studio 3D document.');
+    } catch {
+      setTrustedImportMessage('Trusted 3D operation needs review; no unverified scene was imported.');
+    } finally { setTrustedImportBusy(false); }
+  }, [setSceneData]);
+
   const [transformMode, setTransformMode] = useState<'select' | 'move' | 'rotate' | 'scale'>('select');
   const [workspaceMode, setWorkspaceMode] = useState<'object' | 'edit'>('object');
   const [transformSnapEnabled, setTransformSnapEnabled] = useState(false);
@@ -1065,6 +1115,14 @@ export const Studio3DView: React.FC = () => {
   return (
     <div className="relative flex h-full w-full bg-[#07090e] overflow-hidden text-xs">
       <CreativeWorkspaceToolbar workspace={workspace} />
+      <div className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-col gap-1 rounded-lg border border-cyan-700/50 bg-[#0d121d]/95 p-2 text-[11px] text-cyan-100 shadow-xl">
+        <button type="button" disabled={trustedImportBusy} onClick={() => void importTrustedCube()}
+          className="rounded border border-cyan-600/70 px-3 py-1.5 font-medium hover:bg-cyan-900/60 disabled:opacity-40">
+          {trustedImportBusy ? 'Verifying trusted 3D asset…' : 'Create & Import Trusted Cube'}
+        </button>
+        {trustedImportMessage && <div role="status" className="max-w-xs whitespace-normal break-words text-gray-300">{trustedImportMessage}</div>}
+      </div>
+
       <div className="relative flex-1 h-full flex flex-col">
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#0d121d]/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono"><Eye size={14} /><span>{workspaceMode.toUpperCase()} MODE // {transformMode.toUpperCase()}</span><span className="text-amber-300 text-[10px] ml-2">LOCAL WEBGL</span><button onClick={() => setShortcutHelpOpen(true)} title="Open modeling shortcuts (?)" className="ml-1 rounded border border-cyan-500/30 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-950/60">? Shortcuts</button></div>
         <div className="absolute left-3 top-12 z-10 flex max-w-[calc(100%-1.5rem)] flex-row gap-1 overflow-x-auto rounded-lg border border-gray-700 bg-[#0d121d]/90 p-1 font-mono sm:flex-col sm:overflow-visible">{(['select', 'move', 'rotate', 'scale'] as const).map((mode) => <button key={mode} onClick={() => setTransformMode(mode)} className={`whitespace-nowrap rounded px-2 py-1 text-left text-[10px] uppercase ${transformMode === mode ? 'bg-cyan-500 text-black' : 'text-gray-300 hover:bg-gray-800'}`}>{mode === 'select' ? 'Q Select' : mode === 'move' ? 'W Move' : mode === 'rotate' ? 'E Rotate' : 'R Scale'}</button>)}</div>

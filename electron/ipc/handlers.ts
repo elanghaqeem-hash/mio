@@ -15,6 +15,9 @@ import { DesktopReadOnlyCapabilityBridge } from './readOnlyCapabilityBridge';
 import { GovernedDesktopMutationDispatcher } from './governedMutationDispatcher';
 import { createTrustedNodeCreativeExecutor, type TrustedNodeCreativeExecutor, type TrustedCreativeCommand } from '../../src/observability/TrustedNodeCreativeExecutor';
 import { TrustedCubeSceneAdapter } from '../../src/observability/TrustedCubeSceneAdapter';
+import { inspectTrustedCubeArtifact } from '../../src/observability/TrustedCubeArtifactInspector';
+import { MioCheckpointPersistence } from '../../src/observability/MioCheckpointPersistence';
+import { NodeFileCheckpointStorage } from '../../src/observability/NodeFileCheckpointStorage';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -205,6 +208,31 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   };
 
   return {
+    handleInspectTrustedCube: async (_event: IpcMainInvokeEvent, raw: unknown) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.getPrototypeOf(raw) !== Object.prototype)
+        return { success: false, error: 'TRUSTED_3D_INSPECTION_INVALID' };
+      const request = raw as Record<string, unknown>;
+      if (Object.keys(request).length !== 3 || !['projectId', 'taskId', 'requestId'].every(key => Object.hasOwn(request, key)) ||
+          !validateWorkspaceId(request.projectId) ||
+          !['taskId', 'requestId'].every(key => typeof request[key] === 'string' && /^[A-Za-z0-9_.:-]{1,120}$/.test(request[key] as string)))
+        return { success: false, error: 'TRUSTED_3D_INSPECTION_INVALID' };
+      if (desktopMutationStopped || !isAuthorizedWorkspace(request.projectId))
+        return { success: false, error: 'TRUSTED_3D_WORKSPACE_UNAUTHORIZED_OR_STOPPED' };
+      try {
+        const archive = await new MioCheckpointPersistence(new NodeFileCheckpointStorage(app.getPath('userData'))).load(request.projectId);
+        const checkpoint = archive.get({ projectId: request.projectId, taskId: request.taskId as string, actionId: request.requestId as string });
+        if (!checkpoint || checkpoint.state !== 'COMMITTED' || !checkpoint.mutates)
+          return { success: false, error: 'TRUSTED_3D_CHECKPOINT_NOT_COMMITTED' };
+        const inspected = inspectTrustedCubeArtifact(app.getPath('userData'), {
+          projectId: request.projectId, taskId: request.taskId as string, requestId: request.requestId as string,
+        });
+        if (desktopMutationStopped || !isAuthorizedWorkspace(request.projectId))
+          return { success: false, error: 'TRUSTED_3D_WORKSPACE_UNAUTHORIZED_OR_STOPPED' };
+        return inspected;
+      } catch {
+        return { success: false, error: 'TRUSTED_3D_INSPECTION_REVIEW_REQUIRED' };
+      }
+    },
     handleCreateTrustedCube: (_event: IpcMainInvokeEvent, request: unknown) => invokeTrustedCube(request),
     handleInvokeDesktopReadCapability: (_event: IpcMainInvokeEvent, request: unknown) => desktopReadCapabilities.invoke(request),
     handleMinimize: () => {
