@@ -29,6 +29,9 @@ export const IPC_CHANNELS = {
   FS_INSPECT_WORKSPACE_RECOVERY: 'mio:fs:inspectWorkspaceRecovery',
   FS_EXECUTE_WORKSPACE_MUTATION: 'mio:fs:executeWorkspaceMutation',
 
+  // Narrow trusted Electron main read-only capability dispatch.
+  DESKTOP_INVOKE_READ_CAPABILITY: 'mio:capability:desktopReadOnly',
+
   // Governed read-only browser bridge.
   BROWSER_READ_PAGE: 'mio:browser:readPage',
 
