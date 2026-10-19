@@ -30,7 +30,8 @@
     "release:animation-v1": "node scripts/animation-v1-release-check.mjs",
     "deploy:verify:animation": "node scripts/verify-animation-deployment.mjs",
     "release:animation-e2e-plan": "node scripts/animation-v1-e2e-plan.mjs",
-    "benchmark:file-scanner": "tsx scripts/benchmarks/file-scanner-benchmark.ts"
+    "benchmark:file-scanner": "tsx scripts/benchmarks/file-scanner-benchmark.ts",
+    "test:electron-gui": "xvfb-run -a ./node_modules/.bin/electron --no-sandbox scripts/e2e/electron-trusted-cube-gui.cjs"
   },
   "dependencies": {
     "@types/three": "^0.186.0",
