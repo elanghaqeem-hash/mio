@@ -93,3 +93,10 @@ Run the negative-path smoke suite with `node scripts/local-ai-gateway.test.mjs`.
 **Important:** The gateway accepts a maximum 32 messages of 16,000 characters each and 64 KiB combined. Large project context can exceed these bounds. The frontend must handle HTTP 413 without substituting a fabricated answer.
 
 The gateway is designed for desktop/local development only. Its loopback binding and CORS checks are **not authentication**, and it must not be publicly exposed. Additional security hardening, an explicit UI option, automated build/test verification, abort propagation and end-to-end testing remain acceptance gates before merge.
+
+
+## LAR-05 — Mocked end-to-end gateway contract
+
+Run `node scripts/local-ai-gateway.integration.test.mjs` to test the full HTTP path `/health` and `/v1/chat` against a stubbed in-process Ollama transport. The test verifies route payload, selected model, response, browser origin and propagation of client disconnection to the upstream inference request. No external AI services are needed; these are **mock-inference** tests, not evidence of a real model's quality or availability.
+
+The GitHub Actions local gateway check runs both the negative-path suite and the mock integration suite, followed by the web build. Full real-model acceptance still requires starting Ollama with the configured model and running chat, latency, concurrency, STOP MIO and memory-context checks in the actual desktop runtime. Do not merge until the current head commit's CI passes.
