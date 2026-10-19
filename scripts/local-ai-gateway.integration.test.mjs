@@ -7,6 +7,7 @@ let upstreamCalls = 0;
 let aborted = false;
 let simulateMissingModel = false;
 let simulateUnavailableBackend = false;
+let simulateMalformedBackend = false;
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
   if (simulateUnavailableBackend) throw new Error('Ollama service unavailable');
@@ -15,6 +16,7 @@ globalThis.fetch = async (input, init = {}) => {
   }
   if (url === 'http://127.0.0.1:11434/api/chat') {
     upstreamCalls++;
+    if (simulateMalformedBackend) return new Response('{invalid-json', { status: 200 });
     const body = JSON.parse(init.body);
     assert.equal(body.model, 'qwen2.5:3b');
     assert.equal(body.stream, false);
@@ -69,6 +71,16 @@ try {
   assert.match(unavailableError.error, /Local model unavailable/);
   simulateUnavailableBackend = false;
 
+  simulateMalformedBackend = true;
+  const malformed = await realFetch(base + '/v1/chat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'Malformed response' }] }),
+  });
+  assert.equal(malformed.status, 503);
+  const malformedBody = await malformed.json();
+  assert.match(malformedBody.error, /Local model unavailable/);
+  simulateMalformedBackend = false;
+
   const controller = new AbortController();
   const pending = realFetch(base + '/v1/chat', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -76,8 +88,8 @@ try {
     signal: controller.signal,
   });
   // Wait until mock upstream sees the chat request; bounded polling.
-  for (let i = 0; i < 80 && upstreamCalls < 2; i++) await new Promise(r => setTimeout(r, 10));
-  assert.equal(upstreamCalls, 2, 'slow request must reach local inference');
+  for (let i = 0; i < 80 && upstreamCalls < 3; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(upstreamCalls, 3, 'slow request must reach local inference');
   controller.abort();
   await assert.rejects(pending, e => e.name === 'AbortError');
   for (let i = 0; i < 80 && !aborted; i++) await new Promise(r => setTimeout(r, 10));
