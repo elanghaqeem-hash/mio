@@ -30,7 +30,7 @@ export class WindowsJournalWriterPrototype {
         !journalStat.isFile() || journalStat.isSymbolicLink())
       fail('WINDOWS_JOURNAL_WRITER_UNSAFE');
     this.lockPath = journalPath + '.writer.lock';
-    let fd: number;
+    let fd = -1;
     try {
       fd = fs.openSync(this.lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | NOFOLLOW, 0o600);
     } catch { fail('WINDOWS_JOURNAL_WRITER_ALREADY_LOCKED_OR_UNAVAILABLE'); }
