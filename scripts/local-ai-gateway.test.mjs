@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import http from 'node:http';
 import { createMioLocalGateway } from './local-ai-gateway.mjs';
 
 const server = createMioLocalGateway();
@@ -11,8 +12,13 @@ try {
   const missing = await fetch(base + '/missing');
   assert.equal(missing.status, 404);
 
-  const blockedHost = await fetch(base + '/missing', { headers: { Host: 'evil.example:4318' } });
-  assert.equal(blockedHost.status, 403);
+  const blockedHost = await new Promise((resolve, reject) => {
+    http.get(base + '/missing', { headers: { host: 'evil.example:4318' } }, response => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode));
+    }).on('error', reject);
+  });
+  assert.equal(blockedHost, 403);
 
   const blocked = await fetch(base + '/v1/chat', {
     method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
