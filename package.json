@@ -2,7 +2,7 @@
   "name": "mio-v2-desktop",
   "private": true,
   "version": "1.0.0",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "npm run release:preflight && npm run build:web",
