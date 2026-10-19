@@ -6,7 +6,7 @@
  * verified authorization callback. Neither policy nor execution is controlled
  * by an untrusted renderer.
  */
-import type { MioMutationCheckpointGate, MutationCheckpointIdentity } from './PersistentMutationCheckpointGate';
+import type { MutationCheckpointIdentity } from './PersistentMutationCheckpointGate';
 import { createExclusiveNodeCheckpointRuntime, type ExclusiveNodeCheckpointRuntime } from './ExclusiveNodeCheckpointRuntime';
 
 export type TrustedCreativeMode = '3D' | 'GRAPHIC' | 'DRAWING';
