@@ -26,12 +26,14 @@ const DEFAULT_ENDPOINTS: Record<LocalInferenceBackendId, string> = {
   ollama: 'http://127.0.0.1:11434',
   vllm: 'http://127.0.0.1:8000',
   llamacpp: 'http://127.0.0.1:8080',
+  gateway: 'http://127.0.0.1:4318',
 };
 
 const DISPLAY_NAMES: Record<LocalInferenceBackendId, string> = {
   ollama: 'Ollama',
   vllm: 'vLLM',
   llamacpp: 'llama.cpp server',
+  gateway: 'MIO Local Gateway',
 };
 
 function cleanEndpoint(value: string): string {
@@ -173,6 +175,40 @@ class OpenAICompatibleLocalBackend implements LocalInferenceBackend {
   }
 }
 
+class MioGatewayInferenceBackend implements LocalInferenceBackend {
+  public readonly id = 'gateway' as const;
+  public readonly displayName = DISPLAY_NAMES.gateway;
+  public readonly endpoint: string;
+
+  constructor(endpoint: string, public readonly model: string) {
+    this.endpoint = assertLoopbackInferenceEndpoint(endpoint);
+  }
+
+  public async checkReadiness(signal?: AbortSignal): Promise<LocalInferenceReadiness> {
+    const response = await fetch(`${this.endpoint}/health`, { signal });
+    if (!response.ok) return { ready: false, detail: `MIO Local Gateway returned HTTP ${response.status}` };
+    const result = await response.json() as { status?: string; model?: string; installed?: boolean };
+    return result.status === 'ready' && result.installed === true && result.model === this.model
+      ? { ready: true, detail: `MIO Local Gateway is ready with model '${this.model}'.` }
+      : { ready: false, detail: `MIO Local Gateway is not ready for configured model '${this.model}'. Check local gateway configuration.` };
+  }
+
+  public async chat(messages: ModelMessage[], _request: ModelRequest, signal?: AbortSignal): Promise<LocalInferenceChatResult> {
+    const response = await fetch(`${this.endpoint}/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({ messages }),
+    });
+    if (!response.ok) throw new Error(`MIO Local Gateway returned HTTP ${response.status}`);
+    const result = await response.json() as { model?: string; message?: { content?: string } };
+    const answer = result.message?.content?.trim();
+    if (!answer) throw new Error('MIO Local Gateway returned an empty response');
+    if (result.model !== this.model) throw new Error('MIO Local Gateway model identity mismatch');
+    return { model: result.model, text: answer };
+  }
+}
+
 export function createLocalInferenceBackend(
   id: LocalInferenceBackendId = 'ollama',
   endpoint?: string,
@@ -180,5 +216,6 @@ export function createLocalInferenceBackend(
 ): LocalInferenceBackend {
   const resolvedEndpoint = endpoint?.trim() || defaultLocalInferenceEndpoint(id);
   if (id === 'ollama') return new OllamaInferenceBackend(resolvedEndpoint, model);
+  if (id === 'gateway') return new MioGatewayInferenceBackend(resolvedEndpoint, model);
   return new OpenAICompatibleLocalBackend(id, resolvedEndpoint, model);
 }
