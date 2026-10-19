@@ -10,6 +10,7 @@ const url = new URL(endpoint);
 if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || url.username || url.password || url.pathname !== '/') {
   throw new Error('Gateway test endpoint must be a loopback HTTP origin without credentials or a path');
 }
+const startedAt = Date.now();
 const controller = new AbortController();
 const timeout = setTimeout(() => controller.abort(), 90000);
 try {
@@ -29,7 +30,10 @@ try {
   assert.equal(result.provider, 'local-ollama');
   assert.equal(typeof result.message?.content, 'string');
   assert.ok(result.message.content.trim().length > 0, 'model returned empty text');
-  console.log(JSON.stringify({ result: 'PASS', model: result.model, outputChars: result.message.content.length, apiKeysRequired: false }));
+  console.log(JSON.stringify({ result: 'PASS', model: result.model, outputChars: result.message.content.length, elapsedMs: Date.now() - startedAt, apiKeysRequired: false }));
+} catch (error) {
+  console.error(JSON.stringify({ result: 'FAIL', model: expected, elapsedMs: Date.now() - startedAt, error: error?.name === 'AbortError' ? 'real inference exceeded acceptance timeout' : String(error?.message || error) }));
+  process.exitCode = 1;
 } finally {
   clearTimeout(timeout);
 }
