@@ -100,3 +100,16 @@ The gateway is designed for desktop/local development only. Its loopback binding
 Run `node scripts/local-ai-gateway.integration.test.mjs` to test the full HTTP path `/health` and `/v1/chat` against a stubbed in-process Ollama transport. The test verifies route payload, selected model, response, browser origin and propagation of client disconnection to the upstream inference request. No external AI services are needed; these are **mock-inference** tests, not evidence of a real model's quality or availability.
 
 The GitHub Actions local gateway check runs both the negative-path suite and the mock integration suite, followed by the web build. Full real-model acceptance still requires starting Ollama with the configured model and running chat, latency, concurrency, STOP MIO and memory-context checks in the actual desktop runtime. Do not merge until the current head commit's CI passes.
+
+
+## LAR-06 — Real-model acceptance (requires local hardware)
+
+After starting Ollama and the MIO gateway using the same configured model, execute:
+
+```bash
+node scripts/local-ai-real-model-smoke.mjs
+```
+
+Expected final output: a JSON summary with `"result":"PASS"`, the configured model, non-zero response length, and `"apiKeysRequired":false`. This test performs real inference and must **not** be reported as passed unless actually run on a machine with Ollama and the configured weights. It is intentionally not executed in shared CI runners, because the model installation and compute hardware are not provided.
+
+For the complete desktop test, separately verify (1) Settings selects the `gateway` backend, (2) Chat answers with `modelProvider=mio_local`, (3) the response provenance identifies a local endpoint, and (4) STOP MIO cancels an active generation. A successful direct gateway smoke test alone does not establish complete desktop functionality.
