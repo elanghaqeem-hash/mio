@@ -24,6 +24,11 @@ const unsafe = (): never => { throw new Error('CHECKPOINT_WRITER_LOCK_UNAVAILABL
 
 export function createExclusiveNodeCheckpointRuntime(userDataRoot: string): ExclusiveNodeCheckpointRuntime {
   if (!path.isAbsolute(userDataRoot)) unsafe();
+  // Node's directory fsync used to durably publish checkpoint and writer lock
+  // fails with EPERM on supported Windows CI runners. Never downgrade to
+  // file-only sync or leave a false single-writer lease on this platform.
+  // Windows needs a separately reviewed durable backend before activation.
+  if (process.platform === 'win32') throw new Error('CHECKPOINT_DURABILITY_UNSUPPORTED_WINDOWS');
   const root = path.resolve(userDataRoot);
   if (!fs.existsSync(root) || !fs.lstatSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) unsafe();
   // Use the same directory as the durable checkpoint store; it is initialized by the adapter.
