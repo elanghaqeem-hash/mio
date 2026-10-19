@@ -1,0 +1,60 @@
+name: MIO Apply Validated Lockfile Remediation
+on:
+  push:
+    branches:
+      - feat/local-ai-runtime-gateway-20261019
+    paths:
+      - '.github/workflows/local-ai-remediation-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mio-remediate-feature-branch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.repository == 'elanghaqeem-hash/mio' && github.ref == 'refs/heads/feat/local-ai-runtime-gateway-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Generate and audit lockfile remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm audit fix --package-lock-only --ignore-scripts
+          npm audit --json > audit-after.json || true
+          node -e "const a=require('./audit-after.json'); const v=a.metadata.vulnerabilities; console.log(v); if ((v.critical||0)>0 || (v.high||0)>0) process.exit(1)"
+          node -e "const p=require('./package-lock.json'); if(p.lockfileVersion!==3 || !p.packages) process.exit(1)"
+      - name: Validate candidate before committing
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build:web
+          node scripts/local-ai-gateway.test.mjs
+          node scripts/local-ai-gateway.integration.test.mjs
+          node --import tsx scripts/local-ai-desktop-adapter.test.ts
+      - name: Commit audited lockfile to feature branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo 'No lockfile changes to commit'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix(deps): apply verified lockfile-only security remediation"
+          git push origin HEAD:refs/heads/feat/local-ai-runtime-gateway-20261019
