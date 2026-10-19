@@ -6,6 +6,7 @@ on:
       - '.github/workflows/local-ai-remediation-candidate.yml'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/local-ai-remediation-report.mjs'
 
 permissions:
   contents: read
