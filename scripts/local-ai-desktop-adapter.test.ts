@@ -49,7 +49,24 @@ try {
   assert.equal(disconnected.ready, false, 'disconnected gateway must not be ready');
   assert.match(disconnected.detail, /unreachable/);
 
-    assert.throws(() => createLocalInferenceBackend('gateway', 'https://remote.example:4318', 'qwen2.5:3b'), /loopback/);
+  let stopPropagated = false;
+  globalThis.fetch = async (_url, init) => await new Promise((_resolve, reject) => {
+    const signal = init?.signal;
+    if (!signal) return reject(new Error('Gateway chat must receive an AbortSignal'));
+    const onAbort = () => {
+      stopPropagated = true;
+      reject(Object.assign(new Error('STOP MIO cancelled local inference'), { name: 'AbortError' }));
+    };
+    if (signal.aborted) return onAbort();
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  const stopController = new AbortController();
+  const activeChat = backend.chat([{ role: 'user', content: 'Long request' }], { messages: [] }, stopController.signal);
+  stopController.abort();
+  await assert.rejects(activeChat, { name: 'AbortError' });
+  assert.equal(stopPropagated, true, 'STOP cancellation must propagate to local gateway fetch');
+
+  assert.throws(() => createLocalInferenceBackend('gateway', 'https://remote.example:4318', 'qwen2.5:3b'), /loopback/);
   console.log('MIO desktop local backend contract passed');
 } finally {
   globalThis.fetch = originalFetch;
