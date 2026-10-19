@@ -41,6 +41,39 @@ export async function runExclusiveNodeCheckpointRuntimeTests(): Promise<{ passed
         original.close();
       } finally { fs.rmSync(root, {recursive:true,force:true}); }
     }],
+    ['STOP blocks new operations but existing mutation can settle before close', async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mio-writer-'));
+      try {
+        const runtime = createExclusiveNodeCheckpointRuntime(root);
+        const first = { projectId: 'projectA', taskId: 'taskB', requestId: 'stopping', capabilityId: 'creative.execute' };
+        await runtime.gate.begin(first);
+        check(runtime.activeCount() === 1, 'active checkpoint was not tracked');
+        runtime.stop();
+        denied(() => runtime.close(), 'close released lock with mutation active');
+        let blocked = false;
+        try { await runtime.gate.begin({ ...first, requestId: 'after_stop' }); }
+        catch { blocked = true; }
+        check(blocked, 'STOP admitted new mutation');
+        await runtime.gate.complete(first, true);
+        check(runtime.activeCount() === 0, 'settled mutation remains active');
+        runtime.close();
+      } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    }],
+    ['checkpoint failure quarantines writer and does not release its lock', async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mio-writer-'));
+      try {
+        const runtime = createExclusiveNodeCheckpointRuntime(root);
+        let blocked = false;
+        try { await runtime.gate.complete({ projectId:'projectA',taskId:'taskA',requestId:'missing',capabilityId:'creative.execute' },true); }
+        catch { blocked = true; }
+        check(blocked, 'missing mutation was committed');
+        const work = { projectId:'projectA',taskId:'taskA',requestId:'active',capabilityId:'creative.execute' };
+        await runtime.gate.begin(work);
+        denied(() => runtime.close(), 'in-flight writer lock was released');
+        await runtime.gate.complete(work, false);
+        runtime.close();
+      } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    }],
     ['invalid root and hijacked lock are rejected', async () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mio-writer-'));
       try {
