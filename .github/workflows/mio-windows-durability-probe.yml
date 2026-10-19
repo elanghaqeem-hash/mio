@@ -1,0 +1,28 @@
+name: MIO Windows Durability Probe
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-durability-conformance:
+    name: Windows native file primitives — diagnosis only
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install exact lockfile dependencies
+        run: npm ci
+      - name: Probe file flush, exclusive lock, rename, and directory publication
+        run: node --import tsx scripts/benchmarks/windows-durability-probe.ts
