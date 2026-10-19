@@ -31,7 +31,8 @@ jobs:
         timeout-minutes: 15
         env:
           DEBUG: electron-builder
-        run: npx electron-builder --win nsis portable
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win nsis portable --publish never
       - name: Packaging diagnostics
         if: always()
         shell: pwsh
