@@ -31,6 +31,7 @@ jobs:
           npm audit --json > audit-after.json || true
           node scripts/local-ai-remediation-report.mjs audit-before.json audit-after.json > remediation-summary.json
           cat remediation-summary.json
+          node -e "const r=require('./remediation-summary.json'); if(r.summary.critical.after || r.summary.high.after) process.exit(1)"
       - name: Validate candidate lockfile with installation and web build
         shell: bash
         run: |
@@ -49,4 +50,5 @@ jobs:
             audit-after.json
             remediation-summary.json
             remediation-candidate.patch
+            package-lock.json
           retention-days: 7
