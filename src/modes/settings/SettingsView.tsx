@@ -80,7 +80,7 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleLocalBackendChange = (backend: LocalInferenceBackendId) => {
-    updateRouter({ mioLocalBackend: backend, mioLocalEndpoint: LOCAL_BACKEND_CONFIG[backend].endpoint });
+    updateRouter({ mioLocalBackend: backend, mioLocalEndpoint: LOCAL_BACKEND_CONFIG[backend].endpoint, ...(backend === 'gateway' ? { model: 'qwen2.5:3b' } : {}) });
   };
 
   const checkProvider = async () => {
