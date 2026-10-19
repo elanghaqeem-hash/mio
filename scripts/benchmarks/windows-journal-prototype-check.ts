@@ -1,3 +1,4 @@
+import { runWindowsJournalFileIdentityTests } from '../../src/tests/windowsJournalFileIdentityTests';
 import { runWindowsJournalRestartRecoveryTests } from '../../src/tests/windowsJournalRestartRecoveryTests';
 import { runWindowsJournalAuthenticatedProvisioningTests } from '../../src/tests/windowsJournalAuthenticatedProvisioningTests';
 import { runWindowsJournalProvisioningInspectionTests } from '../../src/tests/windowsJournalProvisioningInspectionTests';
@@ -21,8 +22,10 @@ async function main() {
   if (attestation.passed !== 5 || attestation.total !== 5) throw Error('WINDOWS_AUTHENTICATED_PROVISIONING_TESTS_FAILED');
   const restart = await runWindowsJournalRestartRecoveryTests();
   if (restart.passed !== 4 || restart.total !== 4) throw Error('WINDOWS_JOURNAL_RESTART_INCOMPLETE');
+  const fileIdentity = await runWindowsJournalFileIdentityTests();
+  if (fileIdentity.passed !== 3 || fileIdentity.total !== 3) throw Error('WINDOWS_JOURNAL_FILE_IDENTITY_INCOMPLETE');
   console.log('WINDOWS JOURNAL PROTOTYPE PASS', JSON.stringify({
-    platform: process.platform, tested: result.total + coordination.total + independent.total + commit.total + provisioning.total + attestation.total + restart.total,
+    platform: process.platform, tested: result.total + coordination.total + independent.total + commit.total + provisioning.total + attestation.total + restart.total + fileIdentity.total,
     scope: 'preprovisioned file append/fsync/hash-chain correctness',
     durableDirectoryPublication: false,
     runtimeActivation: false,
