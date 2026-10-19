@@ -20,6 +20,14 @@ try {
   });
   assert.equal(blockedHost, 403);
 
+  const wrongPortHost = await new Promise((resolve, reject) => {
+    http.get(base + '/missing', { headers: { host: '127.0.0.1:99999' } }, response => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode));
+    }).on('error', reject);
+  });
+  assert.equal(wrongPortHost, 403);
+
   const blocked = await fetch(base + '/v1/chat', {
     method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }),
