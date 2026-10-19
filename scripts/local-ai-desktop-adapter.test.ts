@@ -49,6 +49,16 @@ try {
   assert.equal(disconnected.ready, false, 'disconnected gateway must not be ready');
   assert.match(disconnected.detail, /unreachable/);
 
+  // UAT fail-closed: a gateway connection failure must not invoke any cloud fallback.
+  let externalCalls = 0;
+  globalThis.fetch = async (input) => {
+    const endpoint = String(input);
+    if (!endpoint.startsWith('http://127.0.0.1:4318/')) externalCalls++;
+    throw new TypeError('local gateway offline');
+  };
+  await assert.rejects(backend.chat([{ role: 'user', content: 'offline check' }], { messages: [] }), /local gateway offline/);
+  assert.equal(externalCalls, 0, 'local mode must not call cloud models after connection failure');
+
   let stopPropagated = false;
   globalThis.fetch = async (_url, init) => await new Promise((_resolve, reject) => {
     const signal = init?.signal;
