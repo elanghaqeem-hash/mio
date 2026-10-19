@@ -7,6 +7,8 @@ import { setupIpcHandlers } from './ipc/handlers';
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let cancelActiveTrainingJobs: (() => void) | null = null;
+let hasActiveWorkspaceMutations: (() => boolean) | null = null;
+let requestStopWorkspaceMutations: (() => void) | null = null;
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -62,6 +64,8 @@ function createWindow(): BrowserWindow {
 
   const handlers = setupIpcHandlers(mainWindow);
   cancelActiveTrainingJobs = handlers.cancelAllTrainingJobs;
+  hasActiveWorkspaceMutations = handlers.hasActiveWorkspaceMutations;
+  requestStopWorkspaceMutations = handlers.requestStopWorkspaceMutations;
   const assertTrustedSender = (event: IpcMainInvokeEvent) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
       throw new Error('Rejected IPC invocation from untrusted renderer frame');
@@ -86,8 +90,10 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.SHOW_NOTIFICATION, (event, args) => handlers.handleShowNotification(event, args[0]));
   secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => handlers.handleEmergencyStop(event, args[0]));
   secureHandle(IPC_CHANNELS.QUIT_APP, () => {
+    if (handlers.hasActiveWorkspaceMutations()) return {success:false,error:'WORKSPACE_MUTATION_DRAIN_REQUIRED'};
     handlers.revokeAllWorkspaceAuthority();
     app.quit();
+    return {success:true};
   });
   secureHandle(IPC_CHANNELS.FS_AUTHORIZE_WORKSPACE, () => handlers.handleAuthorizeWorkspace());
   secureHandle(IPC_CHANNELS.FS_REVOKE_WORKSPACE, (event, args) => handlers.handleRevokeWorkspace(event, args[0]));
@@ -131,9 +137,18 @@ function createWindow(): BrowserWindow {
     if (fs.existsSync(distHtmlPath)) mainWindow?.loadFile(distHtmlPath);
   });
 
+  mainWindow.on('close', event => {
+    if (handlers.hasActiveWorkspaceMutations()) {
+      handlers.requestStopWorkspaceMutations();
+      event.preventDefault();
+    }
+  });
+
   mainWindow.on('closed', () => {
     handlers.revokeAllWorkspaceAuthority();
     cancelActiveTrainingJobs = null;
+    hasActiveWorkspaceMutations = null;
+    requestStopWorkspaceMutations = null;
     mainWindow = null;
   });
 
@@ -159,6 +174,7 @@ function createTray() {
       label: 'STOP MIO (Emergency Interrupt)',
       click: () => {
         cancelActiveTrainingJobs?.();
+        requestStopWorkspaceMutations?.();
         if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', 'Triggered from System Tray');
       },
     },
@@ -206,7 +222,13 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => cancelActiveTrainingJobs?.());
+app.on('before-quit', event => {
+  cancelActiveTrainingJobs?.();
+  if (hasActiveWorkspaceMutations?.()) {
+    requestStopWorkspaceMutations?.();
+    event.preventDefault();
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
