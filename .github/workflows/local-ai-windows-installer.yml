@@ -40,6 +40,7 @@ jobs:
           $files | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Select-Object Hash, Path } | ConvertTo-Json | Out-File -Encoding utf8 release/sha256-manifest.json
           Get-Content release/sha256-manifest.json
       - name: Save Windows build evidence (not production-signed)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mio-windows-installer-validation
@@ -47,3 +48,4 @@ jobs:
             release/*.exe
             release/sha256-manifest.json
           retention-days: 7
+          if-no-files-found: warn
