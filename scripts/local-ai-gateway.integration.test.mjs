@@ -88,6 +88,18 @@ try {
   assert.equal(recovered.status, 200, 'gateway must recover after malformed Ollama response');
   assert.equal((await recovered.json()).message.content, 'Halo! Saya MIO lokal.');
 
+  // Repeated sequential requests must stay responsive after failures.
+  const beforeStress = upstreamCalls;
+  for (let i = 0; i < 20; i++) {
+    const response = await realFetch(base + '/v1/chat', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'Stress ' + i }] }),
+    });
+    assert.equal(response.status, 200, 'repeated gateway request failed at iteration ' + i);
+    assert.equal((await response.json()).message.content, 'Halo! Saya MIO lokal.');
+  }
+  assert.equal(upstreamCalls - beforeStress, 20, 'all repeated requests must reach local Ollama');
+
   const controller = new AbortController();
   const pending = realFetch(base + '/v1/chat', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -95,8 +107,8 @@ try {
     signal: controller.signal,
   });
   // Wait until mock upstream sees the chat request; bounded polling.
-  for (let i = 0; i < 80 && upstreamCalls < 4; i++) await new Promise(r => setTimeout(r, 10));
-  assert.equal(upstreamCalls, 4, 'slow request must reach local inference');
+  for (let i = 0; i < 80 && upstreamCalls < 24; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(upstreamCalls, 24, 'slow request must reach local inference');
   controller.abort();
   await assert.rejects(pending, e => e.name === 'AbortError');
   for (let i = 0; i < 80 && !aborted; i++) await new Promise(r => setTimeout(r, 10));
