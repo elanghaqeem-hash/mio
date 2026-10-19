@@ -185,7 +185,13 @@ class MioGatewayInferenceBackend implements LocalInferenceBackend {
   }
 
   public async checkReadiness(signal?: AbortSignal): Promise<LocalInferenceReadiness> {
-    const response = await fetch(`${this.endpoint}/health`, { signal });
+    let response: Response;
+    try {
+      response = await fetch(`${this.endpoint}/health`, { signal });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return { ready: false, detail: 'MIO Local Gateway is unreachable. Start the local gateway and Ollama, then retry.' };
+    }
     if (!response.ok) return { ready: false, detail: `MIO Local Gateway returned HTTP ${response.status}` };
     const result = await response.json() as { status?: string; model?: string; installed?: boolean };
     return result.status === 'ready' && result.installed === true && result.model === this.model
