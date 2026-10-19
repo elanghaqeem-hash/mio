@@ -12,6 +12,16 @@ try {
   const missing = await fetch(base + '/missing');
   assert.equal(missing.status, 404);
 
+  const missingHost = await new Promise((resolve, reject) => {
+    const request = http.request(base + '/missing', { setHost: false }, response => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode));
+    });
+    request.on('error', reject);
+    request.end();
+  });
+  assert.equal(missingHost, 400);
+
   const blockedHost = await new Promise((resolve, reject) => {
     http.get(base + '/missing', { headers: { host: 'evil.example:4318' } }, response => {
       response.resume();
