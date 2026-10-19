@@ -5,10 +5,13 @@ import { createMioLocalGateway } from './local-ai-gateway.mjs';
 const realFetch = globalThis.fetch;
 let upstreamCalls = 0;
 let aborted = false;
+let simulateMissingModel = false;
+let simulateUnavailableBackend = false;
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
+  if (simulateUnavailableBackend) throw new Error('Ollama service unavailable');
   if (url === 'http://127.0.0.1:11434/api/tags') {
-    return new Response(JSON.stringify({ models: [{ name: 'qwen2.5:3b' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ models: simulateMissingModel ? [] : [{ name: 'qwen2.5:3b' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   if (url === 'http://127.0.0.1:11434/api/chat') {
     upstreamCalls++;
@@ -50,6 +53,21 @@ try {
   assert.equal(result.model, 'qwen2.5:3b');
   assert.equal(result.message.content, 'Halo! Saya MIO lokal.');
   assert.equal(upstreamCalls, 1);
+
+  simulateMissingModel = true;
+  const missingHealth = await realFetch(base + '/health');
+  assert.equal(missingHealth.status, 200);
+  const missingStatus = await missingHealth.json();
+  assert.equal(missingStatus.status, 'model_missing');
+  assert.equal(missingStatus.installed, false);
+  simulateMissingModel = false;
+
+  simulateUnavailableBackend = true;
+  const unavailableHealth = await realFetch(base + '/health');
+  assert.equal(unavailableHealth.status, 503);
+  const unavailableError = await unavailableHealth.json();
+  assert.match(unavailableError.error, /Local model unavailable/);
+  simulateUnavailableBackend = false;
 
   const controller = new AbortController();
   const pending = realFetch(base + '/v1/chat', {
