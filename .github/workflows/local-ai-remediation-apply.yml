@@ -5,6 +5,12 @@ on:
       - feat/local-ai-runtime-gateway-20261019
     paths:
       - '.github/workflows/local-ai-remediation-apply.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/local-ai-remediation-apply.yml'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +22,7 @@ concurrency:
 
 jobs:
   apply:
-    if: github.repository == 'elanghaqeem-hash/mio' && github.ref == 'refs/heads/feat/local-ai-runtime-gateway-20261019'
+    if: github.repository == 'elanghaqeem-hash/mio' && ((github.event_name == 'push' && github.ref == 'refs/heads/feat/local-ai-runtime-gateway-20261019') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'elanghaqeem-hash/mio' && github.event.pull_request.head.ref == 'feat/local-ai-runtime-gateway-20261019')) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feat/local-ai-runtime-gateway-20261019')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -24,6 +30,7 @@ jobs:
         with:
           persist-credentials: true
           fetch-depth: 0
+          ref: feat/local-ai-runtime-gateway-20261019
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
