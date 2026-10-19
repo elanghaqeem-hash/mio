@@ -128,6 +128,54 @@ async function run() {
     'approved native GUI click did not create, inspect and append cube');
   assert(nativeApprovalCount === 2 && nativeWorkspaceCount === 2, 'native consent/workspace flow not invoked twice');
   console.log('PASS: Electron BrowserWindow click + native consent + durable artifact + inspection + visible DOM object');
+  // Negative paths are exercised from the ACTUAL isolated renderer/preload,
+  // rather than invoking privileged handler methods directly in Node.
+  const beforeDenied = nativeApprovalCount;
+  const denied = await windowRef.webContents.executeJavaScript(`(async () => {
+    const desktop = window.mioDesktop;
+    const unauthorized = await desktop.createTrustedCube({
+      schemaVersion:1,projectId:'ws_forged_workspace',taskId:'test_forged',
+      requestId:'test_forged',mode:'3D',templateId:'primitive_cube_v1'
+    });
+    const unknownTemplate = await desktop.createTrustedCube({
+      schemaVersion:1,projectId:'ws_forged_workspace',taskId:'test_template',
+      requestId:'test_template',mode:'3D',templateId:'run_arbitrary_code'
+    });
+    const unrelatedRead = await desktop.inspectTrustedCube({
+      projectId:'ws_forged_workspace',taskId:'test_forged',requestId:'test_forged'
+    });
+    return {
+      unauthorized:unauthorized.success,unknownTemplate:unknownTemplate.success,
+      unrelatedRead:unrelatedRead.success,
+      rendererHasNodeRequire:typeof require !== 'undefined',
+      rendererHasNodeProcess:typeof process !== 'undefined'
+    };
+  })()`);
+  assert(!denied.unauthorized && !denied.unknownTemplate && !denied.unrelatedRead,
+    'renderer created or inspected unauthorized creative artifacts');
+  assert(!denied.rendererHasNodeRequire && !denied.rendererHasNodeProcess,
+    'renderer unexpectedly has Node process privileges');
+  assert(nativeApprovalCount === beforeDenied,
+    'invalid renderer request triggered human consent dialog');
+  console.log('PASS: renderer cannot bypass project scope, template allowlist or Node isolation');
+
+  const stopped = handlers.handleEmergencyStop(null, 'MioBench GUI STOP check');
+  assert(stopped.success, 'desktop STOP handler failed');
+  const afterStop = await windowRef.webContents.executeJavaScript(`(async () => {
+    const desktop=window.mioDesktop;
+    const workspace=await desktop.authorizeWorkspace();
+    const command={schemaVersion:1,projectId:workspace.workspace.id,
+      taskId:'task_after_stop',requestId:'request_after_stop',mode:'3D',templateId:'primitive_cube_v1'};
+    const creation=await desktop.createTrustedCube(command);
+    const inspection=await desktop.inspectTrustedCube(command);
+    return {created:creation.success,inspected:inspection.success};
+  })()`);
+  assert(!afterStop.created && !afterStop.inspected,
+    'STOP permitted subsequent privileged creation or scene inspection');
+  assert(nativeApprovalCount === beforeDenied,
+    'STOP triggered another native approval dialog');
+  console.log('PASS: sticky STOP forbids post-STOP creative creation and inspection');
+
 }
 
 const watchdog = setTimeout(() => {
