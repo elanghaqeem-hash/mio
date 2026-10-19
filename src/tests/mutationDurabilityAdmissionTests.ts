@@ -53,7 +53,7 @@ export async function runMutationDurabilityAdmissionTests(): Promise<{ passed: n
       emergencyStop.reset();
       calls.executions = count.count;
       assert(result.status === 'CANCELLED' && calls.begins === 1 && calls.completes === 1 && !calls.committed && calls.executions === 0, 'STOP boundary dispatched mutation');
-      assert(result.error.mutationState === 'UNKNOWN' && !result.error.retryable, 'checkpoint cancellation was reported retryable');
+      assert(result.status !== 'SUCCEEDED' && result.error.mutationState === 'UNKNOWN' && !result.error.retryable, 'checkpoint cancellation was reported retryable');
     }],
     ['settlement failure after STOP cannot be reported as safely cancelled', async () => {
       let resume!: () => void;
