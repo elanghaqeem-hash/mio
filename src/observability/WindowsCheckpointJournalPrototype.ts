@@ -24,6 +24,37 @@ export interface JournalPrototypeEntry {
   readonly digest: string;
 }
 
+/**
+ * Validate pathname both before and after opening. A symlink, special file
+ * or redirected path is rejected; POSIX additionally compares file identity.
+ * On Windows, Node file-id behavior is filesystem dependent, so this is
+ * defense-in-depth, NOT a guarantee against hostile concurrent renames.
+ */
+function withValidatedJournalFile<T>(filename: string, flags: number, use: (fd: number) => T): T {
+  const pre = fs.lstatSync(filename);
+  if (!pre.isFile() || pre.isSymbolicLink()) reject('MIO_WINDOWS_JOURNAL_UNSAFE_PATH');
+  const fd = fs.openSync(filename, flags | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const held = fs.fstatSync(fd);
+    if (!held.isFile() || held.size > MAX_JOURNAL)
+      reject('MIO_WINDOWS_JOURNAL_FILE_INVALID');
+    const current = fs.lstatSync(filename);
+    if (!current.isFile() || current.isSymbolicLink())
+      reject('MIO_WINDOWS_JOURNAL_UNSAFE_PATH');
+    if (process.platform !== 'win32' &&
+        (pre.dev !== held.dev || pre.ino !== held.ino ||
+         current.dev !== held.dev || current.ino !== held.ino))
+      reject('MIO_WINDOWS_JOURNAL_FILE_CHANGED');
+    const result = use(fd);
+    const post = fs.lstatSync(filename);
+    if (!post.isFile() || post.isSymbolicLink())
+      reject('MIO_WINDOWS_JOURNAL_UNSAFE_PATH');
+    if (process.platform !== 'win32' && (post.dev !== held.dev || post.ino !== held.ino))
+      reject('MIO_WINDOWS_JOURNAL_FILE_CHANGED');
+    return result;
+  } finally { fs.closeSync(fd); }
+}
+
 function readRecords(fd: number): { entries: JournalPrototypeEntry[]; lastHash: Buffer; size: number } {
   const stat = fs.fstatSync(fd);
   if (!stat.isFile() || stat.size > MAX_JOURNAL) reject('MIO_WINDOWS_JOURNAL_FILE_INVALID');
@@ -65,8 +96,7 @@ export class WindowsCheckpointJournalPrototype {
   }
   /** Never creates a journal or its parent directory. */
   inspect(): JournalPrototypeEntry[] {
-    const fd = fs.openSync(this.filename, fs.constants.O_RDONLY);
-    try { return readRecords(fd).entries; } finally { fs.closeSync(fd); }
+    return withValidatedJournalFile(this.filename, fs.constants.O_RDONLY, fd => readRecords(fd).entries);
   }
   /**
    * Requires external single-writer coordination. fsync commits bytes to the
@@ -78,8 +108,7 @@ export class WindowsCheckpointJournalPrototype {
     const payload = Buffer.from(json, 'utf8');
     if (!payload.length || payload.length > MAX_PAYLOAD) reject('MIO_WINDOWS_JOURNAL_PAYLOAD_INVALID');
     try { JSON.parse(json); } catch { reject('MIO_WINDOWS_JOURNAL_INVALID_JSON'); }
-    const fd = fs.openSync(this.filename, fs.constants.O_RDWR);
-    try {
+    return withValidatedJournalFile(this.filename, fs.constants.O_RDWR, fd => {
       const state = readRecords(fd); // Reject existing corruption, including torn tail.
       if (state.size + HEADER_BYTES + payload.length > MAX_JOURNAL) reject('MIO_WINDOWS_JOURNAL_LIMIT');
       const digest = hashRecord(state.lastHash, payload);
@@ -100,6 +129,6 @@ export class WindowsCheckpointJournalPrototype {
           verified.entries.at(-1)?.digest !== digest.toString('hex'))
         reject('MIO_WINDOWS_JOURNAL_VERIFY_FAILED');
       return verified.entries[verified.entries.length - 1];
-    } finally { fs.closeSync(fd); }
+    });
   }
 }
