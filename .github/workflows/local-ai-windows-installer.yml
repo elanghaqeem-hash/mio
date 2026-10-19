@@ -1,0 +1,46 @@
+name: MIO Windows Installer Acceptance
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron/**'
+      - 'src/**'
+      - 'scripts/local-ai-*.mjs'
+      - '.github/workflows/local-ai-windows-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build desktop application
+        run: npm run build:all
+      - name: Package Windows NSIS and portable
+        run: npm run dist:win
+      - name: Verify installers and compute hashes
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem release -File -Recurse | Where-Object { $_.Extension -eq '.exe' })
+          if ($files.Count -lt 2) { throw "Expected NSIS and portable executables; found $($files.Count)" }
+          $files | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Select-Object Hash, Path } | ConvertTo-Json | Out-File -Encoding utf8 release/sha256-manifest.json
+          Get-Content release/sha256-manifest.json
+      - name: Save Windows build evidence (not production-signed)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mio-windows-installer-validation
+          path: |
+            release/*.exe
+            release/sha256-manifest.json
+          retention-days: 7
