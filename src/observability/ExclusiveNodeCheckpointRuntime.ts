@@ -48,7 +48,7 @@ export function createExclusiveNodeCheckpointRuntime(userDataRoot: string): Excl
           const current = fs.lstatSync(lockPath);
           if (current.dev !== stat.dev || current.ino !== stat.ino || !current.isFile() || current.isSymbolicLink()) unsafe();
           fs.unlinkSync(lockPath);
-          fs.fsyncSync(directoryFdForSync(path.dirname(lockPath)));
+          syncDirectory(path.dirname(lockPath));
         } finally { fs.closeSync(fd); }
       },
     };
@@ -59,9 +59,7 @@ export function createExclusiveNodeCheckpointRuntime(userDataRoot: string): Excl
   }
 }
 
-function directoryFdForSync(directory: string): number {
+function syncDirectory(directory: string): void {
   const descriptor = fs.openSync(directory, 'r');
   try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-  // This helper syncs and closes the descriptor; caller does not need it.
-  return descriptor;
 }
