@@ -34,6 +34,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const durableCheckpoints = new DesktopDurableMutationCheckpoints(app.getPath('userData'));
   const mutationApprovals = new MutationApprovalStore();
   const workspaceMutationLease = new DesktopWorkspaceMutationLease();
+  // Sticky STOP: a running operation may finish, but no subsequent file mutation is admitted.
+  let desktopMutationStopped = false;
   const browserReadSandbox = new BrowserReadSandbox();
   const trainingJobManager = new TrainingJobManager(workspaceSandbox);
   const trainingHandoffPackager = new TrainingHandoffPackager(workspaceSandbox, trainingJobManager);
@@ -106,7 +108,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return true;
     },
     handleClose: () => {
+      if (workspaceMutationLease.hasActive()) return { success: false, error: 'WORKSPACE_MUTATION_DRAIN_REQUIRED' };
       if (mainWindow) mainWindow.close();
+      return { success: true };
     },
     handleIsMaximized: () => mainWindow ? mainWindow.isMaximized() : false,
 
@@ -134,6 +138,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     handleEmergencyStop: (_event: IpcMainInvokeEvent, reason: unknown) => {
       const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
       console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
+      desktopMutationStopped = true;
+      mutationApprovals.clear();
       trainingJobManager.cancelAll();
       if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', safeReason);
       return { success: true };
@@ -253,8 +259,11 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     handleRequestWorkspaceMutationApproval: async (_event:IpcMainInvokeEvent, request:unknown) => {
       const value=request as {transaction?:DesktopMutationTransaction};if(!value?.transaction||!validateWorkspaceId(value.transaction.workspaceId))return {success:false,error:'Invalid mutation approval request'};
       if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
+      if (desktopMutationStopped) return {success:false,error:'MUTATION_STOP_LATCHED'};
       const choice=await dialog.showMessageBox(mainWindow,{type:'warning',title:'Approve Mio file changes',message:`Approve ${value.transaction.operations.length} file operation(s)?`,detail:'Mio will execute only this exact workspace transaction. Approval expires in 5 minutes and can be used once.',buttons:['Cancel','Approve'],defaultId:0,cancelId:0,noLink:true});
-      if(choice.response!==1)return {success:false,cancelled:true};return {success:true,approval:mutationApprovals.issue(value.transaction)};
+      if(choice.response!==1)return {success:false,cancelled:true};
+      if (desktopMutationStopped || !isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Mutation stopped or workspace authority revoked'};
+      return {success:true,approval:mutationApprovals.issue(value.transaction)};
     },
 
     handleExecuteWorkspaceMutation: async (_event: IpcMainInvokeEvent, request: unknown) => {
@@ -262,6 +271,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
       if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
       if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
+      if (desktopMutationStopped) return {success:false,error:'MUTATION_STOP_LATCHED'};
       // Acquire synchronously before any async mutation. Reject overlap rather than queueing.
       let releaseWorkspace: () => void;
       try { releaseWorkspace = workspaceMutationLease.acquire(value.transaction.workspaceId); }
@@ -274,6 +284,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
         const completedOperationIds: string[] = [];
         mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'STARTED' });
         for (const operation of transaction.operations) {
+          if (desktopMutationStopped) {
+            try { mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: 'STOP_MIO' }); } catch { /* keep checkpoints for manual review */ }
+            return {success:false,receipt:{transactionId:transaction.id,workspaceId:transaction.workspaceId,state:'STOPPED_PARTIAL',completedOperationIds},error:'STOP_MIO: remaining operations not executed; inspect recovery checkpoints'};
+          }
           // Persist EXECUTING before invoking the mutating tool. No tool runs if the write fails.
           durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'EXECUTING');
           try {
@@ -360,7 +374,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
     cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
 
+    hasActiveWorkspaceMutations: () => workspaceMutationLease.hasActive(),
+    requestStopWorkspaceMutations: () => { desktopMutationStopped = true; mutationApprovals.clear(); },
     revokeAllWorkspaceAuthority: () => {
+      desktopMutationStopped = true;
       trainingJobManager.forceStopAll();
       mutationApprovals.clear();
       workspaceSandbox.revokeAll();
