@@ -6,6 +6,7 @@ on:
       - 'scripts/local-ai-gateway.test.mjs'
       - 'scripts/local-ai-gateway.integration.test.mjs'
       - 'scripts/local-ai-desktop-adapter.test.ts'
+      - 'scripts/local-ai-offline-routing.test.ts'
       - 'src/intelligence/model/LocalInferenceBackend.ts'
       - 'src/settings/SystemPreferences.ts'
       - 'src/modes/settings/SettingsView.tsx'
@@ -34,5 +35,7 @@ jobs:
         run: node scripts/local-ai-gateway.integration.test.mjs
       - name: Desktop adapter contract
         run: node --import tsx scripts/local-ai-desktop-adapter.test.ts
+      - name: Offline router no-cloud contract
+        run: node --import tsx scripts/local-ai-offline-routing.test.ts
       - name: TypeScript and web build
         run: npm run build:web
