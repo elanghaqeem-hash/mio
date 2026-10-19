@@ -30,7 +30,7 @@ export interface JournalPrototypeEntry {
  * On Windows, Node file-id behavior is filesystem dependent, so this is
  * defense-in-depth, NOT a guarantee against hostile concurrent renames.
  */
-function withValidatedJournalFile<T>(filename: string, flags: number, use: (fd: number) => T): T {
+function withValidatedJournalFile<T>(filename: string, flags: number, operation: (fd: number) => T): T {
   const pre = fs.lstatSync(filename);
   if (!pre.isFile() || pre.isSymbolicLink()) reject('MIO_WINDOWS_JOURNAL_UNSAFE_PATH');
   const fd = fs.openSync(filename, flags | (fs.constants.O_NOFOLLOW ?? 0));
@@ -45,7 +45,7 @@ function withValidatedJournalFile<T>(filename: string, flags: number, use: (fd: 
         (pre.dev !== held.dev || pre.ino !== held.ino ||
          current.dev !== held.dev || current.ino !== held.ino))
       reject('MIO_WINDOWS_JOURNAL_FILE_CHANGED');
-    const result = use(fd);
+    const result = operation(fd);
     const post = fs.lstatSync(filename);
     if (!post.isFile() || post.isSymbolicLink())
       reject('MIO_WINDOWS_JOURNAL_UNSAFE_PATH');
