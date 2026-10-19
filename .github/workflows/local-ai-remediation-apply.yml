@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          npm audit fix --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts || true
           npm audit --json > audit-after.json || true
           node -e "const a=require('./audit-after.json'); const v=a.metadata.vulnerabilities; console.log(v); if ((v.critical||0)>0 || (v.high||0)>0) process.exit(1)"
           node -e "const p=require('./package-lock.json'); if(p.lockfileVersion!==3 || !p.packages) process.exit(1)"
