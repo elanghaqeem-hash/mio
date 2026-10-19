@@ -16,8 +16,8 @@ const assertReadable = async (file) => {
 };
 
 await assertReadable('dist/index.html');
-await assertReadable('dist-electron/main.js');
-await assertReadable('dist-electron/preload.js');
+await assertReadable('dist-electron/electron/main.js');
+await assertReadable('dist-electron/electron/preload.js');
 
 let assets = [];
 try {
