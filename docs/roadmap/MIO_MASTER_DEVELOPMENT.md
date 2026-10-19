@@ -22,7 +22,7 @@ Base: `main` at `ffdb12e64e62094c1edb207a613531b0de2ca256`.
 | T-0.01–T-0.10 | Complete inventory, risk backlog, frozen baseline | Main HEAD | IN_PROGRESS | Preliminary inspected files above; finish code/CI inventory and platform test evidence |
 | T-1.01 | First-party routing policy | T-0 trust boundary | IN_PROGRESS | Existing ModelRouter; verify model-selection policy |
 | T-1.02 | Deterministic local model registry | T-1.01 interfaces | IMPLEMENTED_UNTESTED | NativeModelRegistry + registered test in this branch; requires CI |
-| T-1.03–T-1.18 | Local backends, automatic selection, lifecycle, resilient offline route | T-1.02, T-2 model assets | NOT_STARTED | Some adapters already exist; evaluate gaps before implementing |
+| T-1.03–T-1.18 | Local backends, automatic selection, lifecycle, resilient offline route | T-1.02, T-2 model assets | IN_PROGRESS | T-1.05 selection policy implemented in isolated code; live router integration still absent |
 | T-2 | Installable, checksummed, benchmarked local models: text, speech, vision, embeddings | Hardware profiles + T-1 | NOT_STARTED | No clean-device inference proof |
 | T-3 | Agent orchestration and approval | T-1 and security boundaries | NOT_STARTED | Existing implementations to audit |
 | T-4 | Persistent memory with consent | T-1 embeddings and permissions | NOT_STARTED | Existing implementations to audit |
@@ -56,3 +56,13 @@ Base: `main` at `ffdb12e64e62094c1edb207a613531b0de2ca256`.
 3. Do not enable Windows Creative Runtime before Windows durability and recovery gates pass.
 4. No release, deployment, or VERIFIED status without real test evidence.
 5. Merge only after CI and human review according to master instruction.
+
+## T-1.05 Implementation record
+
+- Module: `src/intelligence/model/NativeModelSelectionPolicy.ts`
+- Target: deterministic capability/context/memory selection restricted to independently ready model IDs
+- Status: IMPLEMENTED_UNTESTED until updated head CI passes
+- Test suite: `runNativeModelSelectionPolicyTests`, registered in the full test harness
+- Safety: no network calls and no readiness claims from registry descriptors; models with unknown memory estimate cannot bypass a finite budget
+- Remaining risk: serving-layer health checks not yet wired to selection; latency and quality benchmarks absent
+- Next action: validate updated PR checks, integrate health-checked selection into existing ModelRouter without activating cloud paths or Windows Creative Runtime
