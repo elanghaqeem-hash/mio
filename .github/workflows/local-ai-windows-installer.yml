@@ -28,12 +28,15 @@ jobs:
       - name: Build desktop application
         run: npm run build:all
       - name: Package Windows NSIS and portable
-        run: npm run dist:win
+        run: npx electron-builder --win nsis portable
       - name: Verify installers and compute hashes
         shell: pwsh
         run: |
           $files = @(Get-ChildItem release -File -Recurse | Where-Object { $_.Extension -eq '.exe' })
           if ($files.Count -lt 2) { throw "Expected NSIS and portable executables; found $($files.Count)" }
+          $setup = @($files | Where-Object { $_.Name -match "(?i)(setup|installer)" })
+          $portable = @($files | Where-Object { $_.Name -match "(?i)portable" })
+          if ($setup.Count -eq 0 -or $portable.Count -eq 0) { throw "Could not identify both NSIS and portable outputs by filename; inspect release directory." }
           $files | ForEach-Object { Get-FileHash $_.FullName -Algorithm SHA256 | Select-Object Hash, Path } | ConvertTo-Json | Out-File -Encoding utf8 release/sha256-manifest.json
           Get-Content release/sha256-manifest.json
       - name: Save Windows build evidence (not production-signed)
