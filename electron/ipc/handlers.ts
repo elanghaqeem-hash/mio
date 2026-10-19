@@ -12,6 +12,7 @@ import { DesktopMutationJournalStore } from './mutationJournalStore';
 import { DesktopDurableMutationCheckpoints } from './durableMutationCheckpoints';
 import { DesktopWorkspaceMutationLease } from './workspaceMutationLease';
 import { DesktopReadOnlyCapabilityBridge } from './readOnlyCapabilityBridge';
+import { GovernedDesktopMutationDispatcher } from './governedMutationDispatcher';
 
 export interface WorkspacePathRequest {
   workspaceId: string;
@@ -101,6 +102,58 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     list: (workspaceId, relativePath) => workspaceSandbox.listDirectory(workspaceId, relativePath),
     readText: (workspaceId, relativePath) => workspaceSandbox.readText(workspaceId, relativePath),
     inspectRecovery: workspaceId => durableCheckpoints.inspectRecovery(workspaceId),
+  });
+
+  const handleExecuteMutation = async (request: unknown) => {
+      if (!request || typeof request !== 'object') return { success: false, error: 'Invalid mutation request' };
+      const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
+      if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
+      if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
+      if (desktopMutationStopped) return {success:false,error:'MUTATION_STOP_LATCHED'};
+      // Acquire synchronously before any async mutation. Reject overlap rather than queueing.
+      let releaseWorkspace: () => void;
+      try { releaseWorkspace = workspaceMutationLease.acquire(value.transaction.workspaceId); }
+      catch { return { success: false, error: 'WORKSPACE_MUTATION_ALREADY_ACTIVE' }; }
+      try {
+        mutationApprovals.consume(value.transaction,value.approvalToken);
+        const transaction = value.transaction;
+        // Reserve the complete transaction before the first side effect. Disk failure rejects execution.
+        durableCheckpoints.reserve(transaction.workspaceId, transaction.id, transaction.operations.map(operation => operation.id));
+        const completedOperationIds: string[] = [];
+        mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'STARTED' });
+        for (const operation of transaction.operations) {
+          if (desktopMutationStopped) {
+            try { mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: 'STOP_MIO' }); } catch { /* keep checkpoints for manual review */ }
+            return {success:false,receipt:{transactionId:transaction.id,workspaceId:transaction.workspaceId,state:'STOPPED_PARTIAL',completedOperationIds},error:'STOP_MIO: remaining operations not executed; inspect recovery checkpoints'};
+          }
+          // Persist EXECUTING before invoking the mutating tool. No tool runs if the write fails.
+          durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'EXECUTING');
+          try {
+            await workspaceSandbox.mutate(transaction.workspaceId, operation);
+            mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_COMPLETED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target });
+            // A commit confirmation must also reach stable storage before reporting success.
+            durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'COMMITTED');
+            completedOperationIds.push(operation.id);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            // Never retry automatically: the mutation might already have occurred.
+            try { durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'UNCERTAIN'); } catch { /* retain EXECUTING, which is uncertain on restart */ }
+            try {
+              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_FAILED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target, error: message });
+              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: message });
+            } catch { /* journal failure must never trigger a replay */ }
+            return { success: false, receipt: { transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'UNCERTAIN', completedOperationIds, failedOperationId: operation.id, error: message }, error: message };
+          }
+        }
+        mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
+      } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
+      finally { releaseWorkspace(); }
+  };
+
+  const mutationDispatcher = new GovernedDesktopMutationDispatcher({
+    authorized: isAuthorizedWorkspace,
+    stopped: () => desktopMutationStopped,
+    execute: (transaction, approvalToken) => handleExecuteMutation({ transaction, approvalToken }),
   });
 
   return {
@@ -276,51 +329,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return {success:true,approval:mutationApprovals.issue(value.transaction)};
     },
 
-    handleExecuteWorkspaceMutation: async (_event: IpcMainInvokeEvent, request: unknown) => {
-      if (!request || typeof request !== 'object') return { success: false, error: 'Invalid mutation request' };
-      const value=request as {transaction?:DesktopMutationTransaction;approvalToken?:unknown};
-      if (!value.transaction || typeof value.approvalToken!=='string' || !validateWorkspaceId(value.transaction.workspaceId)) return {success:false,error:'Invalid mutation transaction/approval envelope'};
-      if (!isAuthorizedWorkspace(value.transaction.workspaceId)) return {success:false,error:'Workspace authorization required'};
-      if (desktopMutationStopped) return {success:false,error:'MUTATION_STOP_LATCHED'};
-      // Acquire synchronously before any async mutation. Reject overlap rather than queueing.
-      let releaseWorkspace: () => void;
-      try { releaseWorkspace = workspaceMutationLease.acquire(value.transaction.workspaceId); }
-      catch { return { success: false, error: 'WORKSPACE_MUTATION_ALREADY_ACTIVE' }; }
-      try {
-        mutationApprovals.consume(value.transaction,value.approvalToken);
-        const transaction = value.transaction;
-        // Reserve the complete transaction before the first side effect. Disk failure rejects execution.
-        durableCheckpoints.reserve(transaction.workspaceId, transaction.id, transaction.operations.map(operation => operation.id));
-        const completedOperationIds: string[] = [];
-        mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'STARTED' });
-        for (const operation of transaction.operations) {
-          if (desktopMutationStopped) {
-            try { mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: 'STOP_MIO' }); } catch { /* keep checkpoints for manual review */ }
-            return {success:false,receipt:{transactionId:transaction.id,workspaceId:transaction.workspaceId,state:'STOPPED_PARTIAL',completedOperationIds},error:'STOP_MIO: remaining operations not executed; inspect recovery checkpoints'};
-          }
-          // Persist EXECUTING before invoking the mutating tool. No tool runs if the write fails.
-          durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'EXECUTING');
-          try {
-            await workspaceSandbox.mutate(transaction.workspaceId, operation);
-            mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_COMPLETED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target });
-            // A commit confirmation must also reach stable storage before reporting success.
-            durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'COMMITTED');
-            completedOperationIds.push(operation.id);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            // Never retry automatically: the mutation might already have occurred.
-            try { durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, 'UNCERTAIN'); } catch { /* retain EXECUTING, which is uncertain on restart */ }
-            try {
-              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'OPERATION_FAILED', operationId: operation.id, operationKind: operation.kind, source: operation.source, target: operation.target, error: message });
-              mutationJournal.append({ transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'FAILED', error: message });
-            } catch { /* journal failure must never trigger a replay */ }
-            return { success: false, receipt: { transactionId: transaction.id, workspaceId: transaction.workspaceId, state: 'UNCERTAIN', completedOperationIds, failedOperationId: operation.id, error: message }, error: message };
-          }
-        }
-        mutationJournal.append({transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED'});return {success:true,receipt:{transactionId:value.transaction.id,workspaceId:value.transaction.workspaceId,state:'COMPLETED',completedOperationIds}};
-      } catch(error) { return {success:false,error:error instanceof Error?error.message:String(error)}; }
-      finally { releaseWorkspace(); }
-    },
+    handleInvokeApprovedMutation: (_event: IpcMainInvokeEvent, request: unknown) => mutationDispatcher.invoke(request),
+    handleExecuteWorkspaceMutation: (_event: IpcMainInvokeEvent, request: unknown) => handleExecuteMutation(request),
 
     handleBrowserReadPage: async (_event: IpcMainInvokeEvent, request: unknown) => {
       if (!validateBrowserReadRequest(request)) return { success: false, error: 'Invalid browser read request' };
