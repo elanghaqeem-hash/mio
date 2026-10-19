@@ -44,6 +44,11 @@ try {
   globalThis.fetch = async () => new Response(JSON.stringify({ error: 'backend unavailable' }), { status: 503 });
   assert.equal((await backend.checkReadiness()).ready, false, 'unavailable gateway must not be ready');
 
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  const disconnected = await backend.checkReadiness();
+  assert.equal(disconnected.ready, false, 'disconnected gateway must not be ready');
+  assert.match(disconnected.detail, /unreachable/);
+
     assert.throws(() => createLocalInferenceBackend('gateway', 'https://remote.example:4318', 'qwen2.5:3b'), /loopback/);
   console.log('MIO desktop local backend contract passed');
 } finally {
