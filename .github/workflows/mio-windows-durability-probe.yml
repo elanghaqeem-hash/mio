@@ -26,3 +26,5 @@ jobs:
         run: npm ci
       - name: Probe file flush, exclusive lock, rename, and directory publication
         run: node --import tsx scripts/benchmarks/windows-durability-probe.ts
+      - name: Windows append-only journal prototype integrity
+        run: node --import tsx scripts/benchmarks/windows-journal-prototype-check.ts
