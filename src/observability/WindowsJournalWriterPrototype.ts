@@ -6,6 +6,7 @@
  * Stale locks are never reclaimed. No automatic replay, truncate or repair.
  */
 import * as fs from 'node:fs';
+import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { WindowsCheckpointJournalPrototype, type JournalPrototypeEntry } from './WindowsCheckpointJournalPrototype';
 
@@ -15,6 +16,7 @@ const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 export class WindowsJournalWriterPrototype {
   private readonly lockPath: string;
   private readonly fd: number;
+  private readonly lockToken: string;
   private closed = false;
   private compromised = false;
   private active = false;
@@ -35,8 +37,9 @@ export class WindowsJournalWriterPrototype {
       fd = fs.openSync(this.lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | NOFOLLOW, 0o600);
     } catch { fail('WINDOWS_JOURNAL_WRITER_ALREADY_LOCKED_OR_UNAVAILABLE'); }
     this.fd = fd;
+    this.lockToken = crypto.randomBytes(32).toString('hex');
     try {
-      fs.writeFileSync(fd, JSON.stringify({version:1,pid:process.pid}));
+      fs.writeFileSync(fd, JSON.stringify({version:1,pid:process.pid,token:this.lockToken}));
       fs.fsyncSync(fd);
       this.journal = new WindowsCheckpointJournalPrototype(journalPath);
       // Validate the full history BEFORE admitting any append. Bad history
@@ -71,8 +74,16 @@ export class WindowsJournalWriterPrototype {
     if (this.active || this.compromised) fail('WINDOWS_JOURNAL_WRITER_REVIEW_REQUIRED');
     const held = fs.fstatSync(this.fd);
     const current = fs.lstatSync(this.lockPath);
-    if (!current.isFile() || current.isSymbolicLink() ||
-        held.dev !== current.dev || held.ino !== current.ino)
+    if (!current.isFile() || current.isSymbolicLink())
+      fail('WINDOWS_JOURNAL_WRITER_LOCK_CHANGED');
+    // Windows Node file IDs may not match between open handles and lstat.
+    // A unique lock token is validated on Windows; POSIX additionally checks inode identity.
+    if (process.platform !== 'win32' && (held.dev !== current.dev || held.ino !== current.ino))
+      fail('WINDOWS_JOURNAL_WRITER_LOCK_CHANGED');
+    let metadata: unknown;
+    try { metadata = JSON.parse(fs.readFileSync(this.lockPath, 'utf8')); } catch { fail('WINDOWS_JOURNAL_WRITER_LOCK_CHANGED'); }
+    if (!metadata || typeof metadata !== 'object' ||
+        (metadata as {token?:unknown}).token !== this.lockToken)
       fail('WINDOWS_JOURNAL_WRITER_LOCK_CHANGED');
     this.closed = true;
     fs.closeSync(this.fd);
