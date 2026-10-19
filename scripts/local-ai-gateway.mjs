@@ -38,6 +38,10 @@ async function ollama(path, body, clientSignal) {
 }
 export function createMioLocalGateway() {
   return http.createServer(async (req, res) => {
+    // Reject ambiguous duplicate Host headers before any routing.
+    if (req.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'host').length !== 1) {
+      return reply(res, 400, { error: 'Invalid Host headers' });
+    }
     const host = req.headers.host || '';
     const localPort = res.socket?.localPort;
     // Reject DNS-rebinding and unexpected Host headers even for non-browser callers.
