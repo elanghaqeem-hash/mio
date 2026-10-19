@@ -7,11 +7,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MioCheckpointPersistence } from './MioCheckpointPersistence';
-import { PersistentMutationCheckpointGate } from './PersistentMutationCheckpointGate';
+import { PersistentMutationCheckpointGate, type MioMutationCheckpointGate, type MutationCheckpointIdentity } from './PersistentMutationCheckpointGate';
 import { NodeFileCheckpointStorage } from './NodeFileCheckpointStorage';
 
 export interface ExclusiveNodeCheckpointRuntime {
-  readonly gate: PersistentMutationCheckpointGate;
+  readonly gate: MioMutationCheckpointGate;
+  /** Reject new mutations; in-flight mutations must still settle. */
+  stop(): void;
+  /** Number of requests that are starting or awaiting durable settlement. */
+  activeCount(): number;
   /** Release only during orderly shutdown when all mutating work has completed. */
   close(): void;
 }
@@ -36,11 +40,35 @@ export function createExclusiveNodeCheckpointRuntime(userDataRoot: string): Excl
     const directoryFd = fs.openSync(path.dirname(lockPath), 'r');
     try { fs.fsyncSync(directoryFd); } finally { fs.closeSync(directoryFd); }
     // The lock is acquired before any checkpoint is loaded or mutation admitted.
-    const gate = new PersistentMutationCheckpointGate(new MioCheckpointPersistence(storage));
+    const underlying = new PersistentMutationCheckpointGate(new MioCheckpointPersistence(storage));
+    const pending = new Set<string>();
+    let stopped = false;
+    let compromised = false;
+    const identityKey = (identity: MutationCheckpointIdentity) => JSON.stringify([identity.projectId, identity.taskId, identity.requestId]);
+    const gate: MioMutationCheckpointGate = {
+      async begin(identity) {
+        if (stopped || closed || compromised) throw new Error('CHECKPOINT_RUNTIME_STOPPED');
+        const key = identityKey(identity);
+        if (pending.has(key)) throw new Error('CHECKPOINT_RUNTIME_DUPLICATE_IN_FLIGHT');
+        pending.add(key);
+        try { await underlying.begin(identity); }
+        catch (error) { compromised = true; throw error; }
+      },
+      async complete(identity, committed) {
+        const key = identityKey(identity);
+        if (!pending.has(key)) throw new Error('CHECKPOINT_RUNTIME_OPERATION_NOT_ACTIVE');
+        try { await underlying.complete(identity, committed); pending.delete(key); }
+        catch (error) { compromised = true; throw error; }
+      },
+    };
     return {
       gate,
+      stop() { stopped = true; },
+      activeCount() { return pending.size; },
       close() {
         if (closed) return;
+        stopped = true;
+        if (pending.size > 0 || compromised) throw new Error('CHECKPOINT_RUNTIME_DRAIN_OR_REVIEW_REQUIRED');
         closed = true;
         // Never close during in-flight work. The caller owns executor lifecycle.
         try {
