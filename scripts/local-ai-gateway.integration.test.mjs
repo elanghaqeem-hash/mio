@@ -81,6 +81,13 @@ try {
   assert.match(malformedBody.error, /Local model unavailable/);
   simulateMalformedBackend = false;
 
+  const recovered = await realFetch(base + '/v1/chat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'Recovery after malformed upstream' }] }),
+  });
+  assert.equal(recovered.status, 200, 'gateway must recover after malformed Ollama response');
+  assert.equal((await recovered.json()).message.content, 'Halo! Saya MIO lokal.');
+
   const controller = new AbortController();
   const pending = realFetch(base + '/v1/chat', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -88,8 +95,8 @@ try {
     signal: controller.signal,
   });
   // Wait until mock upstream sees the chat request; bounded polling.
-  for (let i = 0; i < 80 && upstreamCalls < 3; i++) await new Promise(r => setTimeout(r, 10));
-  assert.equal(upstreamCalls, 3, 'slow request must reach local inference');
+  for (let i = 0; i < 80 && upstreamCalls < 4; i++) await new Promise(r => setTimeout(r, 10));
+  assert.equal(upstreamCalls, 4, 'slow request must reach local inference');
   controller.abort();
   await assert.rejects(pending, e => e.name === 'AbortError');
   for (let i = 0; i < 80 && !aborted; i++) await new Promise(r => setTimeout(r, 10));
