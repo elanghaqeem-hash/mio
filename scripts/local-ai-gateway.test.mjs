@@ -28,6 +28,16 @@ try {
   });
   assert.equal(wrongPortHost, 403);
 
+  const preflightMissingOrigin = await fetch(base + '/v1/chat', { method: 'OPTIONS' });
+  assert.equal(preflightMissingOrigin.status, 403);
+
+  const preflightAllowed = await fetch(base + '/v1/chat', {
+    method: 'OPTIONS',
+    headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'POST' },
+  });
+  assert.equal(preflightAllowed.status, 204);
+  assert.equal(preflightAllowed.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+
   const blocked = await fetch(base + '/v1/chat', {
     method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }),
