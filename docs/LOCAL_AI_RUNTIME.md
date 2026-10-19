@@ -113,3 +113,10 @@ node scripts/local-ai-real-model-smoke.mjs
 Expected final output: a JSON summary with `"result":"PASS"`, the configured model, non-zero response length, and `"apiKeysRequired":false`. This test performs real inference and must **not** be reported as passed unless actually run on a machine with Ollama and the configured weights. It is intentionally not executed in shared CI runners, because the model installation and compute hardware are not provided.
 
 For the complete desktop test, separately verify (1) Settings selects the `gateway` backend, (2) Chat answers with `modelProvider=mio_local`, (3) the response provenance identifies a local endpoint, and (4) STOP MIO cancels an active generation. A successful direct gateway smoke test alone does not establish complete desktop functionality.
+
+
+## LAR-07 — Desktop adapter contract
+
+The test `node --import tsx scripts/local-ai-desktop-adapter.test.ts` exercises the actual TypeScript local inference adapter used by MIO Settings and ModelRouter. The test substitutes the HTTP fetch transport (not a real model), and verifies readiness, chat message output, configured model identity, AbortSignal propagation, and rejection of non-loopback hosts.
+
+This test has been wired into GitHub Actions. It is not proof of GUI clicks, desktop installer behavior, or a real Ollama generation; these remain separate manual acceptance gates. Keep PR in draft until all current-head CI checks pass and the local device can demonstrate inference plus STOP MIO.
