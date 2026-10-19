@@ -26,8 +26,9 @@ try {
 const controller = new AbortController();
 const started = Date.now();
 let cancelObserved = false;
-const kill = setTimeout(() => controller.abort('intentional-cancel'), 500);
-const watchdog = setTimeout(() => controller.abort('watchdog-timeout'), 15000);
+let abortSource;
+const kill = setTimeout(() => { abortSource = 'intentional-cancel'; controller.abort(); }, 500);
+const watchdog = setTimeout(() => { if (!controller.signal.aborted) { abortSource = 'watchdog-timeout'; controller.abort(); } }, 15000);
 try {
   const request = await fetch(new URL('/v1/chat', base), {
     method: 'POST',
@@ -44,9 +45,9 @@ try {
   console.log(JSON.stringify({ result: 'INCONCLUSIVE', reason: 'Generation finished before cancellation', elapsedMs: Date.now() - started }));
   process.exitCode = 2;
 } catch (error) {
-  if (controller.signal.aborted && controller.signal.reason === 'intentional-cancel' && error?.name === 'AbortError') {
+  if (controller.signal.aborted && abortSource === 'intentional-cancel' && error?.name === 'AbortError') {
     cancelObserved = true;
-  } else if (controller.signal.reason === 'watchdog-timeout') {
+  } else if (abortSource === 'watchdog-timeout') {
     throw new Error('Request exceeded watchdog timeout; cancellation is NOT verified');
   } else {
     throw error;
