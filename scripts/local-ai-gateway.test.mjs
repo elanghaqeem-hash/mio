@@ -11,6 +11,9 @@ try {
   const missing = await fetch(base + '/missing');
   assert.equal(missing.status, 404);
 
+  const blockedHost = await fetch(base + '/missing', { headers: { Host: 'evil.example:4318' } });
+  assert.equal(blockedHost.status, 403);
+
   const blocked = await fetch(base + '/v1/chat', {
     method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }),
