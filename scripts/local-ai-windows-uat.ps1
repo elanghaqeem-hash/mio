@@ -3,6 +3,10 @@
 # This script does not download weights, start services, or use external API keys.
 param([string]$Model = "qwen2.5:3b", [string]$Gateway = "http://127.0.0.1:4318")
 $ErrorActionPreference = "Stop"
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw "Node.js was not found on PATH" }
+if (-not (Test-Path "scripts/local-ai-real-model-smoke.mjs")) { throw "Run this script from the MIO repository root" }
+try { $uri = [Uri]$Gateway } catch { throw "Invalid gateway URL" }
+if ($uri.Scheme -ne "http" -or $uri.Host -notin @("localhost", "127.0.0.1", "::1") -or $uri.UserInfo -or $uri.AbsolutePath -ne "/" -or $uri.Query -or $uri.Fragment) { throw "Gateway must be a loopback HTTP origin without path, credentials or query" }
 $env:MIO_LOCAL_MODEL = $Model
 $env:MIO_LOCAL_GATEWAY_URL = $Gateway
 $results = @()
