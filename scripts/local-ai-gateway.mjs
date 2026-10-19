@@ -51,10 +51,14 @@ export function createMioLocalGateway() {
       return respond( 403, { error: 'Origin not allowed' });
     }
     if (req.method === 'OPTIONS') {
+      // Only explicitly trusted development origins receive preflight permission.
+      if (!origin) return respond(403, { error: 'Origin required for preflight' });
       res.writeHead(204, {
-        'access-control-allow-origin': origin || 'http://localhost:5173',
+        'access-control-allow-origin': origin,
         'access-control-allow-methods': 'GET, POST, OPTIONS',
         'access-control-allow-headers': 'content-type',
+        'vary': 'Origin',
+        'cache-control': 'no-store',
       });
       return res.end();
     }
