@@ -95,6 +95,8 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE, (event, args) => handlers.handleListWorkspace(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_READ_DOCUMENT_ENTRIES, (event, args) => handlers.handleReadDocumentEntries(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_HASH_WORKSPACE_TREE, (event, args) => handlers.handleHashWorkspaceTree(event, args[0]));
+  secureHandle(IPC_CHANNELS.FS_LIST_WORKSPACE_MUTATION_AUDIT, (event, args) => handlers.handleListWorkspaceMutationAudit(event, args[0]));
+  secureHandle(IPC_CHANNELS.FS_REQUEST_WORKSPACE_MUTATION_APPROVAL, (event, args) => handlers.handleRequestWorkspaceMutationApproval(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_INSPECT_WORKSPACE_RECOVERY, (event, args) => handlers.handleInspectWorkspaceRecovery(event, args[0]));
   secureHandle(IPC_CHANNELS.FS_EXECUTE_WORKSPACE_MUTATION, (event, args) => handlers.handleExecuteWorkspaceMutation(event, args[0]));
   secureHandle(IPC_CHANNELS.BROWSER_READ_PAGE, (event, args) => handlers.handleBrowserReadPage(event, args[0]));
