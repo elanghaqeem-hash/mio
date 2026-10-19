@@ -1,3 +1,4 @@
+import { runWindowsJournalCommitVerifierTests } from '../../src/tests/windowsJournalCommitVerifierTests';
 import { runWindowsJournalInterprocessTests } from '../../src/tests/windowsJournalInterprocessTests';
 import { runWindowsJournalWriterPrototypeTests } from '../../src/tests/windowsJournalWriterPrototypeTests';
 import { runWindowsCheckpointJournalPrototypeTests } from '../../src/tests/windowsCheckpointJournalPrototypeTests';
@@ -9,8 +10,10 @@ async function main() {
   if (coordination.passed !== 4 || coordination.total !== 4) throw Error('WINDOWS_JOURNAL_WRITER_COORDINATION_INCOMPLETE');
   const independent = await runWindowsJournalInterprocessTests();
   if (independent.passed !== 2 || independent.total !== 2) throw Error('WINDOWS_JOURNAL_INTERPROCESS_INCOMPLETE');
+  const commit = await runWindowsJournalCommitVerifierTests();
+  if (commit.passed !== 6 || commit.total !== 6) throw Error('WINDOWS_JOURNAL_COMMIT_LOGIC_INCOMPLETE');
   console.log('WINDOWS JOURNAL PROTOTYPE PASS', JSON.stringify({
-    platform: process.platform, tested: result.total + coordination.total + independent.total,
+    platform: process.platform, tested: result.total + coordination.total + independent.total + commit.total,
     scope: 'preprovisioned file append/fsync/hash-chain correctness',
     durableDirectoryPublication: false,
     runtimeActivation: false,
