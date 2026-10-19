@@ -6,12 +6,12 @@ import { inspectJournalMutationCommit, type JournalMutationPhase } from '../obse
 
 const identity={projectId:'ws_1',taskId:'task_1',requestId:'req_1'};
 const check=(value:unknown,message:string)=>{if(!value)throw Error(message);};
-function fixture(run:(journal:WindowsCheckpointJournalPrototype)=>void):void {
+function fixture(run:(journal:WindowsCheckpointJournalPrototype,filename:string)=>void):void {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'mio-commit-verify-'));
   try {
     const name=path.join(root,'preprovisioned.journal');
     fs.writeFileSync(name,Buffer.alloc(0),{flag:'wx'});
-    run(new WindowsCheckpointJournalPrototype(name));
+    run(new WindowsCheckpointJournalPrototype(name),name);
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 }
 const event=(sequence:number,phase:JournalMutationPhase,previousDigest:string|null,requestId='req_1') =>
