@@ -13,13 +13,18 @@ export async function runDesktopMutationIpcAuthorizationTests(): Promise<{ passe
       }
     }],
     ['mutating approval/audit/execution refuse unknown workspace authorization', async () => {
-      for (const name of ['handleListWorkspaceMutationAudit', 'handleRequestWorkspaceMutationApproval', 'handleExecuteWorkspaceMutation']) {
+      for (const name of ['handleListWorkspaceMutationAudit', 'handleRequestWorkspaceMutationApproval']) {
         const from = handlers.indexOf(name + ':');
         assert(from !== -1, 'missing handler ' + name);
         const until = handlers.indexOf('\n    },', from);
         const block = handlers.slice(from, until !== -1 ? until : from + 3000);
         assert(block.includes('isAuthorizedWorkspace(') && block.includes('Workspace authorization required'), name + ' lacks authorization gate');
       }
+      // The original IPC and the new governed capability delegate to this shared
+      // main-process executor. Verify authority there, not on the alias line.
+      const shared = handlers.slice(handlers.indexOf('const handleExecuteMutation ='), handlers.indexOf('const mutationDispatcher ='));
+      assert(shared.includes('isAuthorizedWorkspace(') && shared.includes('Workspace authorization required'), 'shared mutation executor lacks authority gate');
+      assert(handlers.includes('handleExecuteWorkspaceMutation: (_event: IpcMainInvokeEvent, request: unknown) => handleExecuteMutation(request)'), 'legacy IPC bypasses shared guarded executor');
     }],
     ['workspace authority requires explicit authorization and is revoked', async () => {
       const sandbox = new WorkspaceSandbox();

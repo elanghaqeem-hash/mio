@@ -1,0 +1,9 @@
+# MIO PRV-10.06i — Approved Desktop Mutation Capability Dispatch
+
+This phase adds a narrowly scoped, main-frame-guarded Electron capability IPC entrypoint for **approved desktop workspace mutations only**. It does not grant capabilities based on an untrusted renderer's self-asserted permission field.
+
+The dispatcher accepts one allowlisted capability, `desktop.workspace.execute-approved-mutation`, with a bounded transaction envelope and a one-use 64-character approval token issued by the existing desktop approval path. It checks operation shape, IDs, paths, STOP, and workspace authorization before delegating **to the existing main-process mutation executor**. Destructive TRASH operations require `L5_DESTRUCTIVE` in the envelope. The executor independently consumes the approval token bound to the exact transaction, reserves durable checkpoints before effects, serializes in-flight workspace mutations, handles STOP and produces a guarded receipt. The dispatcher does not call the sandbox or issue approval tokens.
+
+A successful result after STOP or authority revocation is reclassified as `CAPABILITY_MUTATION_COMMITTED_REVIEW_REQUIRED`: it is not claimed to have been cancelled or reverted. No automatic retry or rollback.
+
+**Limitations:** the requested level is a syntactic claim, not a separately authenticated privilege; the actual authority comes from the desktop user approval token and workspace session. The original direct mutation IPC remains available with the same underlying protections. This is not integration of arbitrary Creative Engine, Model Router, Voice or browser runtime executors. No crash/power-loss test, multi-process lease, or production deployment. Further verification needed for security review of filesystem mutation primitives and user-facing preview consistency.

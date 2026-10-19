@@ -15,7 +15,7 @@ export async function runDesktopStopDrainTests(): Promise<{ passed: number; tota
       check(area.includes("if (desktopMutationStopped || !isAuthorizedWorkspace(value.transaction.workspaceId))"), 'late dialog approval bypasses STOP or revoked authority');
     }],
     ['STOP blocks remaining operations without declaring complete', () => {
-      const area = handlers.slice(handlers.indexOf('handleExecuteWorkspaceMutation:'), handlers.indexOf('handleBrowserReadPage:'));
+      const area = handlers.slice(handlers.indexOf('const handleExecuteMutation ='), handlers.indexOf('const mutationDispatcher ='));
       check(area.includes('for (const operation of transaction.operations)') &&
         area.includes("state:'STOPPED_PARTIAL'") && area.includes("state: 'FAILED', error: 'STOP_MIO'") &&
         area.indexOf("state:'STOPPED_PARTIAL'") < area.indexOf('durableCheckpoints.transition(transaction.workspaceId, transaction.id, operation.id, \'EXECUTING\')'), 'STOP continuation protection missing');
