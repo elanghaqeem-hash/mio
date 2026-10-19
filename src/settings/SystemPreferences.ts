@@ -15,7 +15,7 @@ const STORAGE_KEY = 'system-preferences-v1';
 const AUTONOMY_LEVELS: AutonomyLevel[] = ['PASSIVE', 'ASSISTIVE', 'PROACTIVE', 'AUTONOMOUS'];
 const NETWORK_STATES: NetworkState[] = ['ONLINE', 'OFFLINE'];
 const PROVIDERS: ModelProviderId[] = ['mio_local', 'local_heuristic', 'openrouter', 'openai', 'gemini', 'claude', 'ollama'];
-const LOCAL_BACKENDS: LocalInferenceBackendId[] = ['ollama', 'vllm', 'llamacpp'];
+const LOCAL_BACKENDS: LocalInferenceBackendId[] = ['ollama', 'vllm', 'llamacpp', 'gateway'];
 
 const defaults = (): MioSystemPreferences => ({
   autonomyLevel: 'ASSISTIVE',
