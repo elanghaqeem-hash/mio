@@ -35,7 +35,16 @@ try {
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
 
-  assert.throws(() => createLocalInferenceBackend('gateway', 'https://remote.example:4318', 'qwen2.5:3b'), /loopback/);
+  globalThis.fetch = async () => new Response(JSON.stringify({ status: 'model_missing', installed: false, model: 'qwen2.5:3b' }), { status: 200 });
+  assert.equal((await backend.checkReadiness()).ready, false, 'missing model must not be reported ready');
+
+  globalThis.fetch = async () => new Response(JSON.stringify({ status: 'ready', installed: true, model: 'wrong-model' }), { status: 200 });
+  assert.equal((await backend.checkReadiness()).ready, false, 'mismatched model must not be reported ready');
+
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'backend unavailable' }), { status: 503 });
+  assert.equal((await backend.checkReadiness()).ready, false, 'unavailable gateway must not be ready');
+
+    assert.throws(() => createLocalInferenceBackend('gateway', 'https://remote.example:4318', 'qwen2.5:3b'), /loopback/);
   console.log('MIO desktop local backend contract passed');
 } finally {
   globalThis.fetch = originalFetch;
