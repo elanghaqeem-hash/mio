@@ -20,6 +20,7 @@ globalThis.fetch = async (input, init = {}) => {
     const body = JSON.parse(init.body);
     assert.equal(body.model, 'qwen2.5:3b');
     assert.equal(body.stream, false);
+    assert.equal(body.options.num_predict, 256, 'gateway default must bound output for desktop latency');
     if (body.messages[0]?.content === 'SLOW_CANCEL') {
       return await new Promise((resolve, reject) => {
         const cancel = () => { aborted = true; reject(Object.assign(new Error('aborted'), { name: 'AbortError' })); };
