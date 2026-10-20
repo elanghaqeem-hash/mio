@@ -12,6 +12,9 @@ const PORT = Number(process.env.MIO_LOCAL_PORT || 4318);
 const MODEL = process.env.MIO_LOCAL_MODEL || 'qwen2.5:3b';
 const TIMEOUT_MS = Math.min(Math.max(Number(process.env.MIO_LOCAL_TIMEOUT_MS || 60000), 1000), 180000);
 const MAX_BYTES = 64 * 1024;
+// Keep desktop responses below its 30-second provider budget on typical local CPUs.
+// Tune explicitly for faster/slower hardware; never allow an unbounded generation.
+const MAX_OUTPUT_TOKENS = Math.min(1024, Math.max(64, Number(process.env.MIO_LOCAL_MAX_OUTPUT_TOKENS || 256)));
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant']);
 const UPSTREAM = 'http://127.0.0.1:11434';
 
@@ -92,7 +95,7 @@ export function createMioLocalGateway() {
         res.once('close', onClose);
         let output;
         try {
-          output = await ollama('/api/chat', { model: MODEL, messages: data.messages, stream: false, options: { num_predict: 1024 } }, inferenceAbort.signal);
+          output = await ollama('/api/chat', { model: MODEL, messages: data.messages, stream: false, options: { num_predict: MAX_OUTPUT_TOKENS } }, inferenceAbort.signal);
         } finally {
           res.removeListener('close', onClose);
         }
