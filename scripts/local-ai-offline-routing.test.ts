@@ -18,6 +18,10 @@ async function main() {
       assert.equal(url, 'http://127.0.0.1:4318/v1/chat', 'offline mode must never send requests to cloud or research tools');
       const body = JSON.parse(String(init?.body));
       assert.ok(body.messages.some((m: { role: string; content: string }) => m.role === 'user' && m.content === 'Offline halo'));
+      const policy = body.messages.find((m: { role: string; content: string }) => m.role === 'system')?.content || '';
+      assert.match(policy, /answer directly/i, 'simple chat policy must prohibit status wrappers');
+      assert.match(policy, /same language as the latest user/i, 'local AI must follow the user language');
+      assert.match(policy, /application owns actual task state/i, 'model must not invent task lifecycle labels');
       return new Response(JSON.stringify({
         provider: 'local-ollama',
         model: 'qwen2.5:3b',
