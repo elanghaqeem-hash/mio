@@ -1,0 +1,54 @@
+name: MIO Dependency Remediation Candidate
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/local-ai-remediation-candidate.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/local-ai-remediation-report.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Capture baseline and generate safe lockfile candidate
+        shell: bash
+        run: |
+          npm ci
+          npm audit --json > audit-before.json || true
+          npm audit fix --package-lock-only --ignore-scripts || true
+          git diff -- package-lock.json > remediation-candidate.patch
+          npm audit --json > audit-after.json || true
+          node scripts/local-ai-remediation-report.mjs audit-before.json audit-after.json > remediation-summary.json
+          cat remediation-summary.json
+          node -e "const r=require('./remediation-summary.json'); if(r.summary.critical.after || r.summary.high.after) process.exit(1)"
+      - name: Validate candidate lockfile with installation and web build
+        shell: bash
+        run: |
+          npm ci
+          npm run build:web
+          node scripts/local-ai-gateway.test.mjs
+          node scripts/local-ai-gateway.integration.test.mjs
+          node --import tsx scripts/local-ai-desktop-adapter.test.ts
+      - name: Archive candidate for review (never auto-commit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mio-lockfile-remediation-candidate
+          path: |
+            audit-before.json
+            audit-after.json
+            remediation-summary.json
+            remediation-candidate.patch
+            package-lock.json
+          retention-days: 7

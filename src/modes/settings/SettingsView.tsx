@@ -29,6 +29,7 @@ const LOCAL_BACKEND_CONFIG: Record<LocalInferenceBackendId, { label: string; end
   ollama: { label: 'Ollama', endpoint: 'http://127.0.0.1:11434', detail: 'Native Ollama /api/chat runtime' },
   vllm: { label: 'vLLM', endpoint: 'http://127.0.0.1:8000', detail: 'OpenAI-compatible /v1/chat/completions runtime' },
   llamacpp: { label: 'llama.cpp server', endpoint: 'http://127.0.0.1:8080', detail: 'OpenAI-compatible local GGUF server' },
+  gateway: { label: 'MIO Local Gateway', endpoint: 'http://127.0.0.1:4318', detail: 'Loopback gateway /v1/chat, no commercial AI API key' },
 };
 
 export const SettingsView: React.FC = () => {
@@ -79,7 +80,7 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleLocalBackendChange = (backend: LocalInferenceBackendId) => {
-    updateRouter({ mioLocalBackend: backend, mioLocalEndpoint: LOCAL_BACKEND_CONFIG[backend].endpoint });
+    updateRouter({ mioLocalBackend: backend, mioLocalEndpoint: LOCAL_BACKEND_CONFIG[backend].endpoint, ...(backend === 'gateway' ? { model: 'qwen2.5:3b' } : {}) });
   };
 
   const checkProvider = async () => {
