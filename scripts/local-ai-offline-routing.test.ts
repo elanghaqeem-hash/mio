@@ -22,6 +22,8 @@ async function main() {
       assert.match(policy, /answer directly/i, 'simple chat policy must prohibit status wrappers');
       assert.match(policy, /same language as the latest user/i, 'local AI must follow the user language');
       assert.match(policy, /application owns actual task state/i, 'model must not invent task lifecycle labels');
+      assert.doesNotMatch(policy, /<MIO_TOOL_CALL>/, 'offline local model should not be prompted with unavailable tool-call grammar');
+      assert.doesNotMatch(policy, /For search, respond ONLY|For a specific page, respond ONLY/, 'disabled tools must not be advertised in the system prompt');
       return new Response(JSON.stringify({
         provider: 'local-ollama',
         model: 'qwen2.5:3b',
