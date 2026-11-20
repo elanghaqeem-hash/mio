@@ -63,3 +63,7 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         shell: pwsh
         run: ./scripts/benchmarks/windows-native-directory-acl-probe.ps1
+      - name: Native handle-bound security descriptor (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-handle-acl-probe.ps1
