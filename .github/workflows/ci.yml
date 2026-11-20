@@ -32,6 +32,9 @@ jobs:
       - name: CORE local model adapter regression
         run: node --import tsx scripts/benchmarks/mio-core-local-model-check.ts
 
+      - name: CORE cognitive orchestration regression
+        run: node --import tsx scripts/benchmarks/mio-cognitive-orchestrator-check.ts
+
       - name: Lint
         run: npm run lint
 
