@@ -5,24 +5,12 @@
  * backend. A trusted operator must pre-provision the file and a single writer.
  * No directory creation, atomic-rename claim, auto-tail repair or replay.
  */
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const MAGIC = Buffer.from('MIOJ01', 'ascii');
-const HEADER_BYTES = 6 + 4 + 32;
-const MAX_PAYLOAD = 256 * 1024;
-const MAX_JOURNAL = 8 * 1024 * 1024;
-const ZERO_DIGEST = Buffer.alloc(32, 0);
+import { decodeJournalRecords, encodeJournalRecord, MAX_JOURNAL, type JournalPrototypeEntry } from './WindowsJournalBinaryCodec';
+export type { JournalPrototypeEntry } from './WindowsJournalBinaryCodec';
 const reject = (code: string): never => { throw new Error(code); };
-const hashRecord = (previous: Buffer, payload: Buffer): Buffer =>
-  crypto.createHash('sha256').update(previous).update(payload).digest();
-
-export interface JournalPrototypeEntry {
-  readonly offset: number;
-  readonly json: string;
-  readonly digest: string;
-}
 
 /**
  * Validate pathname both before and after opening. A symlink, special file
@@ -65,27 +53,7 @@ function readRecords(fd: number): { entries: JournalPrototypeEntry[]; lastHash: 
     if (!got) reject('MIO_WINDOWS_JOURNAL_SHORT_READ');
     read += got;
   }
-  const entries: JournalPrototypeEntry[] = [];
-  let previous = ZERO_DIGEST;
-  let offset = 0;
-  while (offset < bytes.length) {
-    if (bytes.length - offset < HEADER_BYTES) reject('MIO_WINDOWS_JOURNAL_TORN_TAIL');
-    if (!bytes.subarray(offset, offset + MAGIC.length).equals(MAGIC)) reject('MIO_WINDOWS_JOURNAL_BAD_MAGIC');
-    const length = bytes.readUInt32BE(offset + MAGIC.length);
-    if (length < 1 || length > MAX_PAYLOAD || offset + HEADER_BYTES + length > bytes.length)
-      reject('MIO_WINDOWS_JOURNAL_TORN_OR_OVERSIZED');
-    const payload = bytes.subarray(offset + HEADER_BYTES, offset + HEADER_BYTES + length);
-    const digest = bytes.subarray(offset + 10, offset + HEADER_BYTES);
-    const expected = hashRecord(previous, payload);
-    if (!crypto.timingSafeEqual(digest, expected)) reject('MIO_WINDOWS_JOURNAL_HASH_CHAIN_BROKEN');
-    const json = payload.toString('utf8');
-    if (!Buffer.from(json, 'utf8').equals(payload)) reject('MIO_WINDOWS_JOURNAL_INVALID_UTF8');
-    try { JSON.parse(json); } catch { reject('MIO_WINDOWS_JOURNAL_INVALID_JSON'); }
-    entries.push({ offset, json, digest: expected.toString('hex') });
-    previous = Buffer.from(expected);
-    offset += HEADER_BYTES + length;
-  }
-  return { entries, lastHash: previous, size: bytes.length };
+  return decodeJournalRecords(bytes);
 }
 
 export class WindowsCheckpointJournalPrototype {
@@ -104,19 +72,11 @@ export class WindowsCheckpointJournalPrototype {
    * newly created file or NTFS metadata.
    */
   append(json: string): JournalPrototypeEntry {
-    if (typeof json !== 'string') reject('MIO_WINDOWS_JOURNAL_PAYLOAD_INVALID');
-    const payload = Buffer.from(json, 'utf8');
-    if (!payload.length || payload.length > MAX_PAYLOAD) reject('MIO_WINDOWS_JOURNAL_PAYLOAD_INVALID');
-    try { JSON.parse(json); } catch { reject('MIO_WINDOWS_JOURNAL_INVALID_JSON'); }
+    // Validate the payload before opening the file, preserving fail-closed behavior.
+    encodeJournalRecord(json, Buffer.alloc(32), 0);
     return withValidatedJournalFile(this.filename, fs.constants.O_RDWR, fd => {
-      const state = readRecords(fd); // Reject existing corruption, including torn tail.
-      if (state.size + HEADER_BYTES + payload.length > MAX_JOURNAL) reject('MIO_WINDOWS_JOURNAL_LIMIT');
-      const digest = hashRecord(state.lastHash, payload);
-      const record = Buffer.alloc(HEADER_BYTES + payload.length);
-      MAGIC.copy(record, 0);
-      record.writeUInt32BE(payload.length, MAGIC.length);
-      digest.copy(record, 10);
-      payload.copy(record, HEADER_BYTES);
+      const state = readRecords(fd);
+      const { record, digest } = encodeJournalRecord(json, state.lastHash, state.size);
       let written = 0;
       while (written < record.length) {
         const count = fs.writeSync(fd, record, written, record.length - written, state.size + written);
