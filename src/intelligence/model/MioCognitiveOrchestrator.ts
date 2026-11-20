@@ -16,7 +16,7 @@ export class MioCognitiveOrchestrator {
  private readonly profiles:LocalModelProfile[];
  constructor(profiles:readonly LocalModelProfile[]=[{model:'qwen2.5:3b',workloads:kinds}],private readonly transport:typeof fetch=fetch){
   if(!Array.isArray(profiles)||profiles.length<1||profiles.length>8||new Set(profiles.map(p=>p.model)).size!==profiles.length||
-   profiles.some(p=>typeof p.model!=='string'||!modelPattern.test(p.model)||!Array.isArray(p.workloads)||!p.workloads.length||p.workloads.some(w=>!kinds.includes(w))))throw Error('MIO_COGNITIVE_PROFILE_INVALID');
+   profiles.some(p=>typeof p.model!=='string'||!modelPattern.test(p.model)||!Array.isArray(p.workloads)||!p.workloads.length||p.workloads.some((w: CognitiveWorkload)=>!kinds.includes(w))))throw Error('MIO_COGNITIVE_PROFILE_INVALID');
   this.profiles=profiles.map(p=>({model:p.model,workloads:[...p.workloads]}));
   this.core=new MioIntelligenceLifecycle(1);
  }
