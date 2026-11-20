@@ -29,6 +29,9 @@ jobs:
       - name: CORE intelligence lifecycle regression
         run: node --import tsx scripts/benchmarks/mio-core-intelligence-lifecycle-check.ts
 
+      - name: CORE local model adapter regression
+        run: node --import tsx scripts/benchmarks/mio-core-local-model-check.ts
+
       - name: Lint
         run: npm run lint
 
