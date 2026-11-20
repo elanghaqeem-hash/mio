@@ -70,3 +70,6 @@ jobs:
       - name: Read-only controlled recovery evidence (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-journal-recovery-evidence-check.ts
+      - name: Authenticated recovery review (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-recovery-auth-check.ts
