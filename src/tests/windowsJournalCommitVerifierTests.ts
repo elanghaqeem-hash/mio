@@ -63,6 +63,14 @@ export async function runWindowsJournalCommitVerifierTests():Promise<{passed:num
       check(reject(()=>inspectJournalMutationCommit(j.inspect(),identity)),'committed history replayed');
     });
   }],
+  ['non-string identifiers and phases cannot be coerced into logical events',()=>{
+    for(const override of [{projectId:123},{taskId:true},{requestId:['req_1']},{phase:['PREPARED']}]) {
+      fixture(j=>{
+        j.append(JSON.stringify({version:1,...identity,sequence:1,phase:'PREPARED',previousDigest:null,...override}));
+        check(reject(()=>inspectJournalMutationCommit(j.inspect(),identity)),'coerced logical event accepted');
+      });
+    }
+  }],
   ['torn or corrupted underlying journal is never converted to safe logical success',()=>{
     fixture(j=>{
       j.append(event(1,'PREPARED',null));
