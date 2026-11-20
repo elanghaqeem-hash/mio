@@ -79,3 +79,6 @@ jobs:
       - name: Authenticated incident archive (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-journal-incident-archive-check.ts
+      - name: Incident storage generation contract (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-storage-check.ts
