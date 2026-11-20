@@ -10,6 +10,8 @@ import type { StorageProvider } from '../storage/StorageProvider';
 import { createLocalInferenceBackend } from '../intelligence/model/LocalInferenceBackend';
 import { LocalHeuristicProvider } from '../intelligence/model/LocalHeuristicProvider';
 import { MioLocalProvider } from '../intelligence/model/MioLocalProvider';
+import { MioNativeRouterProvider } from '../intelligence/model/MioNativeRouterProvider';
+import type { LocalModelProfile } from '../intelligence/model/MioCognitiveOrchestrator';
 import { OllamaProvider } from '../intelligence/model/OllamaProvider';
 import { SecureProxyModelProvider } from '../intelligence/model/SecureProxyModelProvider';
 import { taskRuntime } from '../orchestrator/TaskRuntime';
@@ -202,6 +204,29 @@ export class ModelRouter {
     if (lastUserIndex >= 0) messages.splice(lastUserIndex, 0, applicationMessage);
     else messages.push(applicationMessage);
     return { ...request, messages, applicationContext: undefined };
+  }
+
+  /** Explicit read-only native route; preserves legacy provider configuration. */
+  public static async generateNativeLocal(request: ModelRequest, profiles: readonly LocalModelProfile[] = [{model:'qwen2.5:3b',workloads:['CHAT','ANALYSIS','CODE','CREATIVE']}], timeoutMs = 120000): Promise<ModelResponse> {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000) throw Error('MIO_NATIVE_TIMEOUT_INVALID');
+    if (emergencyStop.isEmergencyStopped()) throw Error('Model request cancelled');
+    const taskId = typeof request.metadata?.taskId === 'string' ? request.metadata.taskId : undefined;
+    const mode = taskId ? taskRuntime.get(taskId)?.mode : undefined;
+    if (taskId) {
+      if (taskRuntime.isCancelled(taskId)) throw Error('Model request cancelled');
+      const decision = resourceGovernor.consumeModelCall(taskId, false, mode);
+      if (!decision.allowed) throw Error(decision.reason ?? 'Resource budget blocked native model execution');
+    }
+    const provider = new MioNativeRouterProvider(profiles);
+    const startedAt = Date.now();
+    try {
+      const result = await this.executeProvider(provider, request, timeoutMs);
+      this.recordProvenance(provider, request, startedAt, 'SUCCEEDED', result.model, 0, 0);
+      return result;
+    } catch (error) {
+      this.recordProvenance(provider, request, startedAt, 'FAILED', 'native-local', 0, undefined, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   }
 
   public static async generate(request: ModelRequest, timeoutMs: number = 30000): Promise<ModelResponse> {
