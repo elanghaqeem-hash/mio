@@ -50,3 +50,6 @@ jobs:
       - name: Verify actual Windows production runtime admission remains denied
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-production-admission-check.ts
+      - name: Native binary journal interoperability (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-native-binary-interop.ts
