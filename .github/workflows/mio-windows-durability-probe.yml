@@ -59,3 +59,7 @@ jobs:
       - name: Native logical transaction session (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-native-logical-session-check.ts
+      - name: Native trusted directory and restrictive ACL (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-directory-acl-probe.ps1
