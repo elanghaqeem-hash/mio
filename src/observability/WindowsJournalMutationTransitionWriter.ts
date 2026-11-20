@@ -54,7 +54,7 @@ export class WindowsJournalMutationTransitionWriter {
       : false;
     if (!valid) fail('WINDOWS_JOURNAL_TRANSITION_DENIED');
     const payload = JSON.stringify({
-      version: 1, ...identity, sequence: (state?.sequence ?? 0) + 1,
+      version: 1, projectId: identity.projectId, taskId: identity.taskId, requestId: identity.requestId, sequence: (state?.sequence ?? 0) + 1,
       phase, previousDigest: entries.at(-1)?.digest ?? null,
     });
     try {
