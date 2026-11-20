@@ -56,3 +56,6 @@ jobs:
       - name: Native same-handle journal session validation (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-native-journal-session-check.ts
+      - name: Native logical transaction session (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-native-logical-session-check.ts
