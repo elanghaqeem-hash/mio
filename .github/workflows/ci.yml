@@ -41,6 +41,9 @@ jobs:
       - name: Local model allocation regression
         run: node --import tsx scripts/benchmarks/mio-model-allocation-check.ts
 
+      - name: Native application ModelRouter integration regression
+        run: node --import tsx scripts/benchmarks/mio-native-router-integration-check.ts
+
       - name: Lint
         run: npm run lint
 
