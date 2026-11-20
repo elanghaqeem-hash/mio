@@ -28,3 +28,5 @@ jobs:
         run: node --import tsx scripts/benchmarks/windows-durability-probe.ts
       - name: Windows append-only journal prototype integrity
         run: node --import tsx scripts/benchmarks/windows-journal-prototype-check.ts
+      - name: Held file identity and pathname replacement diagnosis
+        run: node scripts/benchmarks/windows-journal-file-id-probe.mjs
