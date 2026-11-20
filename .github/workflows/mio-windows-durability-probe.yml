@@ -82,3 +82,6 @@ jobs:
       - name: Incident storage generation contract (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-journal-incident-storage-check.ts
+      - name: Incident CORE emergency stop bridge (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-stop-check.ts
