@@ -21,7 +21,7 @@ public static class MioDirectoryProbe {
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     private static extern bool MoveFileEx(string source,string target,uint flags);
     public static SafeFileHandle Open(string path) {
-        var h=CreateFileW(path,0x80,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
+        var h=CreateFileW(path,0x81,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
         if(h.IsInvalid){int e=Marshal.GetLastWin32Error();h.Dispose();throw new Win32Exception(e);}
         try {
             AttributeTag a;
