@@ -23,6 +23,7 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - name: Install exact lockfile dependencies
+        id: dependencies
         run: npm ci
       - name: Probe file flush, exclusive lock, rename, and directory publication
         run: node --import tsx scripts/benchmarks/windows-durability-probe.ts
@@ -31,5 +32,6 @@ jobs:
       - name: Held file identity and pathname replacement diagnosis
         run: node scripts/benchmarks/windows-journal-file-id-probe.mjs
       - name: Native Windows file-ID and handle sharing probe (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         shell: pwsh
         run: ./scripts/benchmarks/windows-native-identity-probe.ps1
