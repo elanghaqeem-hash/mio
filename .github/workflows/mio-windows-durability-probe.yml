@@ -30,3 +30,6 @@ jobs:
         run: node --import tsx scripts/benchmarks/windows-journal-prototype-check.ts
       - name: Held file identity and pathname replacement diagnosis
         run: node scripts/benchmarks/windows-journal-file-id-probe.mjs
+      - name: Native Windows file-ID and handle sharing probe (diagnosis only)
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-identity-probe.ps1
