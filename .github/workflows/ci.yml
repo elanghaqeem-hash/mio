@@ -35,6 +35,9 @@ jobs:
       - name: CORE cognitive orchestration regression
         run: node --import tsx scripts/benchmarks/mio-cognitive-orchestrator-check.ts
 
+      - name: Native local model inventory regression
+        run: node --import tsx scripts/benchmarks/mio-native-model-inventory-check.ts
+
       - name: Lint
         run: npm run lint
 
