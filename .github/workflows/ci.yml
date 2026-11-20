@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: CORE intelligence lifecycle regression
+        run: node --import tsx scripts/benchmarks/mio-core-intelligence-lifecycle-check.ts
+
       - name: Lint
         run: npm run lint
 
