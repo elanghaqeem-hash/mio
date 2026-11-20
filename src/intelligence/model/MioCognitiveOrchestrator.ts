@@ -1,6 +1,8 @@
 /** Isolated read-only local orchestration. Classification is heuristic, not learned reasoning. */
 import { MioCoreLocalModelAdapter } from './MioCoreLocalModelAdapter';
 import { MioIntelligenceLifecycle } from '../../core/MioIntelligenceLifecycle';
+import { MioNativeModelInventory, selectInstalledProfiles } from './MioNativeModelInventory';
+import { allocateLocalModels, type ModelAllocationBudget } from './MioModelAllocation';
 export type CognitiveWorkload='CHAT'|'ANALYSIS'|'CODE'|'CREATIVE';
 export interface LocalModelProfile {model:string;workloads:readonly CognitiveWorkload[];}
 const kinds:CognitiveWorkload[]=['CHAT','ANALYSIS','CODE','CREATIVE'];
@@ -20,12 +22,20 @@ export class MioCognitiveOrchestrator {
   this.profiles=profiles.map(p=>({model:p.model,workloads:[...p.workloads]}));
   this.core=new MioIntelligenceLifecycle(1);
  }
- async generate(prompt:string,timeoutMs=120000,workload?:CognitiveWorkload){
+ async generate(prompt:string,timeoutMs=120000,workload?:CognitiveWorkload,budget?:ModelAllocationBudget){
   if(typeof prompt!=='string'||!prompt.trim()||prompt.length>32000||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>300000||(workload!==undefined&&!kinds.includes(workload)))throw Error('MIO_COGNITIVE_REQUEST_INVALID');
   const task=this.core.begin(), started=performance.now(), selected=workload??classifyCognitiveRequest(prompt);
   const remaining=()=>{const ms=Math.floor(timeoutMs-(performance.now()-started));if(task.signal.aborted||ms<1)throw Error('MIO_COGNITIVE_CANCELLED_OR_TIMEOUT');return ms;};
   try{
-   for(const profile of this.profiles.filter(p=>p.workloads.includes(selected))){
+   const inventory=new MioNativeModelInventory(this.transport);
+   const cancelDiscovery=()=>inventory.dispose();
+   task.signal.addEventListener('abort',cancelDiscovery,{once:true});
+   let candidates:LocalModelProfile[];
+   try{
+    const installed=await inventory.discover(Math.min(8000,remaining()));
+    candidates=budget===undefined?selectInstalledProfiles(installed,this.profiles,selected):allocateLocalModels(installed,this.profiles,selected,budget);
+   }finally{task.signal.removeEventListener('abort',cancelDiscovery);inventory.dispose();}
+   for(const profile of candidates){
     const adapter=new MioCoreLocalModelAdapter(profile.model,this.transport);
     const abort=()=>adapter.dispose();
     task.signal.addEventListener('abort',abort,{once:true});
