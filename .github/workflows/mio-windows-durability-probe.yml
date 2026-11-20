@@ -47,3 +47,6 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         shell: pwsh
         run: ./scripts/benchmarks/windows-native-crash-probe.ps1
+      - name: Verify actual Windows production runtime admission remains denied
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-production-admission-check.ts
