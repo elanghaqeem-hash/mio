@@ -76,3 +76,6 @@ jobs:
       - name: Incident registry and single-use review challenge (diagnosis only)
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: node --import tsx scripts/benchmarks/windows-journal-incident-registry-check.ts
+      - name: Authenticated incident archive (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-archive-check.ts
