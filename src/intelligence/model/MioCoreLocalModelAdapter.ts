@@ -1,4 +1,5 @@
 /** Local-only text inference adapter. No tools, external providers or mutation execution. */
+import type { ModelMessage } from '../../types/models';
 import { MioIntelligenceLifecycle } from '../../core/MioIntelligenceLifecycle';
 export class MioCoreLocalModelAdapter {
  private readonly core=new MioIntelligenceLifecycle(1);
@@ -36,8 +37,13 @@ export class MioCoreLocalModelAdapter {
  }
  generate(prompt:string,timeoutMs=120000){
   if(typeof prompt!=='string'||!prompt.trim()||prompt.length>32000)throw Error('MIO_LOCAL_PROMPT_INVALID');
+  return this.generateMessages([{role:'user',content:prompt}],timeoutMs);
+ }
+ generateMessages(messages:readonly ModelMessage[],timeoutMs=120000){
+  if(!Array.isArray(messages)||messages.length<1||messages.length>128||messages.some((m:ModelMessage)=>!m||!['system','user','assistant'].includes(m.role)||typeof m.content!=='string')||messages.reduce((n:number,m:ModelMessage)=>n+m.content.length,0)>32000||!messages.some((m:ModelMessage)=>m.role==='user'&&m.content.trim()))throw Error('MIO_LOCAL_MESSAGES_INVALID');
+  const snapshot=messages.map((m:ModelMessage)=>({role:m.role,content:m.content}));
   return this.invoke(timeoutMs,async signal=>{
-   const p=await this.request('/api/chat',signal,{model:this.model,stream:false,messages:[{role:'user',content:prompt}],options:{num_predict:1024}});
+   const p=await this.request('/api/chat',signal,{model:this.model,stream:false,messages:snapshot,options:{num_predict:1024}});
    if(p?.done!==true||p.model!==this.model||typeof p.message?.content!=='string'||!p.message.content.trim()||p.message.content.length>65536)throw Error('MIO_LOCAL_RESPONSE_INVALID');
    return {text:p.message.content.trim(),model:this.model,provider:'ollama' as const,localOnly:true as const,mutationPermitted:false as const};
   });
