@@ -60,6 +60,14 @@ export async function runWindowsJournalMutationTransitionWriterTests(): Promise<
       check(fs.existsSync(filename + '.writer.lock'), 'quarantined lock removed');
       check(denied(() => new WindowsJournalMutationTransitionWriter(filename)), 'quarantined history reopened');
     })],
+    ['extra caller fields cannot override journal metadata', () => fixture(filename => {
+      const writer = new WindowsJournalMutationTransitionWriter(filename);
+      const supplied = { ...identity, version: 99, extra: 'untrusted', sequence: 999, previousDigest: 'forged', phase: 'COMMITTED' };
+      const record = JSON.parse(writer.append(supplied, 'PREPARED').json);
+      check(record.version === 1 && record.sequence === 1 && record.previousDigest === null && record.phase === 'PREPARED', 'caller metadata accepted');
+      check(!Object.prototype.hasOwnProperty.call(record, 'extra'), 'unexpected caller field persisted');
+      writer.close();
+    })],
     ['logical UNCERTAIN is terminal and never automatically replayed', () => fixture(filename => {
       const writer = new WindowsJournalMutationTransitionWriter(filename);
       writer.append(identity, 'PREPARED');
