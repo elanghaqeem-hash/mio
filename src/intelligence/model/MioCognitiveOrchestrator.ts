@@ -3,6 +3,7 @@ import { MioCoreLocalModelAdapter } from './MioCoreLocalModelAdapter';
 import { MioIntelligenceLifecycle } from '../../core/MioIntelligenceLifecycle';
 import { MioNativeModelInventory, selectInstalledProfiles } from './MioNativeModelInventory';
 import { allocateLocalModels, type ModelAllocationBudget } from './MioModelAllocation';
+import type { ModelMessage } from '../../types/models';
 export type CognitiveWorkload='CHAT'|'ANALYSIS'|'CODE'|'CREATIVE';
 export interface LocalModelProfile {model:string;workloads:readonly CognitiveWorkload[];}
 const kinds:CognitiveWorkload[]=['CHAT','ANALYSIS','CODE','CREATIVE'];
@@ -22,7 +23,7 @@ export class MioCognitiveOrchestrator {
   this.profiles=profiles.map(p=>({model:p.model,workloads:[...p.workloads]}));
   this.core=new MioIntelligenceLifecycle(1);
  }
- async generate(prompt:string,timeoutMs=120000,workload?:CognitiveWorkload,budget?:ModelAllocationBudget){
+ async generate(prompt:string,timeoutMs=120000,workload?:CognitiveWorkload,budget?:ModelAllocationBudget,messages?:readonly ModelMessage[]){
   if(typeof prompt!=='string'||!prompt.trim()||prompt.length>32000||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>300000||(workload!==undefined&&!kinds.includes(workload)))throw Error('MIO_COGNITIVE_REQUEST_INVALID');
   const task=this.core.begin(), started=performance.now(), selected=workload??classifyCognitiveRequest(prompt);
   const remaining=()=>{const ms=Math.floor(timeoutMs-(performance.now()-started));if(task.signal.aborted||ms<1)throw Error('MIO_COGNITIVE_CANCELLED_OR_TIMEOUT');return ms;};
@@ -43,7 +44,7 @@ export class MioCognitiveOrchestrator {
      remaining();
      const ready=await adapter.readiness(Math.min(8000,remaining()));
      if(!ready.ready)continue;
-     const response=await adapter.generate(prompt,remaining());
+     const response=messages===undefined?await adapter.generate(prompt,remaining()):await adapter.generateMessages(messages,remaining());
      if(!this.core.finish(task.token))throw Error('MIO_COGNITIVE_RESULT_DENIED');
      return {...response,workload:selected,selection:'FIRST_READY_CONFIGURED_LOCAL_MODEL' as const};
     }finally{task.signal.removeEventListener('abort',abort);adapter.dispose();}
