@@ -53,6 +53,9 @@ jobs:
       - name: Bounded Ollama JSON decoding regression
         run: node --import tsx scripts/benchmarks/mio-bounded-local-json-check.ts
 
+      - name: Native inference privacy and reliability metrics regression
+        run: node --import tsx scripts/benchmarks/mio-native-inference-metrics-check.ts
+
       - name: Lint
         run: npm run lint
 
