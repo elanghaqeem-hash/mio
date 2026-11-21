@@ -56,6 +56,9 @@ jobs:
       - name: Native inference privacy and reliability metrics regression
         run: node --import tsx scripts/benchmarks/mio-native-inference-metrics-check.ts
 
+      - name: Desktop hardware-aware admission regression
+        run: node --import tsx scripts/benchmarks/mio-native-hardware-admission-check.ts
+
       - name: Lint
         run: npm run lint
 
