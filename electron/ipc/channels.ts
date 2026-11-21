@@ -9,6 +9,9 @@ export const IPC_CHANNELS = {
   GET_SYSTEM_INFO: 'mio:system:getInfo',
   GET_APP_VERSION: 'mio:system:getVersion',
 
+  // Read-only local Ollama chat, routed through trusted Electron main.
+  DESKTOP_NATIVE_LOCAL_CHAT: 'mio:ai:nativeLocalChat',
+
   // Desktop Notifications
   SHOW_NOTIFICATION: 'mio:notification:show',
 
