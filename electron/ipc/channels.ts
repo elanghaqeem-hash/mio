@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
   // Desktop Notifications
   SHOW_NOTIFICATION: 'mio:notification:show',
 
+  DESKTOP_LOCAL_CHAT: 'mio:ai:localChat',
+
   // Emergency Stop & Lifecycle
   EMERGENCY_STOP: 'mio:emergency:stop',
   QUIT_APP: 'mio:app:quit',
