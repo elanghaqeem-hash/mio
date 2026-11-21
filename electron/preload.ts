@@ -124,6 +124,7 @@ export interface MioDesktopAPI {
     cpuCores: number;
   }>;
   getAppVersion: () => Promise<string>;
+  nativeLocalChat: (request: {messages:Array<{role:'system'|'user'|'assistant';content:string}>}) => Promise<{success:boolean;text?:string;model?:string;source?:'LOCAL_ENDPOINT';error?:string}>;
 
   showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<{ success: boolean; error?: string }>;
   triggerEmergencyStop: (reason: string) => Promise<{ success: boolean }>;
@@ -164,6 +165,7 @@ const desktopAPI: MioDesktopAPI = {
 
   getSystemInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SYSTEM_INFO),
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
+  nativeLocalChat: (request) => ipcRenderer.invoke(IPC_CHANNELS.DESKTOP_NATIVE_LOCAL_CHAT, request),
 
   showNotification: (options) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_NOTIFICATION, options),
   triggerEmergencyStop: (reason) => ipcRenderer.invoke(IPC_CHANNELS.EMERGENCY_STOP, reason),
