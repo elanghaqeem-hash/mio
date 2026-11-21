@@ -49,7 +49,7 @@ export const ChatStudioView: React.FC = () => {
     if (nativeLocalMode) {
       setNativeBusy(true); setNativeError(null);
       try {
-        const nativeMessages: ModelMessage[] = [...conversation, { role: 'user', content: userText }];
+        const nativeMessages: ModelMessage[] = [...conversation.slice(-11), { role: 'user', content: userText }];
         const desktopBridge = getDesktopNativeChatBridge();
         const response = desktopBridge ? await generateDesktopNativeChat(nativeMessages, desktopBridge) : await ModelRouter.generateNativeLocal({ messages: nativeMessages });
         setMessages((prev) => [...prev, { id: `msg_native_${Date.now()}`, sender: 'mio', text: response.text, timestamp: Date.now() }]);
