@@ -47,6 +47,9 @@ jobs:
       - name: Desktop native Ollama chat IPC service regression
         run: node --import tsx scripts/benchmarks/mio-desktop-native-chat-check.ts
 
+      - name: Desktop inference timeout and stale-result regression
+        run: node --import tsx scripts/benchmarks/mio-desktop-timeout-regression.ts
+
       - name: Lint
         run: npm run lint
 
