@@ -54,7 +54,8 @@ async function main(){
  assert.equal(stop.inspect().active,1);
  stop.stop();
  assert.equal((await pending).error,'MIO_DESKTOP_NATIVE_ABORTED');
- assert.equal(stop.inspect().stopped,1);
+ assert.equal(stop.inspect().stopped,true);
+ assert.equal(stop.inspect().cancelledByStop,1);
  assert.equal(stop.inspect().timedOut,0);
  const failed=new NativeDesktopChatService(async()=>{throw Error('ECONNREFUSED');});
  assert.equal((await failed.chat({messages})).success,false);
