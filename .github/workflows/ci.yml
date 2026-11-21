@@ -65,6 +65,9 @@ jobs:
       - name: Adaptive calibrated local model selection regression
         run: node --import tsx scripts/benchmarks/mio-adaptive-local-selection-check.ts
 
+      - name: Local model benchmark summary regression
+        run: node --import tsx scripts/benchmarks/mio-local-benchmark-summary-check.ts
+
       - name: Lint
         run: npm run lint
 
