@@ -6,7 +6,7 @@ import type { ModelMessage } from '../../src/types/models';
 const MODEL='qwen2.5:3b';
 const HOST='http://127.0.0.1:11434';
 const LIMIT_MS=120000;
-type Trial={turn:number;durationMs:number;model:string;responseChars:number;heapDeltaBytes:number};
+type Trial={turn:number;durationMs:number;model:string;responseChars:number;heapDeltaBytes:number;rssBytes:number;cpuUserMicros:number;cpuSystemMicros:number};
 async function main(){
  if(process.env.MIO_LIVE_OLLAMA!=='1'){
   console.error('NOT_RUN: set MIO_LIVE_OLLAMA=1 to opt into real local Ollama inference. No tests were run.');
@@ -29,6 +29,7 @@ async function main(){
   for(let i=0;i<prompts.length;i++){
    history.push({role:'user',content:prompts[i]});
    const heap=process.memoryUsage().heapUsed;
+   const beforeCpu=process.cpuUsage();
    const started=performance.now();
    const response=await svc.chat({messages:history});
    const ms=Math.round(performance.now()-started);
@@ -37,11 +38,17 @@ async function main(){
    assert.equal(response.source,'LOCAL_ENDPOINT','Response came from nonlocal source');
    assert.ok(response.text&&response.text.length>0,'Empty local inference response');
    history.push({role:'assistant',content:response.text!});
-   samples.push({turn:i+1,durationMs:ms,model:response.model!,responseChars:response.text!.length,heapDeltaBytes:process.memoryUsage().heapUsed-heap});
+   const cpu=process.cpuUsage(beforeCpu);
+   samples.push({turn:i+1,durationMs:ms,model:response.model!,responseChars:response.text!.length,heapDeltaBytes:process.memoryUsage().heapUsed-heap,rssBytes:process.memoryUsage().rss,cpuUserMicros:cpu.user,cpuSystemMicros:cpu.system});
   }
  }finally{svc.stop();}
+ const durations=samples.map(x=>x.durationMs).sort((a,b)=>a-b);
  const result={stage:'M-2.02b',mode:'LIVE_LOCAL_OLLAMA',status:'PASS_TRANSPORT_AND_TWO_TURNS',model:MODEL,host:HOST,
   totalDurationMs:Math.round(performance.now()-start),samples,
+  p50TurnMs:durations[Math.ceil(durations.length*.5)-1]??null,
+  p95TurnMs:durations[Math.ceil(durations.length*.95)-1]??null,
+  serviceDiagnostics:svc.inspect(),
+  cpuScope:'NODE_PROCESS_ONLY',memoryScope:'NODE_PROCESS_ONLY',gpuUsage:'NOT_MEASURED',
   semanticQuality:'NOT_SCORED',powerLossDurability:'NOT_TESTED',desktopGui:'NOT_TESTED',
   externalApiKeysRequired:false};
  console.log(JSON.stringify(result,null,2));
