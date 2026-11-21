@@ -3,8 +3,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { IPC_CHANNELS } from './ipc/channels';
 import { setupIpcHandlers } from './ipc/handlers';
+import { NativeDesktopChatService } from './ipc/nativeLocalChat';
 
 let mainWindow: BrowserWindow | null = null;
+let nativeChat: NativeDesktopChatService | null = null;
 let tray: Tray | null = null;
 let cancelActiveTrainingJobs: (() => void) | null = null;
 let hasActiveWorkspaceMutations: (() => boolean) | null = null;
@@ -63,9 +65,10 @@ function createWindow(): BrowserWindow {
   });
 
   const handlers = setupIpcHandlers(mainWindow);
+  nativeChat = new NativeDesktopChatService();
   cancelActiveTrainingJobs = handlers.cancelAllTrainingJobs;
   hasActiveWorkspaceMutations = handlers.hasActiveWorkspaceMutations;
-  requestStopWorkspaceMutations = handlers.requestStopWorkspaceMutations;
+  requestStopWorkspaceMutations = () => { nativeChat?.stop(); handlers.requestStopWorkspaceMutations(); };
   const assertTrustedSender = (event: IpcMainInvokeEvent) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
       throw new Error('Rejected IPC invocation from untrusted renderer frame');
@@ -87,10 +90,12 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, () => handlers.handleIsMaximized());
   secureHandle(IPC_CHANNELS.GET_SYSTEM_INFO, () => handlers.handleGetSystemInfo());
   secureHandle(IPC_CHANNELS.GET_APP_VERSION, () => handlers.handleGetAppVersion());
+  secureHandle(IPC_CHANNELS.DESKTOP_NATIVE_LOCAL_CHAT, (_event, args) => nativeChat?.chat(args[0]) ?? {success:false,error:'MIO_DESKTOP_NATIVE_UNAVAILABLE'});
   secureHandle(IPC_CHANNELS.SHOW_NOTIFICATION, (event, args) => handlers.handleShowNotification(event, args[0]));
-  secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => handlers.handleEmergencyStop(event, args[0]));
+  secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => { nativeChat?.stop(); return handlers.handleEmergencyStop(event, args[0]); });
   secureHandle(IPC_CHANNELS.QUIT_APP, () => {
     if (handlers.hasActiveWorkspaceMutations()) return {success:false,error:'WORKSPACE_MUTATION_DRAIN_REQUIRED'};
+    nativeChat?.stop();
     handlers.revokeAllWorkspaceAuthority();
     app.quit();
     return {success:true};
@@ -149,6 +154,7 @@ function createWindow(): BrowserWindow {
   });
 
   mainWindow.on('closed', () => {
+    nativeChat?.stop(); nativeChat = null;
     handlers.revokeAllWorkspaceAuthority();
     cancelActiveTrainingJobs = null;
     hasActiveWorkspaceMutations = null;
@@ -227,6 +233,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', event => {
+  nativeChat?.stop();
   cancelActiveTrainingJobs?.();
   if (hasActiveWorkspaceMutations?.()) {
     requestStopWorkspaceMutations?.();
