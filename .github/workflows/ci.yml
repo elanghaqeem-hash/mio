@@ -62,6 +62,9 @@ jobs:
       - name: Native local runtime preflight regression
         run: node --import tsx scripts/benchmarks/mio-native-runtime-preflight-check.ts
 
+      - name: Adaptive calibrated local model selection regression
+        run: node --import tsx scripts/benchmarks/mio-adaptive-local-selection-check.ts
+
       - name: Lint
         run: npm run lint
 
