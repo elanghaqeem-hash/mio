@@ -50,6 +50,9 @@ jobs:
       - name: Desktop inference timeout and stale-result regression
         run: node --import tsx scripts/benchmarks/mio-desktop-timeout-regression.ts
 
+      - name: Bounded Ollama JSON decoding regression
+        run: node --import tsx scripts/benchmarks/mio-bounded-local-json-check.ts
+
       - name: Lint
         run: npm run lint
 
