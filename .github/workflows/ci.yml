@@ -26,6 +26,48 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: CORE intelligence lifecycle regression
+        run: node --import tsx scripts/benchmarks/mio-core-intelligence-lifecycle-check.ts
+
+      - name: CORE local model adapter regression
+        run: node --import tsx scripts/benchmarks/mio-core-local-model-check.ts
+
+      - name: CORE cognitive orchestration regression
+        run: node --import tsx scripts/benchmarks/mio-cognitive-orchestrator-check.ts
+
+      - name: Native local model inventory regression
+        run: node --import tsx scripts/benchmarks/mio-native-model-inventory-check.ts
+
+      - name: Local model allocation regression
+        run: node --import tsx scripts/benchmarks/mio-model-allocation-check.ts
+
+      - name: Native application ModelRouter integration regression
+        run: node --import tsx scripts/benchmarks/mio-native-router-integration-check.ts
+
+      - name: Desktop native Ollama chat IPC service regression
+        run: node --import tsx scripts/benchmarks/mio-desktop-native-chat-check.ts
+
+      - name: Desktop inference timeout and stale-result regression
+        run: node --import tsx scripts/benchmarks/mio-desktop-timeout-regression.ts
+
+      - name: Bounded Ollama JSON decoding regression
+        run: node --import tsx scripts/benchmarks/mio-bounded-local-json-check.ts
+
+      - name: Native inference privacy and reliability metrics regression
+        run: node --import tsx scripts/benchmarks/mio-native-inference-metrics-check.ts
+
+      - name: Desktop hardware-aware admission regression
+        run: node --import tsx scripts/benchmarks/mio-native-hardware-admission-check.ts
+
+      - name: Native local runtime preflight regression
+        run: node --import tsx scripts/benchmarks/mio-native-runtime-preflight-check.ts
+
+      - name: Adaptive calibrated local model selection regression
+        run: node --import tsx scripts/benchmarks/mio-adaptive-local-selection-check.ts
+
+      - name: Local model benchmark summary regression
+        run: node --import tsx scripts/benchmarks/mio-local-benchmark-summary-check.ts
+
       - name: Lint
         run: npm run lint
 
@@ -63,3 +105,7 @@ jobs:
         env:
           ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
         run: npm run test:electron-gui
+      - name: Run native Electron chat preload / IPC / STOP smoke
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
+        run: xvfb-run -a ./node_modules/.bin/electron --no-sandbox scripts/e2e/electron-native-chat-gui.cjs

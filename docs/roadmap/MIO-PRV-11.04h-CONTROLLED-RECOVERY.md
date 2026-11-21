@@ -1,0 +1,3 @@
+# PRV-11.04h — Controlled recovery evidence
+
+Prior native CI 44688435221 verified 35 journal regression cases and 10 native/admission diagnostics; overall failure remains Node path identity. New read-only bounded snapshot analysis checks binary and logical history and returns SHA-256, record count and recorded state, always denying replay, lock release and runtime activation. Eight scenarios added to Windows CI (pending). No filesystem mutation or lock management API exposed. Evidence digest is not authentication or proof of side effect, freshness, physical persistence or trusted provenance. Manual authenticated review, stable acquisition of snapshot under native handle, authenticated incident registry, durable quarantine and STOP wiring remain open. No deployment.

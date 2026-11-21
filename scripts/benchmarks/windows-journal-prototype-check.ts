@@ -11,11 +11,11 @@ async function main() {
   const result = await runWindowsCheckpointJournalPrototypeTests();
   if (result.passed !== 4 || result.total !== 4) throw Error('WINDOWS_JOURNAL_PROTOTYPE_INCOMPLETE');
   const coordination = await runWindowsJournalWriterPrototypeTests();
-  if (coordination.passed !== 4 || coordination.total !== 4) throw Error('WINDOWS_JOURNAL_WRITER_COORDINATION_INCOMPLETE');
+  if (coordination.passed !== 5 || coordination.total !== 5) throw Error('WINDOWS_JOURNAL_WRITER_COORDINATION_INCOMPLETE');
   const independent = await runWindowsJournalInterprocessTests();
   if (independent.passed !== 2 || independent.total !== 2) throw Error('WINDOWS_JOURNAL_INTERPROCESS_INCOMPLETE');
   const commit = await runWindowsJournalCommitVerifierTests();
-  if (commit.passed !== 6 || commit.total !== 6) throw Error('WINDOWS_JOURNAL_COMMIT_LOGIC_INCOMPLETE');
+  if (commit.passed !== 7 || commit.total !== 7) throw Error('WINDOWS_JOURNAL_COMMIT_LOGIC_INCOMPLETE');
   const provisioning = await runWindowsJournalProvisioningInspectionTests();
   if (provisioning.total !== 5 || provisioning.passed !== 5) throw Error('WINDOWS_PROVISIONING_DIAGNOSTICS_INCOMPLETE');
   const attestation = await runWindowsJournalAuthenticatedProvisioningTests();

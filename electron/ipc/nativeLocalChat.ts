@@ -1,0 +1,70 @@
+/** Electron main-process native chat: fixed loopback, bounded text-only IPC, no tools or remote fallback. */
+import { MioNativeInferenceMetrics, type NativeInferenceOutcome } from './nativeInferenceMetrics';
+import { assessNativeHardware, readNativeHardwareSnapshot, type LocalHardwareSnapshot } from './nativeHardwareAdmission';
+import { MioNativeRouterProvider } from '../../src/intelligence/model/MioNativeRouterProvider';
+import type { CalibratedLocalModel } from '../../src/intelligence/model/MioAdaptiveLocalModelSelection';
+import type { ModelMessage } from '../../src/types/models';
+
+export interface NativeDesktopChatRequest { messages: ModelMessage[]; }
+export interface NativeDesktopChatResult { success:boolean; text?:string; model?:string; source?:'LOCAL_ENDPOINT'; error?:string; }
+const LIMIT=32000;
+export function validateNativeDesktopChatRequest(value:unknown):value is NativeDesktopChatRequest {
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==1||!('messages' in value))return false;
+ const messages=value.messages;
+ if(!Array.isArray(messages)||messages.length<1||messages.length>12)return false;
+ let chars=0;
+ for(const item of messages){
+  if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).length!==2||
+     !Object.hasOwn(item,'role')||!Object.hasOwn(item,'content')||
+     !['system','user','assistant'].includes(item.role)||typeof item.content!=='string')return false;
+  chars+=item.content.length;
+  if(chars>LIMIT)return false;
+ }
+ return messages.at(-1)?.role==='user'&&messages.at(-1)?.content.trim().length>0;
+}
+export class NativeDesktopChatService {
+ private stopped=false;
+ private readonly active=new Set<AbortController>();
+ private readonly metrics=new MioNativeInferenceMetrics();
+ constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000,private readonly hardware:()=>LocalHardwareSnapshot=readNativeHardwareSnapshot,
+ private readonly calibratedModels?:readonly CalibratedLocalModel[]){
+  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw Error('MIO_DESKTOP_NATIVE_TIMEOUT_INVALID');
+ }
+ async chat(request:unknown):Promise<NativeDesktopChatResult>{
+  if(this.stopped)return {success:false,error:'MIO_DESKTOP_NATIVE_STOPPED'};
+  if(!validateNativeDesktopChatRequest(request))return {success:false,error:'MIO_DESKTOP_NATIVE_REQUEST_INVALID'};
+  if(this.active.size>0)return {success:false,error:'MIO_DESKTOP_NATIVE_BUSY'};
+  let allowed=false;
+  let hardwareError='MIO_HARDWARE_UNKNOWN';
+  let snapshot:LocalHardwareSnapshot;
+  try{snapshot=this.hardware();const admission=assessNativeHardware(snapshot);allowed=admission.allowed;hardwareError=admission.reason;}
+  catch{return {success:false,error:'MIO_HARDWARE_UNKNOWN'};}
+  if(!allowed)return {success:false,error:hardwareError};
+  const controller=new AbortController();
+  const startedAt=performance.now();
+  let outcome:NativeInferenceOutcome='FAILED';
+  this.active.add(controller);
+  const timer=setTimeout(()=>controller.abort(),this.timeoutMs);
+  try{
+   const messages=request.messages.map(m=>({role:m.role,content:m.content}));
+   const provider=new MioNativeRouterProvider([{model:'qwen2.5:3b',workloads:['CHAT','ANALYSIS','CODE','CREATIVE']}],this.transport,
+    this.calibratedModels===undefined?undefined:{profiles:this.calibratedModels,freeMemoryBytes:snapshot.freeMemoryBytes,reserveMemoryBytes:768*1024*1024});
+   const response=await Promise.race([
+    provider.generate({messages},controller.signal),
+    new Promise<never>((_,reject)=>{
+     if(controller.signal.aborted){reject(Error('MIO_DESKTOP_NATIVE_ABORTED'));return;}
+     controller.signal.addEventListener('abort',()=>reject(Error('MIO_DESKTOP_NATIVE_ABORTED')),{once:true});
+    }),
+   ]);
+   if(this.stopped||controller.signal.aborted){outcome=this.stopped?'STOPPED':'TIMEOUT';return {success:false,error:'MIO_DESKTOP_NATIVE_ABORTED'};}
+   if(!response.text||response.text.length>65536)return {success:false,error:'MIO_DESKTOP_NATIVE_RESPONSE_INVALID'};
+   outcome='SUCCESS';
+   return {success:true,text:response.text,model:response.model,source:'LOCAL_ENDPOINT'};
+  }catch(error){
+   outcome=this.stopped?'STOPPED':controller.signal.aborted?'TIMEOUT':'FAILED';
+   return {success:false,error:this.stopped||controller.signal.aborted?'MIO_DESKTOP_NATIVE_ABORTED':error instanceof Error?error.message.slice(0,180):'MIO_DESKTOP_NATIVE_FAILED'};
+  }finally{clearTimeout(timer);this.active.delete(controller);this.metrics.record(outcome,performance.now()-startedAt);}
+ }
+ stop(){if(this.stopped)return;this.stopped=true;for(const controller of this.active)controller.abort();}
+ inspect(){return {...this.metrics.snapshot(this.active.size,this.stopped),stopped:this.stopped};}
+}

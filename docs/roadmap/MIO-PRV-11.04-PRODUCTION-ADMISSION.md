@@ -1,0 +1,5 @@
+# PRV-11.04 — Production durability admission: NO-GO
+
+Evidence: Windows CI 44658455474 passed 33 journal prototype cases and native k/l/m/n diagnostics. Overall workflow remains failed on Node path/handle comparison; directory fsync remains EPERM. Existing actual production runtime factory denies Windows before disk initialization. New regression calls that factory for existing and absent absolute roots, checks exact denial and no disk changes; CI result pending. No runtime gate relaxation or environment override.
+
+Required before separate reviewed activation: trusted parent handle and ACL threat model; no post-open alias races; native real hash-chain journal integration; authenticated approval and side-effect verification; full crash matrix across all logical states; physical power-loss durability on target storage; dependency remediation and clean release validation. Diagnostic fixture success is not admission. No deployment. Read-only work and other existing supported routes are not changed by this PR.
