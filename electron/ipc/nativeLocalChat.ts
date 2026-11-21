@@ -1,4 +1,5 @@
 /** Electron main-process native chat: fixed loopback, bounded text-only IPC, no tools or remote fallback. */
+import { MioNativeInferenceMetrics, type NativeInferenceOutcome } from './nativeInferenceMetrics';
 import { MioNativeRouterProvider } from '../../src/intelligence/model/MioNativeRouterProvider';
 import type { ModelMessage } from '../../src/types/models';
 
@@ -22,6 +23,7 @@ export function validateNativeDesktopChatRequest(value:unknown):value is NativeD
 export class NativeDesktopChatService {
  private stopped=false;
  private readonly active=new Set<AbortController>();
+ private readonly metrics=new MioNativeInferenceMetrics();
  constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000){
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw Error('MIO_DESKTOP_NATIVE_TIMEOUT_INVALID');
  }
@@ -30,6 +32,8 @@ export class NativeDesktopChatService {
   if(!validateNativeDesktopChatRequest(request))return {success:false,error:'MIO_DESKTOP_NATIVE_REQUEST_INVALID'};
   if(this.active.size>0)return {success:false,error:'MIO_DESKTOP_NATIVE_BUSY'};
   const controller=new AbortController();
+  const startedAt=performance.now();
+  let outcome:NativeInferenceOutcome='FAILED';
   this.active.add(controller);
   const timer=setTimeout(()=>controller.abort(),this.timeoutMs);
   try{
@@ -44,11 +48,13 @@ export class NativeDesktopChatService {
    ]);
    if(this.stopped||controller.signal.aborted)return {success:false,error:'MIO_DESKTOP_NATIVE_ABORTED'};
    if(!response.text||response.text.length>65536)return {success:false,error:'MIO_DESKTOP_NATIVE_RESPONSE_INVALID'};
+   outcome='SUCCESS';
    return {success:true,text:response.text,model:response.model,source:'LOCAL_ENDPOINT'};
   }catch(error){
+   outcome=this.stopped?'STOPPED':controller.signal.aborted?'TIMEOUT':'FAILED';
    return {success:false,error:this.stopped||controller.signal.aborted?'MIO_DESKTOP_NATIVE_ABORTED':error instanceof Error?error.message.slice(0,180):'MIO_DESKTOP_NATIVE_FAILED'};
-  }finally{clearTimeout(timer);this.active.delete(controller);}
+  }finally{clearTimeout(timer);this.active.delete(controller);this.metrics.record(outcome,performance.now()-startedAt);}
  }
  stop(){if(this.stopped)return;this.stopped=true;for(const controller of this.active)controller.abort();}
- inspect(){return {stopped:this.stopped,active:this.active.size,localOnly:true as const};}
+ inspect(){return {...this.metrics.snapshot(this.active.size,this.stopped),stopped:this.stopped};}
 }
