@@ -28,7 +28,7 @@ export class MioCoreLocalModelAdapter {
  private async request(path:'/api/tags'|'/api/chat',signal:AbortSignal,body?:unknown){
   const response=await this.transport('http://127.0.0.1:11434'+path,{method:body===undefined?'GET':'POST',redirect:'error',credentials:'omit',signal,...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
   if(!response.ok)throw Error('MIO_LOCAL_HTTP_'+response.status);
-  return readBoundedLocalJson(response,path==='/api/tags'?1048576:524288);
+  return readBoundedLocalJson<{models?:unknown;done?:unknown;model?:unknown;message?:{content?:unknown}}>(response,path==='/api/tags'?1048576:524288);
  }
  readiness(timeoutMs=8000){
   return this.invoke(timeoutMs,async signal=>{
