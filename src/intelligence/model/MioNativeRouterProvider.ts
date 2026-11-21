@@ -38,6 +38,6 @@ export class MioNativeRouterProvider implements ModelProvider {
    const response=await core.generate(prompt,300000,undefined,undefined,messages);
    if(signal?.aborted)throw Error('MIO_NATIVE_CANCELLED');
    return {provider:this.id,model:response.model,text:response.text,generatedAt:Date.now(),source:'LOCAL_ENDPOINT'};
-  }finally{signal?.removeEventListener('abort',cancel);core.dispose();}
+  }finally{signal?.removeEventListener('abort',cancel);inventory?.dispose();core?.dispose();}
  }
 }
