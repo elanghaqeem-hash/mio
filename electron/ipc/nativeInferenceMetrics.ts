@@ -8,7 +8,7 @@ export interface NativeInferenceDiagnostics {
   succeeded:number;
   failed:number;
   timedOut:number;
-  stopped:number;
+  cancelledByStop:number;
   active:number;
   stoppedLatch:boolean;
   lastOutcome:NativeInferenceOutcome|null;
@@ -46,7 +46,7 @@ export class MioNativeInferenceMetrics {
   return {
    schemaVersion:1,
    accepted:this.accepted,succeeded:this.succeeded,failed:this.failed,
-   timedOut:this.timedOut,stopped:this.stopped,
+   timedOut:this.timedOut,cancelledByStop:this.stopped,
    active,stoppedLatch,lastOutcome:this.lastOutcome,lastDurationMs:this.lastDurationMs,
    averageDurationMs:this.accepted?Math.round(this.totalDuration/this.accepted):null,
    p95RecentDurationMs:sorted.length?sorted[Math.ceil(sorted.length*.95)-1]:null,
