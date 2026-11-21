@@ -53,7 +53,7 @@ export const ChatStudioView: React.FC = () => {
         if (voiceOutputEnabled && !listeningRef.current) void mioChatVoice.speak(response.text);
       } catch (error) {
         setNativeError(error instanceof Error ? error.message.slice(0, 240) : 'Local inference unavailable');
-      } finally { setNativeBusy(false); mioChatVoice.markThinking(); }
+      } finally { setNativeBusy(false); eventBus.emit('CORE_STATE_CHANGE', 'IDLE'); }
       return;
     }
     const structured = await AgentOrchestrator.processPrompt(userText, conversation, { projectKnowledgeEnabled: projectKnowledgeAtRequest, memoryEnabled: memoryAtRequest, excludedAssetIds: exclusionsAtRequest, contextBudgetChars: 4800, memoryContextBudgetChars: 3600, sessionId: sessionIdRef.current });
