@@ -59,6 +59,9 @@ jobs:
       - name: Desktop hardware-aware admission regression
         run: node --import tsx scripts/benchmarks/mio-native-hardware-admission-check.ts
 
+      - name: Native local runtime preflight regression
+        run: node --import tsx scripts/benchmarks/mio-native-runtime-preflight-check.ts
+
       - name: Lint
         run: npm run lint
 
