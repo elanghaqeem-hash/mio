@@ -22,14 +22,16 @@ export function validateNativeDesktopChatRequest(value:unknown):value is NativeD
 export class NativeDesktopChatService {
  private stopped=false;
  private readonly active=new Set<AbortController>();
- constructor(private readonly transport:typeof fetch=fetch){}
+ constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000){
+  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw Error('MIO_DESKTOP_NATIVE_TIMEOUT_INVALID');
+ }
  async chat(request:unknown):Promise<NativeDesktopChatResult>{
   if(this.stopped)return {success:false,error:'MIO_DESKTOP_NATIVE_STOPPED'};
   if(!validateNativeDesktopChatRequest(request))return {success:false,error:'MIO_DESKTOP_NATIVE_REQUEST_INVALID'};
   if(this.active.size>0)return {success:false,error:'MIO_DESKTOP_NATIVE_BUSY'};
   const controller=new AbortController();
   this.active.add(controller);
-  const timer=setTimeout(()=>controller.abort(),120000);
+  const timer=setTimeout(()=>controller.abort(),this.timeoutMs);
   try{
    const messages=request.messages.map(m=>({role:m.role,content:m.content}));
    const provider=new MioNativeRouterProvider([{model:'qwen2.5:3b',workloads:['CHAT','ANALYSIS','CODE','CREATIVE']}],this.transport);
