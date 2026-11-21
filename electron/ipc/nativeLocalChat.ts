@@ -2,6 +2,7 @@
 import { MioNativeInferenceMetrics, type NativeInferenceOutcome } from './nativeInferenceMetrics';
 import { assessNativeHardware, readNativeHardwareSnapshot, type LocalHardwareSnapshot } from './nativeHardwareAdmission';
 import { MioNativeRouterProvider } from '../../src/intelligence/model/MioNativeRouterProvider';
+import type { CalibratedLocalModel } from '../../src/intelligence/model/MioAdaptiveLocalModelSelection';
 import type { ModelMessage } from '../../src/types/models';
 
 export interface NativeDesktopChatRequest { messages: ModelMessage[]; }
@@ -25,7 +26,8 @@ export class NativeDesktopChatService {
  private stopped=false;
  private readonly active=new Set<AbortController>();
  private readonly metrics=new MioNativeInferenceMetrics();
- constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000,private readonly hardware:()=>LocalHardwareSnapshot=readNativeHardwareSnapshot){
+ constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000,private readonly hardware:()=>LocalHardwareSnapshot=readNativeHardwareSnapshot,
+ private readonly calibratedModels?:readonly CalibratedLocalModel[]){
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw Error('MIO_DESKTOP_NATIVE_TIMEOUT_INVALID');
  }
  async chat(request:unknown):Promise<NativeDesktopChatResult>{
@@ -34,7 +36,8 @@ export class NativeDesktopChatService {
   if(this.active.size>0)return {success:false,error:'MIO_DESKTOP_NATIVE_BUSY'};
   let allowed=false;
   let hardwareError='MIO_HARDWARE_UNKNOWN';
-  try{const admission=assessNativeHardware(this.hardware());allowed=admission.allowed;hardwareError=admission.reason;}
+  let snapshot:LocalHardwareSnapshot;
+  try{snapshot=this.hardware();const admission=assessNativeHardware(snapshot);allowed=admission.allowed;hardwareError=admission.reason;}
   catch{return {success:false,error:'MIO_HARDWARE_UNKNOWN'};}
   if(!allowed)return {success:false,error:hardwareError};
   const controller=new AbortController();
@@ -44,7 +47,8 @@ export class NativeDesktopChatService {
   const timer=setTimeout(()=>controller.abort(),this.timeoutMs);
   try{
    const messages=request.messages.map(m=>({role:m.role,content:m.content}));
-   const provider=new MioNativeRouterProvider([{model:'qwen2.5:3b',workloads:['CHAT','ANALYSIS','CODE','CREATIVE']}],this.transport);
+   const provider=new MioNativeRouterProvider([{model:'qwen2.5:3b',workloads:['CHAT','ANALYSIS','CODE','CREATIVE']}],this.transport,
+    this.calibratedModels===undefined?undefined:{profiles:this.calibratedModels,freeMemoryBytes:snapshot.freeMemoryBytes,reserveMemoryBytes:768*1024*1024});
    const response=await Promise.race([
     provider.generate({messages},controller.signal),
     new Promise<never>((_,reject)=>{
