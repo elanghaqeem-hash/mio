@@ -1,6 +1,5 @@
 import { app, BrowserWindow, dialog, IpcMainInvokeEvent, Notification } from 'electron';
 import * as os from 'os';
-import { DesktopLocalChat } from './desktopLocalChat';
 import { BrowserReadSandbox } from './browserReadSandbox';
 import { TrainingHandoffPackager, type PackageTrainingHandoffRequest } from './trainingHandoffPackager';
 import { TrainingHandoffReader, type ReadTrainingHandoffRequest } from './trainingHandoffReader';
@@ -38,7 +37,6 @@ const MAX_TRAINING_PATH = 4096;
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   const workspaceSandbox = new WorkspaceSandbox();
-  const desktopLocalChat = new DesktopLocalChat();
   const mutationJournal = DesktopMutationJournalStore.atUserData(app.getPath('userData'));
   const durableCheckpoints = new DesktopDurableMutationCheckpoints(app.getPath('userData'));
   const mutationApprovals = new MutationApprovalStore();
@@ -281,15 +279,12 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       const safeReason = typeof reason === 'string' ? reason.slice(0, MAX_STOP_REASON) : 'Renderer requested STOP MIO';
       console.warn(`[ELECTRON MAIN] Emergency Stop Triggered: ${safeReason}`);
       desktopMutationStopped = true;
-      desktopLocalChat.stop();
       stopCreative();
       mutationApprovals.clear();
       trainingJobManager.cancelAll();
       if (mainWindow) mainWindow.webContents.send('mio:event:emergencyStop', safeReason);
       return { success: true };
     },
-
-    handleLocalChat: (request: unknown) => desktopLocalChat.generate(request),
 
     handleAuthorizeWorkspace: async () => {
       const result = await dialog.showOpenDialog(mainWindow, {
@@ -478,10 +473,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     cancelAllTrainingJobs: () => trainingJobManager.cancelAll(),
 
     hasActiveWorkspaceMutations: () => workspaceMutationLease.hasActive() || creativeBusy(),
-    requestStopWorkspaceMutations: () => { desktopLocalChat.stop(); desktopMutationStopped = true; stopCreative(); mutationApprovals.clear(); },
+    requestStopWorkspaceMutations: () => { desktopMutationStopped = true; stopCreative(); mutationApprovals.clear(); },
     revokeAllWorkspaceAuthority: () => {
       desktopMutationStopped = true;
-      desktopLocalChat.stop();
       stopCreative();
       if (!creativeBusy()) { try { creativeRuntime?.close(); } catch { /* preserve lock for manual checkpoint review */ } }
       trainingJobManager.forceStopAll();
