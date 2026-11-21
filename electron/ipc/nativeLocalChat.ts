@@ -46,7 +46,7 @@ export class NativeDesktopChatService {
      controller.signal.addEventListener('abort',()=>reject(Error('MIO_DESKTOP_NATIVE_ABORTED')),{once:true});
     }),
    ]);
-   if(this.stopped||controller.signal.aborted)return {success:false,error:'MIO_DESKTOP_NATIVE_ABORTED'};
+   if(this.stopped||controller.signal.aborted){outcome=this.stopped?'STOPPED':'TIMEOUT';return {success:false,error:'MIO_DESKTOP_NATIVE_ABORTED'};}
    if(!response.text||response.text.length>65536)return {success:false,error:'MIO_DESKTOP_NATIVE_RESPONSE_INVALID'};
    outcome='SUCCESS';
    return {success:true,text:response.text,model:response.model,source:'LOCAL_ENDPOINT'};
