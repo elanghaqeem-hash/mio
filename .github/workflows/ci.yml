@@ -84,3 +84,7 @@ jobs:
         env:
           ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
         run: npm run test:electron-gui
+      - name: Run native Electron chat preload / IPC / STOP smoke
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
+        run: xvfb-run -a ./node_modules/.bin/electron --no-sandbox scripts/e2e/electron-native-chat-gui.cjs
