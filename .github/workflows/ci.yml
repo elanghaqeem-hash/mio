@@ -44,6 +44,9 @@ jobs:
       - name: Native application ModelRouter integration regression
         run: node --import tsx scripts/benchmarks/mio-native-router-integration-check.ts
 
+      - name: Desktop native Ollama chat IPC service regression
+        run: node --import tsx scripts/benchmarks/mio-desktop-native-chat-check.ts
+
       - name: Lint
         run: npm run lint
 
