@@ -12,3 +12,13 @@ M-2.02d Mio CI 44877494118 and Validation Gate passed. Windows Durability Probe 
 
 ## Limits / next steps
 OS free RAM is an approximate snapshot, can race with allocations and is not Ollama's in-use memory. CPU count is observed, **not** used as a model-performance score. No GPU/VRAM discovery, automatic download, model-switch policy, hardware benchmarking, or user-machine proof is claimed. Windows live acceptance remains opt-in per M-2.02b. CI at latest commit pending. Keep PR #565 unmerged and Windows mutation production gate denied until durable checkpoint issues resolved. Takane Mio unchanged.
+
+## Read-only Windows readiness preflight (new)
+On the target Windows machine, from this branch after `npm ci`, run:
+
+```powershell
+ollama pull qwen2.5:3b
+node --import tsx scripts/benchmarks/mio-native-runtime-preflight.ts
+```
+
+The command probes OS memory/CPU and `http://127.0.0.1:11434/api/tags` only; it never generates a response, runs a tool, downloads a model, or sends data to a remote provider. It prints a structured verdict: `READY`, `LOW_MEMORY`, `HARDWARE_UNKNOWN`, `OLLAMA_UNREACHABLE`, or `MODEL_MISSING`. Exit code 0 means the **preflight conditions** passed; exit code 2 means not ready, not necessarily a software defect. A passing preflight does **not** prove GPU fit, model quality, inference performance, Windows desktop GUI correctness, or checkpoint durability. `scripts/benchmarks/mio-native-runtime-preflight-check.ts` mocks every verdict, tests offline timeout and confirms no network on low-memory denial; registered in Mio CI.
