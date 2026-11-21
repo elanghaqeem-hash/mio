@@ -27,7 +27,7 @@ export function selectCalibratedLocalModels(input:AdaptiveSelectionInput):Calibr
  for(const p of input.profiles){
   if(!p||typeof p.model!=='string'||!NAME.test(p.model)||names.has(p.model)||
    p.calibration!=='USER_VERIFIED'||!Array.isArray(p.workloads)||!p.workloads.length||
-   p.workloads.some(w=>!KINDS.includes(w))||
+   p.workloads.some((w:CognitiveWorkload)=>!KINDS.includes(w))||
    !Number.isSafeInteger(p.requiredFreeMemoryBytes)||p.requiredFreeMemoryBytes<1)
    throw Error('MIO_ADAPTIVE_PROFILE_INVALID');
   names.add(p.model);
