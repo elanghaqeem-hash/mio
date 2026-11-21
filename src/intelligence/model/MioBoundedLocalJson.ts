@@ -1,5 +1,5 @@
 /** Bounded Ollama JSON decoding: limits decompressed bytes, including chunked responses. */
-export async function readBoundedLocalJson(response:Response,maxBytes:number):Promise<unknown>{
+export async function readBoundedLocalJson<T=unknown>(response:Response,maxBytes:number):Promise<T>{
  if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>1048576)throw Error('MIO_LOCAL_JSON_LIMIT_INVALID');
  const stated=response.headers.get('content-length');
  if(stated!==null){
@@ -22,7 +22,7 @@ export async function readBoundedLocalJson(response:Response,maxBytes:number):Pr
   const buffer=new Uint8Array(bytes);
   let offset=0;
   for(const chunk of chunks){buffer.set(chunk,offset);offset+=chunk.byteLength;}
-  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(buffer)) as unknown;}
+  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(buffer)) as T;}
   catch{throw Error('MIO_LOCAL_JSON_INVALID');}
  }catch(error){
   void reader.cancel().catch(()=>{});
