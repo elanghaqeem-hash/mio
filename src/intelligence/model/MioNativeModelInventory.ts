@@ -1,3 +1,4 @@
+import { readBoundedLocalJson } from './MioBoundedLocalJson';
 /** Local inventory only; discovered names do not grant execution or prove capabilities. */
 import { MioIntelligenceLifecycle } from '../../core/MioIntelligenceLifecycle';
 import type { CognitiveWorkload, LocalModelProfile } from './MioCognitiveOrchestrator';
@@ -34,7 +35,7 @@ export class MioNativeModelInventory{
     if(controller.signal.aborted)throw Error('MIO_INVENTORY_ABORTED');
     const r=await this.transport('http://127.0.0.1:11434/api/tags',{signal:controller.signal,redirect:'error',credentials:'omit'});
     if(!r.ok)throw Error('MIO_INVENTORY_HTTP');
-    return parseLocalInventory(await r.json());
+    return parseLocalInventory(await readBoundedLocalJson(r,1048576));
    })]);
    if(controller.signal.aborted||!this.core.finish(task.token))throw Error('MIO_INVENTORY_RESULT_DENIED');
    return result;
