@@ -1,5 +1,6 @@
 /** Electron main-process native chat: fixed loopback, bounded text-only IPC, no tools or remote fallback. */
 import { MioNativeInferenceMetrics, type NativeInferenceOutcome } from './nativeInferenceMetrics';
+import { assessNativeHardware, readNativeHardwareSnapshot, type LocalHardwareSnapshot } from './nativeHardwareAdmission';
 import { MioNativeRouterProvider } from '../../src/intelligence/model/MioNativeRouterProvider';
 import type { ModelMessage } from '../../src/types/models';
 
@@ -24,13 +25,18 @@ export class NativeDesktopChatService {
  private stopped=false;
  private readonly active=new Set<AbortController>();
  private readonly metrics=new MioNativeInferenceMetrics();
- constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000){
+ constructor(private readonly transport:typeof fetch=fetch,private readonly timeoutMs=120000,private readonly hardware:()=>LocalHardwareSnapshot=readNativeHardwareSnapshot){
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw Error('MIO_DESKTOP_NATIVE_TIMEOUT_INVALID');
  }
  async chat(request:unknown):Promise<NativeDesktopChatResult>{
   if(this.stopped)return {success:false,error:'MIO_DESKTOP_NATIVE_STOPPED'};
   if(!validateNativeDesktopChatRequest(request))return {success:false,error:'MIO_DESKTOP_NATIVE_REQUEST_INVALID'};
   if(this.active.size>0)return {success:false,error:'MIO_DESKTOP_NATIVE_BUSY'};
+  let allowed=false;
+  let hardwareError='MIO_HARDWARE_UNKNOWN';
+  try{const admission=assessNativeHardware(this.hardware());allowed=admission.allowed;hardwareError=admission.reason;}
+  catch{return {success:false,error:'MIO_HARDWARE_UNKNOWN'};}
+  if(!allowed)return {success:false,error:hardwareError};
   const controller=new AbortController();
   const startedAt=performance.now();
   let outcome:NativeInferenceOutcome='FAILED';
