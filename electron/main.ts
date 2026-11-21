@@ -92,7 +92,6 @@ function createWindow(): BrowserWindow {
   secureHandle(IPC_CHANNELS.GET_APP_VERSION, () => handlers.handleGetAppVersion());
   secureHandle(IPC_CHANNELS.DESKTOP_NATIVE_LOCAL_CHAT, (_event, args) => nativeChat?.chat(args[0]) ?? {success:false,error:'MIO_DESKTOP_NATIVE_UNAVAILABLE'});
   secureHandle(IPC_CHANNELS.SHOW_NOTIFICATION, (event, args) => handlers.handleShowNotification(event, args[0]));
-  secureHandle(IPC_CHANNELS.DESKTOP_LOCAL_CHAT, (event, args) => handlers.handleLocalChat(args[0]));
   secureHandle(IPC_CHANNELS.EMERGENCY_STOP, (event, args) => { nativeChat?.stop(); return handlers.handleEmergencyStop(event, args[0]); });
   secureHandle(IPC_CHANNELS.QUIT_APP, () => {
     if (handlers.hasActiveWorkspaceMutations()) return {success:false,error:'WORKSPACE_MUTATION_DRAIN_REQUIRED'};
