@@ -1,7 +1,7 @@
 /** Opt-in local Ollama repeatability run: 3 independent 3-turn sessions, no automatic approval. */
 import * as os from 'node:os';
 import { NativeDesktopChatService } from '../../electron/ipc/nativeLocalChat';
-import { summarizeLocalBenchmark, type LocalBenchmarkSample } from '../../electron/ipc/nativeLocalBenchmark';
+import { summarizeLocalBenchmark, type LocalBenchmarkSample, type LocalBenchmarkSummary } from '../../electron/ipc/nativeLocalBenchmark';
 import { assessLocalBenchmarkRepeatability } from '../../src/intelligence/model/MioLocalBenchmarkRepeatability';
 import { checkNativeRuntimePreflight } from '../../electron/ipc/nativeRuntimePreflight';
 import type { ModelMessage } from '../../src/types/models';
@@ -12,7 +12,7 @@ async function main(){
  }
  const preflight=await checkNativeRuntimePreflight();
  if(!preflight.ready){console.error(JSON.stringify({status:'PREFLIGHT_DENIED',reason:preflight.status}));process.exitCode=2;return;}
- const summaries=[];
+ const summaries:LocalBenchmarkSummary[]=[];
  const questions=['Jawab dengan satu kata: siap.','Sebutkan satu manfaat AI lokal.','Jelaskan arti privasi data dalam satu kalimat.'];
  for(let round=0;round<3;round++){
   const service=new NativeDesktopChatService();
