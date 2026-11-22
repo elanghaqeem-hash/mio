@@ -71,6 +71,9 @@ jobs:
       - name: Human-reviewed local calibration governance regression
         run: node --import tsx scripts/benchmarks/mio-local-calibration-governance-check.ts
 
+      - name: Local multi-run benchmark repeatability regression
+        run: node --import tsx scripts/benchmarks/mio-local-repeatability-check.ts
+
       - name: Lint
         run: npm run lint
 
