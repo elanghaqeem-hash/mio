@@ -26,3 +26,16 @@ Live Windows/Ollama acceptance and independent RAM/VRAM observations; verified o
 
 ## Trusted integration seam
 `electron/ipc/trustedCalibratedChat.ts` exposes `createReviewedNativeChatService(review, options)` for **trusted main-process callers only**. It applies the review gate before constructing an opt-in `NativeDesktopChatService` with the approved profile. This method is not registered in Electron IPC, not exposed via preload, not wired to a renderer button, and does not activate automatically on production startup. Its integration is tested using a simulated local Ollama server, including rejection of fabricated approval. This is a non-production integration seam, not a replacement for cryptographic attestation or evidence audit.
+
+## Multi-run latency repeatability (additional M-2.02h gate)
+`src/intelligence/model/MioLocalBenchmarkRepeatability.ts` checks three to ten **separately collected** benchmark summaries, each with at least three samples. It rejects malformed/self-certifying evidence and classifies complete, successful runs by a configured p95 latency ceiling and a maximum threefold spread between fastest and slowest run p95. A pass means **READY_FOR_HUMAN_REVIEW**, never automatic approval or proof of memory fit. `scripts/benchmarks/mio-local-repeatability-check.ts` covers slow, unstable, failed and malformed run evidence in CI.
+
+On the authorized Windows machine, after `npm ci`, `ollama pull qwen2.5:3b` and successful preflight, run:
+
+```powershell
+$env:MIO_LIVE_OLLAMA = '1'
+node --import tsx scripts/benchmarks/mio-live-local-repeatability.ts
+Remove-Item Env:MIO_LIVE_OLLAMA
+```
+
+This **opt-in** script executes nine local inference turns in three fresh conversations and prints sanitized aggregate observations. It does not auto-save evidence, approve a model, change the default model, or write any router settings. A clean latency repeatability verdict remains **insufficient** for `reviewLocalCalibration` without independently measured model memory and operator approval. CPU/GPU/VRAM and Windows checkpoint durability are not proven.
