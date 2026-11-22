@@ -23,3 +23,6 @@ An operator acknowledgment is a **self-assertion**, not independently authentica
 
 ## Remaining blockers
 Live Windows/Ollama acceptance and independent RAM/VRAM observations; verified operator authority and audit trail; model performance at higher sample counts; dependency audit; Windows checkpoint durable identity/power-loss behavior. Keep PR #565 unmerged and mutation production checks fail-closed. Takane Mio unchanged.
+
+## Trusted integration seam
+`electron/ipc/trustedCalibratedChat.ts` exposes `createReviewedNativeChatService(review, options)` for **trusted main-process callers only**. It applies the review gate before constructing an opt-in `NativeDesktopChatService` with the approved profile. This method is not registered in Electron IPC, not exposed via preload, not wired to a renderer button, and does not activate automatically on production startup. Its integration is tested using a simulated local Ollama server, including rejection of fabricated approval. This is a non-production integration seam, not a replacement for cryptographic attestation or evidence audit.
