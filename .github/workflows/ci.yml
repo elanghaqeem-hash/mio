@@ -68,6 +68,9 @@ jobs:
       - name: Local model benchmark summary regression
         run: node --import tsx scripts/benchmarks/mio-local-benchmark-summary-check.ts
 
+      - name: Human-reviewed local calibration governance regression
+        run: node --import tsx scripts/benchmarks/mio-local-calibration-governance-check.ts
+
       - name: Lint
         run: npm run lint
 
