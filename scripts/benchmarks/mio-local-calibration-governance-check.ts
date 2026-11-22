@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { summarizeLocalBenchmark } from '../../electron/ipc/nativeLocalBenchmark';
 import { reviewLocalCalibration } from '../../src/intelligence/model/MioLocalCalibrationGovernance';
 import { selectCalibratedLocalModels } from '../../src/intelligence/model/MioAdaptiveLocalModelSelection';
+import { createReviewedNativeChatService } from '../../electron/ipc/trustedCalibratedChat';
 const MiB=1024*1024,now=1780000000000;
 const sample={elapsedMs:700,freeBeforeBytes:6*1024*MiB,freeAfterBytes:5*1024*MiB,
  processRssBeforeBytes:125*MiB,processRssAfterBytes:130*MiB,success:true};
@@ -42,6 +43,23 @@ async function main(){
  assert.throws(()=>reviewLocalCalibration(review,0),/CLOCK_INVALID/);
  assert.throws(()=>reviewLocalCalibration(benchmark,now),/REVIEW_INVALID/);
  assert.ok(!JSON.stringify(approved).includes('operatorApproval'));
+ const MiBbytes=1024*1024;
+ const localCalls:string[]=[];
+ const service=createReviewedNativeChatService(review,{
+  nowMs:now,timeoutMs:1000,hardware:()=>({totalMemoryBytes:12*1024*MiBbytes,freeMemoryBytes:6*1024*MiBbytes,logicalCpuCount:8}),
+  transport:async(url,init)=>{
+   assert.ok(String(url).startsWith('http://127.0.0.1:11434/'));
+   if(String(url).endsWith('/api/tags'))return Response.json({models:[{name:'qwen2.5:3b'}]});
+   const model=JSON.parse(String(init?.body)).model;localCalls.push(model);
+   return Response.json({done:true,model,message:{content:'Verified local output'}});
+  },
+ });
+ try{
+  const result=await service.chat({messages:[{role:'user',content:'hello'}]});
+  assert.equal(result.success,true);assert.equal(result.text,'Verified local output');
+  assert.deepEqual(localCalls,['qwen2.5:3b']);
+ }finally{service.stop();}
+ assert.throws(()=>createReviewedNativeChatService({...review,operatorApproval:'AUTO_APPROVED' as typeof review.operatorApproval},{nowMs:now}),/REVIEW_INVALID/);
  console.log(JSON.stringify({stage:'M-2.02h',approvalGate:'pass',autoApprovalDenied:true,reviewIsOperatorAssertion:true,liveHardware:false}));
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
