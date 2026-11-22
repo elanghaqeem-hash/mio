@@ -23,8 +23,65 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - name: Install exact lockfile dependencies
+        id: dependencies
         run: npm ci
       - name: Probe file flush, exclusive lock, rename, and directory publication
         run: node --import tsx scripts/benchmarks/windows-durability-probe.ts
       - name: Windows append-only journal prototype integrity
         run: node --import tsx scripts/benchmarks/windows-journal-prototype-check.ts
+      - name: Held file identity and pathname replacement diagnosis
+        run: node scripts/benchmarks/windows-journal-file-id-probe.mjs
+      - name: Native Windows file-ID and handle sharing probe (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-identity-probe.ps1
+      - name: Native guarded open and reparse denial (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-guarded-open-probe.ps1
+      - name: Native handle-bound journal I/O (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-handle-io-probe.ps1
+      - name: Native hard-link and process-death probe (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-crash-probe.ps1
+      - name: Verify actual Windows production runtime admission remains denied
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-production-admission-check.ts
+      - name: Native binary journal interoperability (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-native-binary-interop.ts
+      - name: Native same-handle journal session validation (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-native-journal-session-check.ts
+      - name: Native logical transaction session (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-native-logical-session-check.ts
+      - name: Native trusted directory and restrictive ACL (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-directory-acl-probe.ps1
+      - name: Native handle-bound security descriptor (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/benchmarks/windows-native-handle-acl-probe.ps1
+      - name: Read-only controlled recovery evidence (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-recovery-evidence-check.ts
+      - name: Authenticated recovery review (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-recovery-auth-check.ts
+      - name: Incident registry and single-use review challenge (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-registry-check.ts
+      - name: Authenticated incident archive (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-archive-check.ts
+      - name: Incident storage generation contract (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-storage-check.ts
+      - name: Incident CORE emergency stop bridge (diagnosis only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --import tsx scripts/benchmarks/windows-journal-incident-stop-check.ts

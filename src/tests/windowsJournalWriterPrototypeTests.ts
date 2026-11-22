@@ -44,6 +44,23 @@ export async function runWindowsJournalWriterPrototypeTests(): Promise<{passed:n
         insist(denied(()=>new WindowsJournalWriterPrototype(pathname)),'quarantined history reopened');
       } finally {fs.rmSync(root,{recursive:true,force:true});}
     }],
+    ['inspection failure latches quarantine and denies release even after bytes restored', async () => {
+      const root=fs.mkdtempSync(path.join(os.tmpdir(),'mio-win-writer-'));
+      try {
+        const pathname=path.join(root,'journal.bin');
+        fs.writeFileSync(pathname,Buffer.alloc(0),{flag:'wx'});
+        const writer=new WindowsJournalWriterPrototype(pathname);
+        writer.append('{"state":"PREPARED"}');
+        const original=fs.readFileSync(pathname);
+        fs.appendFileSync(pathname,Buffer.from([1,2,3]));
+        insist(denied(()=>writer.inspect()),'corrupt inspection accepted');
+        fs.writeFileSync(pathname,original);
+        insist(denied(()=>writer.inspect()) && denied(()=>writer.append('{"state":"EXECUTING"}')) && denied(()=>writer.close()),'quarantine bypassed after restore');
+        insist(fs.existsSync(pathname+'.writer.lock'),'quarantine lock removed');
+        insist(denied(()=>new WindowsJournalWriterPrototype(pathname)),'new writer bypassed quarantine');
+        insist(fs.readFileSync(pathname).equals(original),'denied operation changed bytes');
+      } finally {fs.rmSync(root,{recursive:true,force:true});}
+    }],
     ['failed append quarantines lock and disallows retry/close', async () => {
       const root=fs.mkdtempSync(path.join(os.tmpdir(),'mio-win-writer-'));
       try {

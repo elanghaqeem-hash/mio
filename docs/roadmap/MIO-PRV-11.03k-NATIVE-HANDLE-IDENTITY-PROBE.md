@@ -1,0 +1,5 @@
+# PRV-11.03k — Native Windows identity diagnostic
+
+MIO only. Run `pwsh -File scripts/benchmarks/windows-native-identity-probe.ps1` on native Windows PowerShell 7. Uses GetFileInformationByHandleEx(FileIdInfo) and a held FileStream with read sharing only. Requires identical IDs from concurrent read handles, denied conflicting writer and rename, successful rename after release, preserved original ID and different replacement ID. Uses an isolated temporary directory; no production or user data touched. CI Windows durability workflow runs this as a diagnostic. No PASS is asserted until runner evidence is collected.
+
+Scope: this does not integrate held handles into the Node journal writer; it is not an ACL or reparse-point guard, parent-directory race defense, physical persistence test, or production admission. Keep CHECKPOINT_DURABILITY_UNSUPPORTED_WINDOWS. Next: native guarded open with reparse checks and handle-bound I/O, then attack/restart matrix with explicit ACL assumptions. No deployment.

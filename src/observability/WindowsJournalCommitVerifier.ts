@@ -32,9 +32,9 @@ function decode(raw: string): JournalMutationEvent {
   const rec = item as Record<string,unknown>;
   const keys = ['version','projectId','taskId','requestId','sequence','phase','previousDigest'];
   if (Object.keys(rec).length !== keys.length || !keys.every(k=>Object.hasOwn(rec,k)) ||
-      rec.version !== 1 || !ID.test(String(rec.projectId)) || !ID.test(String(rec.taskId)) ||
-      !ID.test(String(rec.requestId)) || !Number.isSafeInteger(rec.sequence) ||
-      (rec.sequence as number) < 1 || !phases.has(String(rec.phase)) ||
+      rec.version !== 1 || typeof rec.projectId !== 'string' || !ID.test(rec.projectId) || typeof rec.taskId !== 'string' || !ID.test(rec.taskId) ||
+      typeof rec.requestId !== 'string' || !ID.test(rec.requestId) || !Number.isSafeInteger(rec.sequence) ||
+      (rec.sequence as number) < 1 || typeof rec.phase !== 'string' || !phases.has(rec.phase) ||
       !(rec.previousDigest === null || (typeof rec.previousDigest === 'string' && DIGEST.test(rec.previousDigest)))) fail();
   return rec as unknown as JournalMutationEvent;
 }

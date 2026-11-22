@@ -18,6 +18,7 @@ export class WindowsJournalWriterPrototype {
   private readonly fd: number;
   private readonly lockToken: string;
   private closed = false;
+  private descriptorClosed = false;
   private compromised = false;
   private active = false;
   private readonly journal: WindowsCheckpointJournalPrototype;
@@ -46,8 +47,7 @@ export class WindowsJournalWriterPrototype {
       // quarantines the lock so that external intervention is necessary.
       this.journal.inspect();
     } catch (error) {
-      this.compromised = true;
-      try { fs.closeSync(fd); } catch { /* preserve lock */ }
+      this.quarantine();
       throw error;
     }
   }
@@ -58,14 +58,24 @@ export class WindowsJournalWriterPrototype {
     try {
       return this.journal.append(json);
     } catch (error) {
-      this.compromised = true;
+      this.quarantine();
       throw error;
     } finally { this.active = false; }
   }
 
   inspect(): JournalPrototypeEntry[] {
     if (this.closed || this.compromised) fail('WINDOWS_JOURNAL_WRITER_REVIEW_REQUIRED');
-    return this.journal.inspect();
+    try { return this.journal.inspect(); }
+    catch (error) { this.quarantine(); throw error; }
+  }
+
+  /** Preserve on-disk lock for operator review; never reclaim or repair automatically. */
+  private quarantine(): void {
+    this.compromised = true;
+    if (!this.descriptorClosed) {
+      this.descriptorClosed = true;
+      try { fs.closeSync(this.fd); } catch { /* retain lock, remain denied */ }
+    }
   }
 
   /** Orderly release is impossible after uncertain writes or detected corruption. */
