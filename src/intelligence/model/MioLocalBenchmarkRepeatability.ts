@@ -10,7 +10,7 @@ export interface LocalRepeatabilityReport {
  totalSuccessfulSamples:number;
  worstRunP95Ms:number;
  bestRunP95Ms:number;
- maxToMinP95Ratio:number;
+ maxToMinP95Ratio:number|null;
  modelMemoryRequirement:'NOT_DETERMINED';
  automaticallyApproved:false;
 }
@@ -43,6 +43,6 @@ export function assessLocalBenchmarkRepeatability(
  const ratio=best===0?(worst===0?1:Infinity):worst/best;
  const verdict:RepeatabilityVerdict=failed?'RUN_FAILED':worst>maxP95Ms?'SLOW':ratio>maxP95Ratio?'UNSTABLE':'READY_FOR_HUMAN_REVIEW';
  return {schemaVersion:1,verdict,runCount:runs.length,totalSuccessfulSamples:successful,
-  worstRunP95Ms:worst,bestRunP95Ms:best,maxToMinP95Ratio:Number.isFinite(ratio)?Math.round(ratio*100)/100:10,
+  worstRunP95Ms:worst,bestRunP95Ms:best,maxToMinP95Ratio:Number.isFinite(ratio)?Math.round(ratio*100)/100:null,
   modelMemoryRequirement:'NOT_DETERMINED',automaticallyApproved:false};
 }
