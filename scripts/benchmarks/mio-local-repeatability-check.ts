@@ -14,6 +14,9 @@ async function main(){
  assert.equal(good.worstRunP95Ms,150);
  assert.equal(good.bestRunP95Ms,100);
  assert.equal(good.maxToMinP95Ratio,1.5);
+ const zero=assessLocalBenchmarkRepeatability([run(0),run(100),run(100)],1000);
+ assert.equal(zero.verdict,'UNSTABLE');
+ assert.equal(zero.maxToMinP95Ratio,null);
  assert.equal(good.automaticallyApproved,false);
  assert.equal(good.modelMemoryRequirement,'NOT_DETERMINED');
  assert.equal(assessLocalBenchmarkRepeatability([run(100),run(120),run(2000)],1000).verdict,'SLOW');
